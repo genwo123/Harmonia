@@ -5,6 +5,10 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "InteractableInterface.h"
+#include "DrawDebugHelpers.h"
+#include "EngineUtils.h"
+#include "PickupActor.h"
 
 AHamoniaCharacter::AHamoniaCharacter()
 {
@@ -25,6 +29,10 @@ AHamoniaCharacter::AHamoniaCharacter()
 	// Enable crouching
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->CrouchedHalfHeight = 44.0f;
+
+	// 상호작용 관련 변수 초기화
+	bIsLookingAtInteractable = false;
+	CurrentInteractableActor = nullptr;
 }
 
 void AHamoniaCharacter::BeginPlay()
@@ -45,6 +53,83 @@ void AHamoniaCharacter::BeginPlay()
 	// 지연된 호출을 통해 입력 설정이 확실히 적용되도록 함
 	FTimerHandle TimerHandle;
 	GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+
+	// 디버그: 레벨에서 PickupActor 찾기
+	UE_LOG(LogTemp, Warning, TEXT("Searching for PickupActors in level..."));
+	for (TActorIterator<APickupActor> It(GetWorld()); It; ++It)
+	{
+		APickupActor* PickupActor = *It;
+		UE_LOG(LogTemp, Warning, TEXT("Found PickupActor: %s at location %s"),
+			*PickupActor->GetName(),
+			*PickupActor->GetActorLocation().ToString());
+	}
+}
+
+void AHamoniaCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	// 상호작용 중인 액터가 유효한지 확인 (이미 제거되었을 수 있음)
+	if (CurrentInteractableActor && !IsValid(CurrentInteractableActor))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Interactable actor was destroyed, resetting state"));
+		bIsLookingAtInteractable = false;
+		CurrentInteractableActor = nullptr;
+		CurrentInteractionText.Empty();
+	}
+
+	// 기본 레이캐스트 방식으로 검사
+	CheckForInteractables();
+
+	// 레이캐스트로 상호작용 가능한 객체를 찾지 못한 경우에만 근접 검사 실행
+	if (!bIsLookingAtInteractable)
+	{
+		// PickupActor 검사
+		for (TActorIterator<APickupActor> It(GetWorld()); It; ++It)
+		{
+			APickupActor* PickupActor = *It;
+			if (IsValid(PickupActor)) // 유효한 액터인지 확인
+			{
+				float Distance = FVector::Distance(GetActorLocation(), PickupActor->GetActorLocation());
+				if (Distance < 400.0f)
+				{
+					bIsLookingAtInteractable = true;
+					CurrentInteractableActor = PickupActor;
+					CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(PickupActor);
+					UE_LOG(LogTemp, Display, TEXT("Auto-detected PickupActor at distance %f"), Distance);
+					break;
+				}
+			}
+		}
+
+		// 여전히 상호작용 가능한 객체를 찾지 못했다면, 일반 액터 중 인터페이스 구현체 검사
+		if (!bIsLookingAtInteractable)
+		{
+			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+			{
+				AActor* Actor = *It;
+				// A_Reflect나 관련 액터인지 확인 (이름으로 확인하거나 클래스로 확인)
+				if (IsValid(Actor) &&
+					Actor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()) &&
+					(Actor->GetName().Contains("Reflect") || Actor->GetName().Contains("Mirror")))
+				{
+					float Distance = FVector::Distance(GetActorLocation(), Actor->GetActorLocation());
+					if (Distance < 400.0f)
+					{
+						bIsLookingAtInteractable = true;
+						CurrentInteractableActor = Actor;
+						CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(Actor);
+						UE_LOG(LogTemp, Warning, TEXT("Auto-detected Reflect actor: %s at distance %f"),
+							*Actor->GetName(), Distance);
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	// 디버그 라인 그리기
+	DrawDebugInteractionLine();
 }
 
 void AHamoniaCharacter::SetupEnhancedInput()
@@ -56,19 +141,49 @@ void AHamoniaCharacter::SetupEnhancedInput()
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
 		{
 			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+			UE_LOG(LogTemp, Warning, TEXT("Enhanced input setup successful"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("Failed to get Enhanced Input subsystem"));
 		}
 	}
 	else
 	{
 		// 실패한 경우 다시 시도
+		UE_LOG(LogTemp, Warning, TEXT("SetupEnhancedInput delayed - Controller or MappingContext not ready"));
 		FTimerHandle TimerHandle;
 		GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
 	}
 }
 
-void AHamoniaCharacter::Tick(float DeltaTime)
+
+void AHamoniaCharacter::DrawDebugInteractionLine()
 {
-	Super::Tick(DeltaTime);
+	FVector Start = CameraComponent->GetComponentLocation();
+	FVector End = Start + (CameraComponent->GetForwardVector() * InteractionDistance);
+
+	// 상호작용 가능 여부에 따라 색상 변경
+	FColor LineColor = bIsLookingAtInteractable ? FColor::Green : FColor::Red;
+
+	// 디버그 라인 그리기
+	DrawDebugLine(GetWorld(), Start, End, LineColor, false, -1.0f, 0, 1.0f);
+
+	if (bIsLookingAtInteractable && CurrentInteractableActor)
+	{
+		// 상호작용 가능한 오브젝트에 구체 표시
+		DrawDebugSphere(
+			GetWorld(),
+			CurrentInteractableActor->GetActorLocation(),
+			30.0f,
+			12,
+			FColor::Green,
+			false,
+			-1.0f,
+			0,
+			1.0f
+		);
+	}
 }
 
 void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -76,27 +191,60 @@ void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
 	// Setup Enhanced Input
-	if (UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent))
+	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
+	if (EnhancedInputComponent)
 	{
 		// Movement
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Move);
+		if (MoveAction)
+		{
+			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Move);
+			UE_LOG(LogTemp, Display, TEXT("Move action bound"));
+		}
 
 		// Looking
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Look);
+		if (LookAction)
+		{
+			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Look);
+			UE_LOG(LogTemp, Display, TEXT("Look action bound"));
+		}
 
 		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		if (JumpAction)
+		{
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+			UE_LOG(LogTemp, Display, TEXT("Jump action bound"));
+		}
 
 		// Sprinting
-		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::StartSprint);
-		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHamoniaCharacter::StopSprint);
+		if (SprintAction)
+		{
+			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::StartSprint);
+			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHamoniaCharacter::StopSprint);
+			UE_LOG(LogTemp, Display, TEXT("Sprint action bound"));
+		}
 
 		// Crouching
-		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::ToggleCrouch);
+		if (CrouchAction)
+		{
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::ToggleCrouch);
+			UE_LOG(LogTemp, Display, TEXT("Crouch action bound"));
+		}
 
 		// Interaction
-		EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Interact);
+		if (InteractAction)
+		{
+			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Interact);
+			UE_LOG(LogTemp, Display, TEXT("Interact action bound"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("InteractAction is null - Cannot bind interaction"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to setup Enhanced Input - No EnhancedInputComponent found"));
 	}
 }
 
@@ -174,7 +322,17 @@ void AHamoniaCharacter::ToggleCrouch(const FInputActionValue& Value)
 
 void AHamoniaCharacter::Interact()
 {
-	CheckForInteractables();
+	UE_LOG(LogTemp, Warning, TEXT("Interact called"));
+
+	if (bIsLookingAtInteractable && CurrentInteractableActor)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Interacting with: %s"), *CurrentInteractableActor->GetName());
+		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No interactable actor found"));
+	}
 }
 
 void AHamoniaCharacter::CheckForInteractables()
@@ -186,8 +344,53 @@ void AHamoniaCharacter::CheckForInteractables()
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this);
 
-	if (GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams))
+	// 이전 상태 저장
+	bool bWasLookingAtInteractable = bIsLookingAtInteractable;
+	AActor* PreviousInteractableActor = CurrentInteractableActor;
+
+	// 레이캐스트 검사만 초기화 (근접 검사 결과 유지를 위해)
+	bool bFoundWithRaycast = false;
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams);
+	if (bHit)
 	{
-		// 블루프린트에서 처리할 수 있도록 기본 구조만 구현
+		AActor* HitActor = HitResult.GetActor();
+
+		// 인터페이스 구현 여부 확인
+		if (HitActor && HitActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+		{
+			// 상호작용 가능 여부 확인
+			if (IInteractableInterface::Execute_CanInteract(HitActor, this))
+			{
+				bIsLookingAtInteractable = true;
+				bFoundWithRaycast = true;
+				CurrentInteractableActor = HitActor;
+				CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(HitActor);
+				UE_LOG(LogTemp, Verbose, TEXT("Can interact with: %s, Text: %s"),
+					*HitActor->GetName(), *CurrentInteractionText);
+			}
+		}
+	}
+
+	// 레이캐스트 검사 실패 시에만 상태 초기화 (근접 검사를 위해)
+	if (!bFoundWithRaycast && bWasLookingAtInteractable && PreviousInteractableActor == CurrentInteractableActor)
+	{
+		bIsLookingAtInteractable = false;
+		CurrentInteractionText = FString();
+		CurrentInteractableActor = nullptr;
+	}
+
+	// 상태가 변경되었을 때만 로그 출력
+	if (bWasLookingAtInteractable != bIsLookingAtInteractable ||
+		(bIsLookingAtInteractable && PreviousInteractableActor != CurrentInteractableActor))
+	{
+		if (bIsLookingAtInteractable)
+		{
+			UE_LOG(LogTemp, Display, TEXT("Looking at interactable: %s"), *CurrentInteractableActor->GetName());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Display, TEXT("No longer looking at interactable"));
+		}
 	}
 }
