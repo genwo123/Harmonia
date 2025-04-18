@@ -1,88 +1,94 @@
-// HamoniaCharacter.h
 #pragma once
+
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
 #include "HamoniaCharacter.generated.h"
 
+class UInventoryComponent;
+class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
-class UCameraComponent;
 
-UCLASS()
+UCLASS(Blueprintable)
 class DISTRICT_TEST_API AHamoniaCharacter : public ACharacter
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
+
 public:
-    AHamoniaCharacter();
-    virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	AHamoniaCharacter();
 
 protected:
-    virtual void BeginPlay() override;
-    virtual void Tick(float DeltaTime) override;
+	virtual void BeginPlay() override;
 
-    // Input Actions
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-    UInputMappingContext* DefaultMappingContext;
+public:
+	virtual void Tick(float DeltaTime) override;
+	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-    UInputAction* MoveAction;
+	// Components
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UCameraComponent* CameraComponent;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-    UInputAction* LookAction;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UInventoryComponent* InventoryComponent;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-    UInputAction* JumpAction;
+	// Enhanced Input System
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputMappingContext* DefaultMappingContext;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-    UInputAction* SprintAction;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* MoveAction;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-    UInputAction* CrouchAction;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* LookAction;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Input")
-    UInputAction* InteractAction;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* JumpAction;
 
-    // Components
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
-    UCameraComponent* CameraComponent;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* InteractAction;
 
-    // Movement properties
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float WalkSpeed = 400.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* SprintAction;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float SprintSpeed = 600.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* CrouchAction;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float CrouchSpeed = 200.0f;
+	// Character movement properties (BP editable)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	float WalkSpeed = 400.0f;
 
-    // 추가 이동 속성
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float JumpZVelocity = 420.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	float SprintSpeed = 600.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float CrouchedHalfHeight = 60.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	float CrouchSpeed = 200.0f;
 
-    // 카메라 속성
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
-    float LookSensitivity = 1.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	float JumpHeight = 420.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera")
-    bool bInvertYAxis = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
+	float LookSensitivity = 0.5f;
 
-    // 상호작용 속성
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
-    float InteractionDistance = 200.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+	float InteractionDistance = 200.0f;
 
-    // Input handlers
-    void Move(const FInputActionValue& Value);
-    void Look(const FInputActionValue& Value);
-    void StartSprint(const FInputActionValue& Value);
-    void StopSprint(const FInputActionValue& Value);
-    void ToggleCrouch(const FInputActionValue& Value);
-    void Interact(const FInputActionValue& Value);
+	// Input handlers
+	void Move(const FInputActionValue& Value);
+	void Look(const FInputActionValue& Value);
+	void StartSprint(const FInputActionValue& Value);
+	void StopSprint(const FInputActionValue& Value);
+	void ToggleCrouch(const FInputActionValue& Value);
+
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	void Interact();
+
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	void CheckForInteractables();
 
 private:
-    bool bIsSprinting = false;
+	bool bIsSprinting = false;
+
+	// 입력 시스템 설정을 위한 함수
+	void SetupEnhancedInput();
 };
