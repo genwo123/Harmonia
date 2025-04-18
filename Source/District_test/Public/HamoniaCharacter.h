@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
+#include "InteractableInterface.h"
 #include "HamoniaCharacter.generated.h"
 
 class UInventoryComponent;
@@ -71,7 +72,17 @@ public:
 	float LookSensitivity = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
-	float InteractionDistance = 200.0f;
+	float InteractionDistance = 400.0f;  // 상호작용 거리 증가
+
+	// 상호작용 UI 정보
+	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+	bool bIsLookingAtInteractable;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+	FString CurrentInteractionText;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+	AActor* CurrentInteractableActor;
 
 	// Input handlers
 	void Move(const FInputActionValue& Value);
@@ -85,6 +96,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	void CheckForInteractables();
+
+	// 디버그용 시각적 표시
+	UFUNCTION(BlueprintCallable, Category = "Debug")
+	void DrawDebugInteractionLine();
 
 private:
 	bool bIsSprinting = false;

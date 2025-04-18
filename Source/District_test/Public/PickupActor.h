@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -38,6 +36,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	class UStaticMeshComponent* MeshComponent;
 
+	// 상호작용 영역 (SphereComponent)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	class USphereComponent* InteractionSphere;
+
 	// 인터페이스 구현
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
 	void Interact(AActor* Interactor);
@@ -55,7 +57,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Pickup")
 	bool PickupItem(AActor* Interactor);
 
+	// 습득 이벤트 (블루프린트에서 확장 가능)
+	UFUNCTION(BlueprintImplementableEvent, Category = "Pickup")
+	void OnPickedUp(AActor* Interactor);
+
 	// 습득 효과음
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup")
 	class USoundBase* PickupSound;
+
+	// 아이템 픽업 성공 시 호출됨
+	UFUNCTION(BlueprintCallable, Category = "Pickup")
+	void OnPickupSuccess(AActor* Interactor);
+
+	// 디버그용 시각화
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+	bool bDrawDebug = true;
 };
