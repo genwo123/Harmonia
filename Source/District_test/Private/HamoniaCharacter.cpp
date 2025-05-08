@@ -327,6 +327,11 @@ void AHamoniaCharacter::Interact()
 	if (bIsLookingAtInteractable && CurrentInteractableActor)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Interacting with: %s"), *CurrentInteractableActor->GetName());
+
+		// 상호작용 타입 가져오기
+		CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(CurrentInteractableActor);
+
+		// 상호작용 실행
 		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
 	}
 	else
@@ -366,8 +371,9 @@ void AHamoniaCharacter::CheckForInteractables()
 				bFoundWithRaycast = true;
 				CurrentInteractableActor = HitActor;
 				CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(HitActor);
-				UE_LOG(LogTemp, Verbose, TEXT("Can interact with: %s, Text: %s"),
-					*HitActor->GetName(), *CurrentInteractionText);
+				CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(HitActor); // 추가된 부분
+				UE_LOG(LogTemp, Verbose, TEXT("Can interact with: %s, Text: %s, Type: %d"),
+					*HitActor->GetName(), *CurrentInteractionText, (int32)CurrentInteractionType);
 			}
 		}
 	}
@@ -378,6 +384,7 @@ void AHamoniaCharacter::CheckForInteractables()
 		bIsLookingAtInteractable = false;
 		CurrentInteractionText = FString();
 		CurrentInteractableActor = nullptr;
+		CurrentInteractionType = EInteractionType::Default; // 추가된 부분
 	}
 
 	// 상태가 변경되었을 때만 로그 출력
@@ -386,11 +393,28 @@ void AHamoniaCharacter::CheckForInteractables()
 	{
 		if (bIsLookingAtInteractable)
 		{
-			UE_LOG(LogTemp, Display, TEXT("Looking at interactable: %s"), *CurrentInteractableActor->GetName());
+			UE_LOG(LogTemp, Display, TEXT("Looking at interactable: %s, Type: %d"),
+				*CurrentInteractableActor->GetName(), (int32)CurrentInteractionType);
 		}
 		else
 		{
 			UE_LOG(LogTemp, Display, TEXT("No longer looking at interactable"));
 		}
 	}
+}
+
+// 추가된 함수들
+EInteractionType AHamoniaCharacter::GetCurrentInteractionType() const
+{
+	return CurrentInteractionType;
+}
+
+bool AHamoniaCharacter::IsLookingAtInteractable() const
+{
+	return bIsLookingAtInteractable;
+}
+
+FString AHamoniaCharacter::GetCurrentInteractionText() const
+{
+	return CurrentInteractionText;
 }

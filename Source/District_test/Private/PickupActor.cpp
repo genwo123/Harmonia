@@ -189,3 +189,8 @@ void APickupActor::OnPickupSuccess(AActor* Interactor)
 
 	UE_LOG(LogTemp, Display, TEXT("PickupActor %s components disabled after successful pickup"), *GetName());
 }
+
+EInteractionType APickupActor::GetInteractionType_Implementation()
+{
+	return EInteractionType::Pickup;
+}
