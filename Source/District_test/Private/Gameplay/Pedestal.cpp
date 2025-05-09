@@ -1,6 +1,7 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Pedestal.cpp
 #include "Gameplay/Pedestal.h"
 #include "Kismet/GameplayStatics.h"
+#include "Character/HamoniaCharacter.h"
 
 APedestal::APedestal()
 {
@@ -25,12 +26,17 @@ APedestal::APedestal()
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     MeshComponent->SetGenerateOverlapEvents(true);
 
-   
-    USphereComponent* InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
+    // 상호작용 영역 추가 (PickupActor처럼) - 블루프린트에서 위치 조정 가능
+    InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
     InteractionSphere->SetupAttachment(RootComponent);
     InteractionSphere->SetSphereRadius(150.0f);
     InteractionSphere->SetCollisionProfileName(TEXT("OverlapAll"));
     InteractionSphere->SetGenerateOverlapEvents(true);
+    InteractionSphere->SetRelativeLocation(FVector(0, 0, 50.0f)); // 기본 위치 설정
+
+    // 오버랩 이벤트 바인딩
+    InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &APedestal::OnInteractionSphereBeginOverlap);
+    InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &APedestal::OnInteractionSphereEndOverlap);
 
     // 기본 상호작용 설정
     InteractionText = "Interact with Pedestal";
@@ -42,6 +48,14 @@ void APedestal::BeginPlay()
     Super::BeginPlay();
 
     // 퍼즐 에리어 찾기
+    FindOwnerPuzzleArea();
+}
+
+void APedestal::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+
+    // 에디터에서 위치 변경 시 자동으로 호출됨
     FindOwnerPuzzleArea();
 }
 
@@ -65,6 +79,8 @@ void APedestal::FindOwnerPuzzleArea()
                     OwnerPuzzleArea = PuzzleArea;
                     GridRow = Row;
                     GridColumn = Column;
+                    UE_LOG(LogTemp, Display, TEXT("Pedestal found PuzzleArea: %s, GridPosition: (%d, %d)"),
+                        *PuzzleArea->GetName(), Row, Column);
                     break;
                 }
             }
@@ -81,6 +97,7 @@ void APedestal::Interact_Implementation(AActor* Interactor)
         // 밀기 상호작용 (플레이어 방향으로 밀기)
         if (Interactor)
         {
+            UE_LOG(LogTemp, Warning, TEXT("Push interaction from F key"));
             FVector Direction = GetActorLocation() - Interactor->GetActorLocation();
             Direction.Z = 0;
             Direction.Normalize();
@@ -90,6 +107,7 @@ void APedestal::Interact_Implementation(AActor* Interactor)
 
     case EInteractionType::Rotate:
         // 회전 상호작용
+        UE_LOG(LogTemp, Warning, TEXT("Rotate interaction from F key"));
         Rotate();
         break;
 
@@ -102,6 +120,9 @@ void APedestal::Interact_Implementation(AActor* Interactor)
 
 bool APedestal::Push(FVector Direction)
 {
+    // 디버그 로그 추가
+    UE_LOG(LogTemp, Warning, TEXT("Pedestal::Push called with direction: %s"), *Direction.ToString());
+
     // 퍼즐 에리어가 없으면 찾기
     if (!OwnerPuzzleArea)
     {
@@ -129,6 +150,8 @@ bool APedestal::Push(FVector Direction)
         GridDirection = Direction.Y > 0 ? EGridDirection::South : EGridDirection::North;
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("Pushing in grid direction: %d"), (int32)GridDirection);
+
     // 이동할 위치 계산
     int32 TargetRow = GridRow;
     int32 TargetColumn = GridColumn;
@@ -149,6 +172,9 @@ bool APedestal::Push(FVector Direction)
         break;
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("Current position: (%d, %d), Target position: (%d, %d)"),
+        GridRow, GridColumn, TargetRow, TargetColumn);
+
     // 유효한 위치인지 확인
     if (!OwnerPuzzleArea->IsValidIndex(TargetRow, TargetColumn))
     {
@@ -167,7 +193,7 @@ bool APedestal::Push(FVector Direction)
     AActor* ActorAtTarget = OwnerPuzzleArea->GetActorAtCell(TargetRow, TargetColumn);
     if (ActorAtTarget)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Pedestal: Cannot push - cell already occupied"));
+        UE_LOG(LogTemp, Warning, TEXT("Pedestal: Cannot push - cell already occupied by %s"), *ActorAtTarget->GetName());
         return false;
     }
 
@@ -176,6 +202,7 @@ bool APedestal::Push(FVector Direction)
 
     // 새 위치로 이동
     FVector NewLocation = OwnerPuzzleArea->GetWorldLocationFromGridIndex(TargetRow, TargetColumn);
+    UE_LOG(LogTemp, Warning, TEXT("Moving pedestal to: %s"), *NewLocation.ToString());
     SetActorLocation(NewLocation);
 
     // 그리드 위치 업데이트
@@ -185,21 +212,29 @@ bool APedestal::Push(FVector Direction)
     // 퍼즐 에리어에 등록
     OwnerPuzzleArea->PlaceActorAtCell(this, TargetRow, TargetColumn);
 
+    UE_LOG(LogTemp, Warning, TEXT("Pedestal push completed successfully"));
     return true;
 }
 
 void APedestal::Rotate(float Degrees)
 {
+    // 디버그 로그 추가
+    UE_LOG(LogTemp, Warning, TEXT("Pedestal::Rotate called with degrees: %f"), Degrees);
+
     // 현재 회전에 각도 추가
     FRotator NewRotation = GetActorRotation();
     NewRotation.Yaw += Degrees;
+    UE_LOG(LogTemp, Warning, TEXT("Rotating from %f to %f"), GetActorRotation().Yaw, NewRotation.Yaw);
     SetActorRotation(NewRotation);
 
     // 설치된 오브제도 같이 회전
     if (PlacedObject)
     {
+        UE_LOG(LogTemp, Warning, TEXT("Also rotating placed object: %s"), *PlacedObject->GetName());
         PlacedObject->SetActorRotation(NewRotation);
     }
+
+    UE_LOG(LogTemp, Warning, TEXT("Pedestal rotation completed successfully"));
 }
 
 bool APedestal::PlaceObject(AActor* Object)
@@ -234,15 +269,9 @@ bool APedestal::PlaceObject(AActor* Object)
 
 AActor* APedestal::RemoveObject()
 {
-    UE_LOG(LogTemp, Warning, TEXT("RemoveObject called on Pedestal: %s, CurrentState: %d, PlacedObject: %s"),
-        *GetName(),
-        (int32)CurrentState,
-        PlacedObject ? *PlacedObject->GetName() : TEXT("None"));
-
     // 설치된 오브제가 없으면 null 반환
     if (CurrentState != EPedestalState::Occupied || !PlacedObject)
     {
-        UE_LOG(LogTemp, Warning, TEXT("RemoveObject failed - no object or wrong state"));
         return nullptr;
     }
 
@@ -251,8 +280,6 @@ AActor* APedestal::RemoveObject()
     RemovedObject->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
     PlacedObject = nullptr;
     CurrentState = EPedestalState::Empty;
-
-    UE_LOG(LogTemp, Warning, TEXT("RemoveObject successful - removed: %s"), *RemovedObject->GetName());
 
     return RemovedObject;
 }
@@ -272,4 +299,38 @@ void APedestal::GetGridPosition(int32& OutRow, int32& OutColumn) const
 {
     OutRow = GridRow;
     OutColumn = GridColumn;
+}
+
+void APedestal::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+    UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+    bool bFromSweep, const FHitResult& SweepResult)
+{
+    // 플레이어 캐릭터인지 확인
+    AHamoniaCharacter* Character = Cast<AHamoniaCharacter>(OtherActor);
+    if (Character)
+    {
+        UE_LOG(LogTemp, Display, TEXT("Player entered interaction sphere of pedestal: %s"), *GetName());
+
+        // 캐릭터의 상호작용 상태 업데이트
+        Character->bIsLookingAtInteractable = true;
+        Character->CurrentInteractableActor = this;
+        Character->CurrentInteractionText = InteractionText;
+        Character->CurrentInteractionType = InteractionType;
+    }
+}
+
+void APedestal::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+    UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+    // 플레이어 캐릭터인지 확인
+    AHamoniaCharacter* Character = Cast<AHamoniaCharacter>(OtherActor);
+    if (Character && Character->CurrentInteractableActor == this)
+    {
+        UE_LOG(LogTemp, Display, TEXT("Player exited interaction sphere of pedestal: %s"), *GetName());
+
+        // 캐릭터의 상호작용 상태 초기화
+        Character->bIsLookingAtInteractable = false;
+        Character->CurrentInteractableActor = nullptr;
+        Character->CurrentInteractionText = FString();
+    }
 }
