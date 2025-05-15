@@ -21,6 +21,9 @@ class DISTRICT_TEST_API APedestal : public AInteractableActor
 public:
     APedestal();
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
+    USceneComponent* AttachmentPoint;
+
     // 상호작용 오버라이드 (밀기, 회전, 오브제 설치 등)
     virtual void Interact_Implementation(AActor* Interactor) override;
 
@@ -56,9 +59,32 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Pedestal")
     void GetGridPosition(int32& OutRow, int32& OutColumn) const;
 
+    // 그리드 중앙에 자동으로 정렬하는 함수
+    UFUNCTION(BlueprintCallable, Category = "Pedestal")
+    void SnapToGridCenter();
+
     // 상호작용 영역 - 블루프린트에서 위치 조정 가능
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Interaction")
     USphereComponent* InteractionSphere;
+
+    // 에디터에서 설정할 타겟 퍼즐 에리어 및 그리드 좌표
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ExposeOnSpawn = true))
+    APuzzleArea* TargetPuzzleArea;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ExposeOnSpawn = true))
+    int32 TargetGridRow = 0;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ExposeOnSpawn = true))
+    int32 TargetGridColumn = 0;
+
+    // 특정 그리드 위치로 이동하는 함수
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    bool MoveToGridPosition(int32 NewRow, int32 NewColumn);
+
+#if WITH_EDITOR
+    // 에디터에서 액터 이동 후 호출되는 함수
+    virtual void PostEditMove(bool bFinished) override;
+#endif
 
 protected:
     // 현재 받침대 상태
@@ -86,6 +112,9 @@ protected:
 
     // 소속된 퍼즐 에리어 찾기
     void FindOwnerPuzzleArea();
+
+    // 이전 셀 참조를 제거하는 함수
+    void ClearPreviousCell();
 
     // 오버랩 이벤트 핸들러
     UFUNCTION()

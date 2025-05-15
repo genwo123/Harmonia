@@ -53,7 +53,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* CrouchAction;
 
-    // 추가된 입력 액션
+    // 추가된 입력 액션 - 블루프린트에서 구현
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* RotateAction;
 
@@ -106,12 +106,18 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     void CheckForInteractables();
 
-    // 회전 및 밀기 함수
+    // 회전 및 밀기 함수 - C++에서 기본 구현 + BP에서 확장
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     void RotateObject();
 
+    UFUNCTION(BlueprintImplementableEvent, Category = "Interaction")
+    void OnRotateObject(); // 블루프린트에서 구현 가능
+
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     void PushObject();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Interaction")
+    void OnPushObject(); // 블루프린트에서 구현 가능
 
     // 디버그용 시각적 표시
     UFUNCTION(BlueprintCallable, Category = "Debug")

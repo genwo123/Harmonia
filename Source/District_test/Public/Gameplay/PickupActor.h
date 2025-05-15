@@ -57,6 +57,13 @@ public:
     // 습득 효과음
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup")
     class USoundBase* PickupSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+    FRotator MeshRotation;
+
+    // OnConstruction 선언 추가
+    virtual void OnConstruction(const FTransform& Transform) override;
+
     // 아이템 픽업 성공 시 호출됨
     UFUNCTION(BlueprintCallable, Category = "Pickup")
     void OnPickupSuccess(AActor* Interactor);

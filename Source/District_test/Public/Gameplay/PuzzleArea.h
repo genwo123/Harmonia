@@ -3,8 +3,9 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Components/BoxComponent.h"
-#include "Components/InstancedStaticMeshComponent.h"
 #include "PuzzleArea.generated.h"
+
+class APedestal; // 전방 선언 추가
 
 // 셀 상태 정의
 UENUM(BlueprintType)
@@ -12,7 +13,8 @@ enum class ECellState : uint8
 {
     Walkable,       // 초록색 - 이동 가능
     Unwalkable,     // 빨간색 - 이동 불가능
-    PedestalSlot    // 노란색 - 받침대 배치 가능
+    PedestalSlot,   // 노란색 - 받침대 배치 가능
+    Occupied        // 파란색 - 이미 받침대가 설치됨
 };
 
 // 방향 정의 (레이저/거울 방향 등에 사용)
@@ -69,16 +71,6 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UBoxComponent* AreaBox;
 
-    // 타일 메시 인스턴스 컴포넌트
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UInstancedStaticMeshComponent* WalkableTiles;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UInstancedStaticMeshComponent* UnwalkableTiles;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UInstancedStaticMeshComponent* PedestalSlotTiles;
-
 public:
     // 기본 속성
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings")
@@ -97,17 +89,11 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bShowDebugGrid;
 
-    // 타일 메시 설정
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-    UStaticMesh* WalkableTileMesh;
+    // 게임에서 그리드 라인 표시 설정
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bShowGridInGame;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-    UStaticMesh* UnwalkableTileMesh;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-    UStaticMesh* PedestalSlotTileMesh;
-
-    // 타일 색상 설정
+    // 색상 설정
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
     FLinearColor WalkableColor;
 
@@ -116,6 +102,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
     FLinearColor PedestalSlotColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
+    FLinearColor OccupiedColor;
 
     // 받침대 클래스 (생성할 때 사용)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal")
@@ -129,9 +118,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid Setup")
     void InitializeGrid();
 
-    // 타일 메시 업데이트
+    // 셀 시각화 함수 (UpdateTileMeshes 대체)
     UFUNCTION(BlueprintCallable, Category = "Grid Setup")
-    void UpdateTileMeshes();
+    void UpdateCellVisuals();
 
     // 셀 상태 설정
     UFUNCTION(BlueprintCallable, Category = "Grid Setup")
@@ -201,6 +190,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid Utility")
     FVector GetGridSize() const;
 
+    // 현재 그리드 최대 크기 얻기 (블루프린트에서 사용)
+    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
+    void GetGridDimensions(int32& OutRows, int32& OutColumns) const;
+
     // 모든 셀 상태 저장 (세이브용)
     UFUNCTION(BlueprintCallable, Category = "Save/Load")
     TArray<uint8> SaveCellStates() const;
@@ -213,6 +206,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     void ResetPuzzle();
 
+    // 그리드 상태 리셋 함수 (디버깅용)
+    UFUNCTION(BlueprintCallable, Category = "Debug")
+    void ResetGridState();
+
+    // 그리드 크기 업데이트 (액터 스케일에 따라)
     UFUNCTION(BlueprintCallable, Category = "Grid")
     void UpdateGridSizeFromActorScale();
 
@@ -220,8 +218,29 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid")
     void SetGridSize(float Width, float Height);
 
-private:
-    // 그리드 인덱스 <-> 1D 배열 인덱스 변환 헬퍼 함수
+    // 받침대 등록 함수
+    UFUNCTION(BlueprintCallable, Category = "Pedestal")
+    bool RegisterPedestal(APedestal* Pedestal, int32 Row, int32 Column);
+
+    // 블루프린트에서 특정 그리드 좌표에 받침대 생성
+    UFUNCTION(BlueprintCallable, Category = "Pedestal")
+    APedestal* CreatePedestalAtGridPosition(TSubclassOf<APedestal> InPedestalClass, int32 Row, int32 Column);
+
+    UFUNCTION(BlueprintCallable, Category = "Grid Setup")
+    void RefreshCellVisuals();
+
+    // 게임에서 셀 색상 표시 (선택적)
+    UFUNCTION(BlueprintCallable, Category = "Debug")
+    void DrawCellsInGame(bool bEnable);
+
     int32 GetIndexFrom2DCoord(int32 Row, int32 Column) const;
     void Get2DCoordFromIndex(int32 Index, int32& OutRow, int32& OutColumn) const;
+
+private:
+    // 그리드 인덱스 <-> 1D 배열 인덱스 변환 헬퍼 함수
+
+    // 에디터에서만 셀 색상 표시
+    void DrawCellsInEditor();
+
+    bool IsDebugLinePresent(UWorld* World);
 };

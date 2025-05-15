@@ -41,7 +41,14 @@ void APickupActor::BeginPlay()
 	// 디버그 로그
 	UE_LOG(LogTemp, Display, TEXT("PickupActor %s BeginPlay at location %s"),
 		*GetName(), *GetActorLocation().ToString());
+
+	// 추가: 설정된 회전 적용
+	if (MeshComponent)
+	{
+		MeshComponent->SetRelativeRotation(MeshRotation);
+	}
 }
+
 
 void APickupActor::Tick(float DeltaTime)
 {
@@ -175,6 +182,17 @@ bool APickupActor::PickupItem(AActor* Interactor)
 	}
 
 	return bPickedUp;
+}
+
+void APickupActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	// 에디터에서 편집 시 회전 적용
+	if (MeshComponent)
+	{
+		MeshComponent->SetRelativeRotation(MeshRotation);
+	}
 }
 
 void APickupActor::OnPickupSuccess(AActor* Interactor)

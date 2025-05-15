@@ -134,8 +134,94 @@ void AHamoniaCharacter::Tick(float DeltaTime)
 
 	// 디버그 라인 그리기
 	DrawDebugInteractionLine();
-}
 
+	// E와 R 키를 직접 확인하는 코드 추가
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC)
+	{
+		// E 키 (회전)
+		if (PC->WasInputKeyJustPressed(EKeys::E))
+		{
+			UE_LOG(LogTemp, Error, TEXT("***** E KEY PRESSED DIRECTLY *****"));
+
+			if (bIsLookingAtInteractable && CurrentInteractableActor)
+			{
+				APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
+				if (Pedestal)
+				{
+					UE_LOG(LogTemp, Error, TEXT("***** ROTATING PEDESTAL: %s *****"), *Pedestal->GetName());
+					Pedestal->Rotate();
+				}
+				else
+				{
+					UE_LOG(LogTemp, Error, TEXT("***** NOT A PEDESTAL, CAN'T ROTATE *****"));
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("***** NOT LOOKING AT INTERACTABLE *****"));
+			}
+		}
+
+		// R 키 (밀기)
+		if (PC->WasInputKeyJustPressed(EKeys::R))
+		{
+			UE_LOG(LogTemp, Error, TEXT("***** R KEY PRESSED DIRECTLY *****"));
+
+			if (bIsLookingAtInteractable && CurrentInteractableActor)
+			{
+				APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
+				if (Pedestal)
+				{
+					UE_LOG(LogTemp, Error, TEXT("***** PUSHING PEDESTAL: %s *****"), *Pedestal->GetName());
+
+					FVector Direction = Pedestal->GetActorLocation() - GetActorLocation();
+					Direction.Z = 0;
+					Direction.Normalize();
+
+					UE_LOG(LogTemp, Error, TEXT("***** PUSH DIRECTION: X=%f, Y=%f *****"), Direction.X, Direction.Y);
+					Pedestal->Push(Direction);
+				}
+				else
+				{
+					UE_LOG(LogTemp, Error, TEXT("***** NOT A PEDESTAL, CAN'T PUSH *****"));
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("***** NOT LOOKING AT INTERACTABLE *****"));
+			}
+		}
+	}
+
+	// 현재 상호작용 상태 출력 (변경 시에만)
+	static bool PrevLookingState = false;
+	static AActor* PrevInteractableActor = nullptr;
+
+	if (PrevLookingState != bIsLookingAtInteractable || PrevInteractableActor != CurrentInteractableActor)
+	{
+		if (bIsLookingAtInteractable && CurrentInteractableActor)
+		{
+			UE_LOG(LogTemp, Error, TEXT("***** LOOKING AT: %s, TYPE: %d *****"),
+				*CurrentInteractableActor->GetName(),
+				static_cast<int32>(CurrentInteractionType));
+
+			// Pedestal인지 확인
+			APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
+			if (Pedestal)
+			{
+				UE_LOG(LogTemp, Error, TEXT("***** IT IS A PEDESTAL *****"));
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("***** NOT LOOKING AT ANY INTERACTABLE *****"));
+		}
+
+		PrevLookingState = bIsLookingAtInteractable;
+		PrevInteractableActor = CurrentInteractableActor;
+	}
+}
 void AHamoniaCharacter::SetupEnhancedInput()
 {
 	// 지연된 호출을 통해 컨트롤러가 확실히 설정된 후 입력 시스템을 설정
@@ -235,20 +321,32 @@ void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 			UE_LOG(LogTemp, Display, TEXT("Crouch action bound"));
 		}
 
+		// 회전 액션
 		if (RotateAction)
 		{
 			EnhancedInputComponent->BindAction(RotateAction, ETriggerEvent::Started, this, &AHamoniaCharacter::RotateObject);
+			UE_LOG(LogTemp, Warning, TEXT("[INPUT] Rotate action bound successfully"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("[INPUT] RotateAction is null - Cannot bind rotation"));
 		}
 
+		// 밀기 액션
 		if (PushAction)
 		{
 			EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &AHamoniaCharacter::PushObject);
+			UE_LOG(LogTemp, Warning, TEXT("[INPUT] Push action bound successfully"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("[INPUT] PushAction is null - Cannot bind push"));
 		}
 
 		// Interaction
 		if (InteractAction)
 		{
-			// Triggered 대신 Pressed 사용
+			// Triggered 대신 Started(Pressed) 사용
 			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHamoniaCharacter::Interact);
 			UE_LOG(LogTemp, Display, TEXT("Interact action bound"));
 		}
@@ -536,57 +634,59 @@ FString AHamoniaCharacter::GetCurrentInteractionText() const
 
 
 
-// 회전 함수 구현 - 항상 90도씩 회전
 void AHamoniaCharacter::RotateObject()
 {
+	UE_LOG(LogTemp, Error, TEXT("***** RotateObject FUNCTION CALLED *****"));
+
 	if (bIsLookingAtInteractable && CurrentInteractableActor)
 	{
-		// 받침대인지 확인
+		UE_LOG(LogTemp, Error, TEXT("***** LOOKING AT: %s *****"), *CurrentInteractableActor->GetName());
+
 		APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
 		if (Pedestal)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Rotating pedestal 90 degrees"));
-
-			// 회전 명령 실행 - 90도 고정 (기본값이 90도이므로 인자 없이 호출)
+			UE_LOG(LogTemp, Error, TEXT("***** ROTATING PEDESTAL FROM FUNCTION *****"));
 			Pedestal->Rotate();
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Cannot rotate - not a pedestal"));
+			UE_LOG(LogTemp, Error, TEXT("***** NOT A PEDESTAL, CAN'T ROTATE FROM FUNCTION *****"));
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("***** NOT LOOKING AT INTERACTABLE FROM FUNCTION *****"));
 	}
 }
 
-// 밀기 함수 구현 - 그리드 기반으로 한 칸씩 밀기
 void AHamoniaCharacter::PushObject()
 {
+	UE_LOG(LogTemp, Error, TEXT("***** PushObject FUNCTION CALLED *****"));
+
 	if (bIsLookingAtInteractable && CurrentInteractableActor)
 	{
-		// 받침대인지 확인
+		UE_LOG(LogTemp, Error, TEXT("***** LOOKING AT: %s *****"), *CurrentInteractableActor->GetName());
+
 		APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
 		if (Pedestal)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Pushing pedestal one grid cell"));
+			UE_LOG(LogTemp, Error, TEXT("***** PUSHING PEDESTAL FROM FUNCTION *****"));
 
-			// 플레이어의 위치와 받침대의 위치 가져오기
-			FVector PlayerLocation = GetActorLocation();
-			FVector PedestalLocation = Pedestal->GetActorLocation();
-
-			// 수평 방향 벡터 계산 (Z 성분 무시)
-			FVector Direction = PedestalLocation - PlayerLocation;
-			Direction.Z = 0;
+			// 플레이어가 바라보는 방향으로 밀어내기 (카메라 전방 벡터 사용)
+			FVector Direction = CameraComponent->GetForwardVector();
+			Direction.Z = 0; // 수평 방향만 고려
 			Direction.Normalize();
 
-			// 그리드 방향으로 변환
-			// Pedestal 클래스의 Push 함수는 이미 그리드 기반으로 동작하도록 구현되어 있음
-			// 플레이어 방향에 가장 가까운 그리드 방향(북,동,남,서)으로 밀리게 됨
+			UE_LOG(LogTemp, Error, TEXT("***** PUSH DIRECTION (Player Forward): X=%f, Y=%f *****"), Direction.X, Direction.Y);
 			Pedestal->Push(Direction);
-
-			UE_LOG(LogTemp, Warning, TEXT("Push direction: X=%f, Y=%f"), Direction.X, Direction.Y);
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Cannot push - not a pedestal"));
+			UE_LOG(LogTemp, Error, TEXT("***** NOT A PEDESTAL, CAN'T PUSH FROM FUNCTION *****"));
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("***** NOT LOOKING AT INTERACTABLE FROM FUNCTION *****"));
 	}
 }
