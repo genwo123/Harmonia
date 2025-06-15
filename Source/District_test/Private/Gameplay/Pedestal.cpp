@@ -43,6 +43,11 @@ APedestal::APedestal()
     AttachmentPoint = CreateDefaultSubobject<USceneComponent>(TEXT("AttachmentPoint"));
     AttachmentPoint->SetupAttachment(RootComponent);
     AttachmentPoint->SetRelativeLocation(FVector(0, 0, 80.0f));
+    AttachmentPoint->SetMobility(EComponentMobility::Movable);
+
+#if WITH_EDITORONLY_DATA
+    AttachmentPoint->bVisualizeComponent = true;
+#endif
 
     // 오버랩 이벤트 바인딩
     InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &APedestal::OnInteractionSphereBeginOverlap);
@@ -51,6 +56,8 @@ APedestal::APedestal()
     // 기본 상호작용 설정
     InteractionText = "Interact with Pedestal";
     InteractionType = EInteractionType::Default;
+
+    bAutoSnapToGrid = true;
 }
 
 
@@ -81,11 +88,16 @@ void APedestal::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
 
+    // 자동 연결이 비활성화되어 있으면 실행하지 않음
+    if (!bAutoSnapToGrid)
+    {
+        return;
+    }
+
     // 타겟 퍼즐 에리어가 지정되었으면 사용
     if (TargetPuzzleArea)
     {
         OwnerPuzzleArea = TargetPuzzleArea;
-
         // 타겟 그리드 좌표로 이동
         if (MoveToGridPosition(TargetGridRow, TargetGridColumn))
         {
@@ -233,7 +245,13 @@ void APedestal::FindOwnerPuzzleArea()
     TArray<AActor*> FoundAreas;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), APuzzleArea::StaticClass(), FoundAreas);
 
-    UE_LOG(LogTemp, Warning, TEXT("Found %d PuzzleAreas in level"), FoundAreas.Num());
+
+    if (!bAutoSnapToGrid)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Auto snap to grid is disabled for pedestal: %s"), *GetName());
+        return;
+    }
+
 
     for (AActor* Area : FoundAreas)
     {
@@ -287,12 +305,18 @@ void APedestal::Interact_Implementation(AActor* Interactor)
 
 bool APedestal::Push(FVector Direction)
 {
+ 
     // 디버그 로그 추가
-    UE_LOG(LogTemp, Warning, TEXT("Pedestal::Push called with direction: %s"), *Direction.ToString());
+    UE_LOG(LogTemp, Warning, TEXT("Pedestal::Push called with original direction: %s"), *Direction.ToString());
 
-    // 중요: 방향 반전 추가 - 플레이어가 바라보는 방향으로 밀리도록
+    // 방향 반전을 확실하게 적용
     Direction = -Direction;
-    UE_LOG(LogTemp, Warning, TEXT("Adjusted push direction (player view): %s"), *Direction.ToString());
+
+    // X와 Y 모두 반대로 동작하므로 두 축 모두 부호 반전
+    FVector AdjustedDirection(-Direction.Y, -Direction.X, Direction.Z);
+    Direction = AdjustedDirection;
+
+    UE_LOG(LogTemp, Warning, TEXT("Final adjusted direction: %s"), *Direction.ToString());
 
     // 퍼즐 에리어가 없으면 찾기
     if (!OwnerPuzzleArea)
@@ -305,7 +329,7 @@ bool APedestal::Push(FVector Direction)
         }
     }
 
-    // 방향 벡터를 그리드 방향으로 변환 (플레이어 바라보는 방향으로 이동)
+    // 방향 벡터를 그리드 방향으로 변환
     EGridDirection GridDirection;
 
     // 가장 큰 방향 성분 찾기
@@ -321,6 +345,7 @@ bool APedestal::Push(FVector Direction)
     }
 
     UE_LOG(LogTemp, Warning, TEXT("Pushing in grid direction: %d"), (int32)GridDirection);
+
 
     // 현재 그리드 위치
     int32 CurrentRow = GridRow;
@@ -346,9 +371,6 @@ bool APedestal::Push(FVector Direction)
         break;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Current position: (%d, %d), Target position: (%d, %d)"),
-        CurrentRow, CurrentColumn, TargetRow, TargetColumn);
-
     // 유효한 위치인지 확인
     if (!OwnerPuzzleArea->IsValidIndex(TargetRow, TargetColumn))
     {
@@ -364,7 +386,7 @@ bool APedestal::Push(FVector Direction)
         return false;
     }
 
-    // 이전 셀 참조 제거 (추가된 부분)
+    // 이전 셀 참조 제거
     ClearPreviousCell();
 
     // 새 위치로 정확히 이동 (그리드 위치에 맞춤)
@@ -428,23 +450,15 @@ void APedestal::SnapToGridCenter()
 
 void APedestal::Rotate(float Degrees)
 {
-    // 디버그 로그 추가
-    UE_LOG(LogTemp, Warning, TEXT("Pedestal::Rotate called with degrees: %f"), Degrees);
-
-    // 현재 회전에 각도 추가
     FRotator NewRotation = GetActorRotation();
     NewRotation.Yaw += Degrees;
-    UE_LOG(LogTemp, Warning, TEXT("Rotating from %f to %f"), GetActorRotation().Yaw, NewRotation.Yaw);
     SetActorRotation(NewRotation);
 
-    // 설치된 오브제도 같이 회전
-    if (PlacedObject)
+    // 조건부 오브젝트 회전
+    if (PlacedObject && bObjectFollowsRotation)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Also rotating placed object: %s"), *PlacedObject->GetName());
         PlacedObject->SetActorRotation(NewRotation);
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("Pedestal rotation completed successfully"));
 }
 
 bool APedestal::PlaceObject(AActor* Object)
@@ -466,7 +480,7 @@ bool APedestal::PlaceObject(AActor* Object)
             AttachmentPoint = NewObject<USceneComponent>(this, TEXT("AttachmentPoint"));
             AttachmentPoint->RegisterComponent();
             AttachmentPoint->SetupAttachment(RootComponent);
-            AttachmentPoint->SetRelativeLocation(FVector(0, 0, MeshComponent->Bounds.BoxExtent.Z)); // 메시 상단에 위치
+            AttachmentPoint->SetRelativeLocation(FVector(0, 0, MeshComponent->Bounds.BoxExtent.Z));
         }
 
         // 오브제를 AttachmentPoint에 배치
@@ -475,8 +489,13 @@ bool APedestal::PlaceObject(AActor* Object)
         // 부착 지점에 정확히 배치 (오프셋 제거)
         Object->SetActorRelativeLocation(FVector::ZeroVector);
 
-        // 받침대와 같은 회전 적용
-        Object->SetActorRotation(GetActorRotation());
+        // 조건부 회전 설정
+        if (!bObjectFollowsRotation)
+        {
+            // 벽 받침대: AttachmentPoint 회전만 사용 (받침대 회전 무시)
+            Object->SetActorRelativeRotation(FRotator::ZeroRotator);
+        }
+        // bObjectFollowsRotation이 true면 AttachmentPoint 회전을 자동으로 따라감
 
         UE_LOG(LogTemp, Display, TEXT("Object %s placed on pedestal at attachment point"), *Object->GetName());
 

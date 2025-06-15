@@ -137,6 +137,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     AActor* GetHeldObject();
 
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bShowDebugLines = true;
+
+   
+
 protected:
     virtual void BeginPlay() override;
 

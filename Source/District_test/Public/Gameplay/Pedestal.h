@@ -21,7 +21,7 @@ class DISTRICT_TEST_API APedestal : public AInteractableActor
 public:
     APedestal();
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components", meta = (AllowPrivateAccess = "true"))
     USceneComponent* AttachmentPoint;
 
     // 상호작용 오버라이드 (밀기, 회전, 오브제 설치 등)
@@ -68,14 +68,18 @@ public:
     USphereComponent* InteractionSphere;
 
     // 에디터에서 설정할 타겟 퍼즐 에리어 및 그리드 좌표
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ExposeOnSpawn = true))
-    APuzzleArea* TargetPuzzleArea;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ExposeOnSpawn = true, AllowedClasses = "PuzzleArea"))
+    TObjectPtr<APuzzleArea> TargetPuzzleArea;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ExposeOnSpawn = true))
     int32 TargetGridRow = 0;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ExposeOnSpawn = true))
     int32 TargetGridColumn = 0;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal")
+    bool bObjectFollowsRotation = true;
+
 
     // 특정 그리드 위치로 이동하는 함수
     UFUNCTION(BlueprintCallable, Category = "Grid")
@@ -105,6 +109,10 @@ protected:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pedestal")
     int32 GridColumn;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    bool bAutoSnapToGrid = true;
+
 
     // 받침대 초기화 (그리드 위치 계산)
     virtual void BeginPlay() override;

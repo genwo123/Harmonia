@@ -1,23 +1,26 @@
-// PuzzleArea.h
+// PuzzleArea.h - 깔끔하게 정리된 버전
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "PuzzleArea.generated.h"
 
-class APedestal; // 전방 선언 추가
+class APedestal;
 
 // 셀 상태 정의
 UENUM(BlueprintType)
 enum class ECellState : uint8
 {
     Walkable,       // 초록색 - 이동 가능
-    Unwalkable,     // 빨간색 - 이동 불가능
+    Unwalkable,     // 빨간색 - 이동 불가능/벽
     PedestalSlot,   // 노란색 - 받침대 배치 가능
-    Occupied        // 파란색 - 이미 받침대가 설치됨
+    Occupied        // 파란색 - 받침대가 설치됨
 };
 
-// 방향 정의 (레이저/거울 방향 등에 사용)
+// 방향 정의
 UENUM(BlueprintType)
 enum class EGridDirection : uint8
 {
@@ -25,6 +28,27 @@ enum class EGridDirection : uint8
     East,
     South,
     West
+};
+
+// 그리드 좌표 구조체
+USTRUCT(BlueprintType)
+struct FGridCoordinate
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Coordinate")
+    int32 Row = 0;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Coordinate")
+    int32 Column = 0;
+
+    FGridCoordinate() = default;
+    FGridCoordinate(int32 InRow, int32 InColumn) : Row(InRow), Column(InColumn) {}
+
+    bool operator==(const FGridCoordinate& Other) const
+    {
+        return Row == Other.Row && Column == Other.Column;
+    }
 };
 
 // 그리드 셀 구조체
@@ -35,23 +59,19 @@ struct FGridCell
 
     // 셀 상태
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell")
-    ECellState State;
+    ECellState State = ECellState::Walkable;
 
     // 월드 위치
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell")
-    FVector WorldLocation;
+    FVector WorldLocation = FVector::ZeroVector;
 
-    // 셀에 배치된 액터 (받침대 또는 퍼즐 요소)
+    // 셀에 배치된 액터 (받침대)
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell")
-    AActor* PlacedActor;
+    AActor* PlacedActor = nullptr;
 
-    // 초기화
-    FGridCell()
-    {
-        State = ECellState::Walkable;
-        WorldLocation = FVector::ZeroVector;
-        PlacedActor = nullptr;
-    }
+    // 바닥 타일 메시
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell")
+    UStaticMeshComponent* TileMesh = nullptr;
 };
 
 UCLASS()
@@ -62,185 +82,157 @@ class DISTRICT_TEST_API APuzzleArea : public AActor
 public:
     APuzzleArea();
 
-protected:
-    virtual void BeginPlay() override;
-    virtual void OnConstruction(const FTransform& Transform) override;
-    virtual void Tick(float DeltaTime) override;
-
-    // 루트 컴포넌트로 사용할 박스
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UBoxComponent* AreaBox;
-
-public:
-    // 기본 속성
+    // ========== 기본 그리드 설정 ==========
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings")
-    int32 GridRows;
+    int32 GridRows = 5;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings")
-    int32 GridColumns;
+    int32 GridColumns = 5;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings")
-    float CellSize;
+    float CellSize = 300.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings")
-    float GridHeight;
+    float GridHeight = 0.0f;
 
-    // 그리드 디버그 표시 여부
+    // ========== 디버그 표시 설정 ==========
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
-    bool bShowDebugGrid;
+    bool bShowDebugGrid = true;
 
-    // 게임에서 그리드 라인 표시 설정
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
-    bool bShowGridInGame;
+    bool bShowGridInGame = false;
 
-    // 색상 설정
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-    FLinearColor WalkableColor;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    bool bForceDebugDisplay = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-    FLinearColor UnwalkableColor;
+    // ========== 셀 색상 설정 ==========
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell Colors")
+    FLinearColor WalkableColor = FLinearColor::Green;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-    FLinearColor PedestalSlotColor;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell Colors")
+    FLinearColor UnwalkableColor = FLinearColor::Red;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-    FLinearColor OccupiedColor;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell Colors")
+    FLinearColor PedestalSlotColor = FLinearColor::Yellow;
 
-    // 받침대 클래스 (생성할 때 사용)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell Colors")
+    FLinearColor OccupiedColor = FLinearColor::Blue;
+
+    // ========== 바닥 타일 설정 ==========
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Floor Tiles")
+    bool bShowTileMeshes = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Floor Tiles")
+    UStaticMesh* DefaultTileMesh;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Floor Tiles")
+    FVector TileScale = FVector(3.0f, 3.0f, 0.4f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Floor Tiles")
+    UMaterialInterface* WalkableMaterial;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Floor Tiles")
+    UMaterialInterface* UnwalkableMaterial;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Floor Tiles")
+    UMaterialInterface* PedestalSlotMaterial;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Floor Tiles")
+    UMaterialInterface* OccupiedMaterial;
+
+    // ========== 수동 벽 설정 ==========
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Manual Wall Setup",
+        meta = (TitleProperty = "Row,Column"))
+    TArray<FGridCoordinate> BlockedCells;
+
+    // ========== 받침대 설정 ==========BlockedCells
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal")
     TSubclassOf<AActor> PedestalClass;
 
-    // 그리드 데이터
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Data")
+    // ========== 그리드 데이터 ==========
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid Data")
     TArray<FGridCell> Grid;
 
-    // 그리드 초기화 함수
-    UFUNCTION(BlueprintCallable, Category = "Grid Setup")
+
+    // 자동 차단 활성화 여부 (기본값: false)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wall Blocking")
+    bool bEnableAutoBlocking = false;
+
+    // 자동 차단 함수 (현재는 빈 함수, 나중에 구현)
+    UFUNCTION(BlueprintCallable, Category = "Wall Blocking")
+    void ApplyAutoBlocking();
+
+    // 수동 차단 함수 (기존)
+    UFUNCTION(BlueprintCallable, Category = "Wall Blocking")
+    void ApplyManualBlocking();
+
+    // ========== 핵심 기능 함수들 ==========
+
+    // 그리드 초기화
+    UFUNCTION(BlueprintCallable, Category = "Grid")
     void InitializeGrid();
 
-    // 셀 시각화 함수 (UpdateTileMeshes 대체)
-    UFUNCTION(BlueprintCallable, Category = "Grid Setup")
-    void UpdateCellVisuals();
-
-    // 셀 상태 설정
-    UFUNCTION(BlueprintCallable, Category = "Grid Setup")
+    // 셀 상태 설정/조회
+    UFUNCTION(BlueprintCallable, Category = "Grid")
     void SetCellState(int32 Row, int32 Column, ECellState NewState);
 
-    // 셀 상태 가져오기
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
+    UFUNCTION(BlueprintCallable, Category = "Grid")
     ECellState GetCellState(int32 Row, int32 Column) const;
 
-    // 월드 위치에서 셀 상태 가져오기
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
-    ECellState GetCellStateFromWorldLocation(const FVector& WorldLocation) const;
-
-    // 월드 위치에서 그리드 인덱스 가져오기
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
-    bool GetGridIndexFromWorldLocation(const FVector& WorldLocation, int32& OutRow, int32& OutColumn) const;
-
-    // 그리드 인덱스에서 월드 위치 가져오기
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
+    // 좌표 변환
+    UFUNCTION(BlueprintCallable, Category = "Grid")
     FVector GetWorldLocationFromGridIndex(int32 Row, int32 Column) const;
 
-    // 유효한 인덱스인지 확인
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    bool GetGridIndexFromWorldLocation(const FVector& WorldLocation, int32& OutRow, int32& OutColumn) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Grid")
     bool IsValidIndex(int32 Row, int32 Column) const;
 
-    // 격자에 위치 스냅(맞추기)
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
-    FVector SnapToGrid(const FVector& WorldLocation) const;
-
-    // 받침대 배치 가능한지 확인
-    UFUNCTION(BlueprintCallable, Category = "Pedestal")
-    bool CanPlacePedestalAt(int32 Row, int32 Column) const;
-
-    // 받침대 배치
-    UFUNCTION(BlueprintCallable, Category = "Pedestal")
-    AActor* PlacePedestal(int32 Row, int32 Column);
-
-    // 모든 받침대 자동 배치 (노란색 셀에)
-    UFUNCTION(BlueprintCallable, Category = "Pedestal")
-    void PlaceAllPedestals();
-
-    // 특정 셀에 배치된 액터 가져오기
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
-    AActor* GetActorAtCell(int32 Row, int32 Column) const;
-
-    // 특정 셀에 액터 배치
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
-    bool PlaceActorAtCell(AActor* Actor, int32 Row, int32 Column);
-
-    // 월드 위치에 액터 배치 (가장 가까운 셀로 스냅)
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
-    bool PlaceActorAtWorldLocation(AActor* Actor, const FVector& WorldLocation);
-
-    // 인접한 셀 가져오기
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
-    bool GetAdjacentCell(int32 Row, int32 Column, EGridDirection Direction, int32& OutRow, int32& OutColumn) const;
-
-    // 디버그용 격자 그리기
-    UFUNCTION(BlueprintCallable, Category = "Debug")
-    void DrawDebugGrid(float Duration = 0.0f);
-
-    // 디버그 모드 토글
-    UFUNCTION(BlueprintCallable, Category = "Debug")
-    void ToggleDebugMode();
-
-    // 그리드 영역 사이즈 가져오기
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
-    FVector GetGridSize() const;
-
-    // 현재 그리드 최대 크기 얻기 (블루프린트에서 사용)
-    UFUNCTION(BlueprintCallable, Category = "Grid Utility")
-    void GetGridDimensions(int32& OutRows, int32& OutColumns) const;
-
-    // 모든 셀 상태 저장 (세이브용)
-    UFUNCTION(BlueprintCallable, Category = "Save/Load")
-    TArray<uint8> SaveCellStates() const;
-
-    // 모든 셀 상태 로드
-    UFUNCTION(BlueprintCallable, Category = "Save/Load")
-    void LoadCellStates(const TArray<uint8>& CellStates);
-
-    // 퍼즐 리셋 (모든 배치된 액터 제거)
-    UFUNCTION(BlueprintCallable, Category = "Puzzle")
-    void ResetPuzzle();
-
-    // 그리드 상태 리셋 함수 (디버깅용)
-    UFUNCTION(BlueprintCallable, Category = "Debug")
-    void ResetGridState();
-
-    // 그리드 크기 업데이트 (액터 스케일에 따라)
-    UFUNCTION(BlueprintCallable, Category = "Grid")
-    void UpdateGridSizeFromActorScale();
-
-    // 특정 크기로 그리드 조정
-    UFUNCTION(BlueprintCallable, Category = "Grid")
-    void SetGridSize(float Width, float Height);
-
-    // 받침대 등록 함수
+    // 받침대 관리
     UFUNCTION(BlueprintCallable, Category = "Pedestal")
     bool RegisterPedestal(APedestal* Pedestal, int32 Row, int32 Column);
 
-    // 블루프린트에서 특정 그리드 좌표에 받침대 생성
     UFUNCTION(BlueprintCallable, Category = "Pedestal")
-    APedestal* CreatePedestalAtGridPosition(TSubclassOf<APedestal> InPedestalClass, int32 Row, int32 Column);
+    AActor* GetActorAtCell(int32 Row, int32 Column) const;
 
-    UFUNCTION(BlueprintCallable, Category = "Grid Setup")
-    void RefreshCellVisuals();
+    // 벽 설정 관리
+    UFUNCTION(BlueprintCallable, Category = "Wall Setup")
+    void ApplyBlockedCells();
 
-    // 게임에서 셀 색상 표시 (선택적)
-    UFUNCTION(BlueprintCallable, Category = "Debug")
-    void DrawCellsInGame(bool bEnable);
+    UFUNCTION(BlueprintCallable, Category = "Wall Setup")
+    void ClearBlockedCells();
+
+    // 시각화 업데이트
+    UFUNCTION(BlueprintCallable, Category = "Visual")
+    void UpdateCellVisuals();
+
+    UFUNCTION(BlueprintCallable, Category = "Visual")
+    void DrawDebugGrid(float Duration = 0.0f);
 
     int32 GetIndexFrom2DCoord(int32 Row, int32 Column) const;
-    void Get2DCoordFromIndex(int32 Index, int32& OutRow, int32& OutColumn) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Tile System")
+    void CreateTileMeshes();
+
+    UFUNCTION(BlueprintCallable, Category = "Tile System")
+    void ClearTileMeshes();
+ 
+protected:
+    virtual void BeginPlay() override;
+    virtual void OnConstruction(const FTransform& Transform) override;
+
+    // 루트 컴포넌트
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UBoxComponent* AreaBox;
+
+    
+    void CreateTileAtCell(int32 Row, int32 Column);
+    void UpdateTileMaterial(int32 Row, int32 Column);
+    UMaterialInterface* GetMaterialForCellState(ECellState State);
 
 private:
-    // 그리드 인덱스 <-> 1D 배열 인덱스 변환 헬퍼 함수
-
-    // 에디터에서만 셀 색상 표시
+    // 내부 헬퍼 함수들
+    
     void DrawCellsInEditor();
-
-    bool IsDebugLinePresent(UWorld* World);
 };
