@@ -18,6 +18,13 @@ protected:
 public:
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    FVector HoldOffset = FVector(100.0f, 0.0f, -20.0f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    bool bMatchCameraRotation = true;
+
     // 현재 이 오브젝트가 받침대에 배치되어 있는지 여부
     UPROPERTY(BlueprintReadOnly, Category = "Puzzle")
     class APedestal* CurrentPedestal;

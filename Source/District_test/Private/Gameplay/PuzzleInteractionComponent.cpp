@@ -23,14 +23,11 @@ void UPuzzleInteractionComponent::TickComponent(float DeltaTime, ELevelTick Tick
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    // 만약 누군가가 이 오브젝트를 들고 있다면, 그 액터를 따라가게 함
     if (HoldingActor)
     {
-        // 소유 액터 가져오기
         AActor* Owner = GetOwner();
         if (Owner)
         {
-            // 캐릭터인 경우 카메라 앞에 배치
             ACharacter* Character = Cast<ACharacter>(HoldingActor);
             if (Character)
             {
@@ -38,17 +35,18 @@ void UPuzzleInteractionComponent::TickComponent(float DeltaTime, ELevelTick Tick
                 FRotator CameraRotation;
                 Character->GetActorEyesViewPoint(CameraLocation, CameraRotation);
 
-                // 카메라 앞 100유닛 위치에 배치
-                FVector NewLocation = CameraLocation + (CameraRotation.Vector() * 100.0f);
+                // 오프셋 적용
+                FVector NewLocation = CameraLocation +
+                    (CameraRotation.Vector() * HoldOffset.X) +
+                    (FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Y) * HoldOffset.Y) +
+                    (FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Z) * HoldOffset.Z);
+
                 Owner->SetActorLocation(NewLocation);
-                Owner->SetActorRotation(CameraRotation);
-            }
-            else
-            {
-                // 일반 액터인 경우, 액터 앞에 배치
-                FVector NewLocation = HoldingActor->GetActorLocation() +
-                    (HoldingActor->GetActorForwardVector() * 100.0f);
-                Owner->SetActorLocation(NewLocation);
+
+                if (bMatchCameraRotation)
+                {
+                    Owner->SetActorRotation(CameraRotation);
+                }
             }
         }
     }
