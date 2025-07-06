@@ -14,6 +14,7 @@
 #include "Gameplay/Pedestal.h"
 #include "Interaction/InteractableMechanism.h"
 #include "Gameplay/PickupActor.h"
+#include <Core/EnhancedQuestComponent.h>
 
 AHamoniaCharacter::AHamoniaCharacter()
 {
@@ -373,6 +374,12 @@ void AHamoniaCharacter::Interact()
 					FVector DropLocation = GetActorLocation() + (GetActorForwardVector() * 100.0f);
 					HeldItemComp->PutDown(DropLocation, GetActorRotation());
 				}
+
+				// 퀘스트 이벤트 호출 (배치/내려놓기 후)
+				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+				{
+					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+				}
 				return;
 			}
 		}
@@ -395,12 +402,24 @@ void AHamoniaCharacter::Interact()
 					{
 						// 오브젝트 집기 시도
 						InteractionComp->PickUp(this);
+
+						// 퀘스트 이벤트 호출 (집기 후)
+						if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+						{
+							IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+						}
 						return;
 					}
 				}
 
 				// 받침대 자체와 상호작용
 				IInteractableInterface::Execute_Interact(Pedestal, this);
+
+				// 퀘스트 이벤트 호출 (받침대 상호작용 후)
+				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+				{
+					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+				}
 				return;
 			}
 
@@ -412,12 +431,24 @@ void AHamoniaCharacter::Interact()
 			{
 				// 오브젝트 집기 시도
 				InteractionComp->PickUp(this);
+
+				// 퀘스트 이벤트 호출 (픽업 후)
+				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+				{
+					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+				}
 				return;
 			}
 		}
 
 		// 3. 기타 일반 상호작용
 		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
+
+		// 4. 퀘스트 이벤트 호출 (일반 상호작용 후)
+		if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+		{
+			IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+		}
 	}
 }
 
