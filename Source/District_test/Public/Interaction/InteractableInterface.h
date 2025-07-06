@@ -34,4 +34,8 @@ public:
     // Get interaction type 
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
     EInteractionType GetInteractionType();
+
+    // Quest interaction event - called after main interaction
+    UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Quest")
+    void OnQuestInteract(AActor* Interactor);
 };

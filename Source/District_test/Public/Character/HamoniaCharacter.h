@@ -80,6 +80,12 @@ public:
     float InteractionDistance = 400.0f;
 
     // 상호작용 UI 정보
+
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Quest")
+    void OnInteractComplete(AActor* InteractedActor);
+
+
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     bool bIsLookingAtInteractable;
 
