@@ -7,6 +7,7 @@
 #include "Gameplay/PuzzleInteractionComponent.h" 
 #include "Gameplay/Pedestal.h"
 #include "Interaction/InteractionEnums.h"
+#include "Core/DialogueManagerComponent.h" 
 #include "HamoniaCharacter.generated.h"
 
 class UInventoryComponent;
@@ -30,6 +31,31 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UInventoryComponent* InventoryComponent;
+
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue")
+    class UDialogueManagerComponent* DialogueManager;
+
+    // DataTable 설정용
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
+    UDataTable* DefaultDialogueDataTable;
+
+    UFUNCTION(BlueprintCallable, Category = "Dialogue")
+    UDialogueManagerComponent* GetDialogueManager();
+
+    // 대화 이벤트 핸들러 (현재 구현 안 됨)
+    UFUNCTION()
+    void OnDialogueStarted(ESpeakerType Speaker, FText DialogueText, EDialogueType Type, float Duration);
+
+    UFUNCTION()
+    void OnDialogueEnded();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Dialogue")
+    void OnDialogueStartedBP(ESpeakerType Speaker, const FText& DialogueText, EDialogueType Type);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Dialogue")
+    void OnDialogueEndedBP();
+
 
     // Enhanced Input System
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
@@ -80,7 +106,15 @@ public:
     float InteractionDistance = 400.0f;
 
     // 상호작용 UI 정보
+    // DialogueTrigger에서 사용할 Getter 함수들
+    UFUNCTION(BlueprintCallable, Category = "Dialogue")
+    class UDialogueManagerComponent* GetDialogueManagerComponent() const { return DialogueManager; }
 
+    UFUNCTION(BlueprintCallable, Category = "Dialogue")
+    FString GetDefaultDialogueID() const { return DefaultDialogueID; }
+
+    UFUNCTION(BlueprintCallable, Category = "Dialogue")
+    void SetDefaultDialogueID(const FString& NewDialogueID) { DefaultDialogueID = NewDialogueID; }
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Quest")
     void OnInteractComplete(AActor* InteractedActor);
@@ -147,7 +181,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bShowDebugLines = true;
 
-   
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
+    FString DefaultDialogueID = "";
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
+    bool bAutoStartDialogue = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
+    float DelayBeforeDialogue = 0.0f;
 
 protected:
     virtual void BeginPlay() override;
