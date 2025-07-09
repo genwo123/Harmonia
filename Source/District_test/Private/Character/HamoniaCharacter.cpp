@@ -39,6 +39,8 @@ AHamoniaCharacter::AHamoniaCharacter()
 	bIsLookingAtInteractable = false;
 	CurrentInteractableActor = nullptr;
 
+	DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
+
 	// 디버그 표시 기본값
 	bShowDebugLines = true;
 }
@@ -59,8 +61,34 @@ void AHamoniaCharacter::BeginPlay()
 	}
 
 	// Enhanced Input 설정
-	FTimerHandle TimerHandle;
-	GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+	FTimerHandle InputTimerHandle;
+	GetWorldTimerManager().SetTimer(InputTimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+
+	// DialogueManager 이벤트 바인딩
+	if (DialogueManager)
+	{
+		DialogueManager->OnDialogueStarted.AddDynamic(this, &AHamoniaCharacter::OnDialogueStarted);
+		DialogueManager->OnDialogueEnded.AddDynamic(this, &AHamoniaCharacter::OnDialogueEnded);
+
+		// DataTable 설정 (클래스 디폴트에서 설정된 경우)
+		if (DefaultDialogueDataTable)
+		{
+			DialogueManager->DialogueDataTable = DefaultDialogueDataTable;
+		}
+	}
+
+	// 기본 대화 자동 시작 설정
+	if (bAutoStartDialogue && !DefaultDialogueID.IsEmpty())
+	{
+		FTimerHandle DialogueTimerHandle;
+		GetWorldTimerManager().SetTimer(DialogueTimerHandle, [this]()
+			{
+				if (DialogueManager && !DialogueManager->bIsInDialogue)
+				{
+					DialogueManager->StartDialogue(DefaultDialogueID);
+				}
+			}, DelayBeforeDialogue, false);
+	}
 }
 
 void AHamoniaCharacter::Tick(float DeltaTime)
@@ -551,4 +579,22 @@ void AHamoniaCharacter::PushObject()
 			Pedestal->Push(Direction);
 		}
 	}
+}
+
+void AHamoniaCharacter::OnDialogueStarted(ESpeakerType Speaker, FText DialogueText, EDialogueType Type, float Duration)
+{
+	// WBP에서 처리할 수 있도록 빈 구현 또는
+	// 기본적인 로그 출력
+	UE_LOG(LogTemp, Log, TEXT("Dialogue Started: %s"), *DialogueText.ToString());
+}
+
+void AHamoniaCharacter::OnDialogueEnded()
+{
+	// 대화 종료 시 처리 (입력 모드 복원 등)
+	UE_LOG(LogTemp, Log, TEXT("Dialogue Ended"));
+}
+
+UDialogueManagerComponent* AHamoniaCharacter::GetDialogueManager()
+{
+	return DialogueManager;
 }
