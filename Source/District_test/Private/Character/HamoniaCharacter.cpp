@@ -375,6 +375,13 @@ void AHamoniaCharacter::ToggleCrouch(const FInputActionValue& Value)
 
 void AHamoniaCharacter::Interact()
 {
+	if (DialogueManager && DialogueManager->bIsInDialogue)
+	{
+		OnDialogueProgressRequested.Broadcast();
+		return;
+	}
+
+
 	if (bIsLookingAtInteractable && CurrentInteractableActor)
 	{
 		// 현재 들고 있는 오브젝트가 있는지 확인
