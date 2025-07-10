@@ -15,12 +15,19 @@ class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
 
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueProgressRequested);
+
 UCLASS(Blueprintable)
 class DISTRICT_TEST_API AHamoniaCharacter : public ACharacter
 {
     GENERATED_BODY()
 public:
     AHamoniaCharacter();
+
+    UPROPERTY(BlueprintAssignable, Category = "Dialogue Events")
+    FOnDialogueProgressRequested OnDialogueProgressRequested;
+
 
     virtual void Tick(float DeltaTime) override;
     virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
