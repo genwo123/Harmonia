@@ -14,6 +14,7 @@
 #include "Gameplay/Pedestal.h"
 #include "Interaction/InteractableMechanism.h"
 #include "Gameplay/PickupActor.h"
+#include "TimerManager.h"
 #include <Core/EnhancedQuestComponent.h>
 
 AHamoniaCharacter::AHamoniaCharacter()
@@ -45,6 +46,30 @@ AHamoniaCharacter::AHamoniaCharacter()
 	bShowDebugLines = true;
 }
 
+void AHamoniaCharacter::SetupEnhancedInput()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (PlayerController && DefaultMappingContext)
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+		}
+		else
+		{
+			// 실패한 경우 다시 시도
+			FTimerHandle TimerHandle;
+			GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+		}
+	}
+	else
+	{
+		// 실패한 경우 다시 시도
+		FTimerHandle TimerHandle;
+		GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+	}
+}
+
 void AHamoniaCharacter::BeginPlay()
 {
 	Super::BeginPlay();
@@ -64,17 +89,40 @@ void AHamoniaCharacter::BeginPlay()
 	FTimerHandle InputTimerHandle;
 	GetWorldTimerManager().SetTimer(InputTimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
 
-	// DialogueManager 이벤트 바인딩
+	// 입력 모드 강제 설정
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->SetInputMode(FInputModeGameOnly());
+	}
+
+	// Enhanced Input 강제 재설정 (대화 후에만 작동하는 문제 해결)
+	FTimerHandle ForceInputTimerHandle;
+	GetWorldTimerManager().SetTimer(ForceInputTimerHandle, [this]()
+		{
+			if (APlayerController* PC = Cast<APlayerController>(GetController()))
+			{
+				if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+					ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+				{
+					if (DefaultMappingContext)
+					{
+						Subsystem->RemoveMappingContext(DefaultMappingContext);
+						Subsystem->AddMappingContext(DefaultMappingContext, 0);
+					}
+				}
+			}
+		}, 1.0f, false);
+
+	// DialogueManager 설정
 	if (DialogueManager)
 	{
+		// 이벤트 바인딩
 		DialogueManager->OnDialogueStarted.AddDynamic(this, &AHamoniaCharacter::OnDialogueStarted);
 		DialogueManager->OnDialogueEnded.AddDynamic(this, &AHamoniaCharacter::OnDialogueEnded);
 
-		// DataTable 설정 (클래스 디폴트에서 설정된 경우)
-		if (DefaultDialogueDataTable)
-		{
-			DialogueManager->DialogueDataTable = DefaultDialogueDataTable;
-		}
+		// DataTable 설정 초기화
+		FTimerHandle DialogueInitTimerHandle;
+		GetWorldTimerManager().SetTimer(DialogueInitTimerHandle, this, &AHamoniaCharacter::InitializeDialogueSystem, 0.1f, false);
 	}
 
 	// 기본 대화 자동 시작 설정
@@ -89,6 +137,30 @@ void AHamoniaCharacter::BeginPlay()
 				}
 			}, DelayBeforeDialogue, false);
 	}
+}
+
+void AHamoniaCharacter::InitializeDialogueSystem()
+{
+	if (DialogueManager && DefaultDialogueDataTable)
+	{
+		// 블루프린트에서 설정한 DataTable을 컴포넌트에 설정
+		DialogueManager->DialogueDataTable = DefaultDialogueDataTable;
+
+		UE_LOG(LogTemp, Warning, TEXT("HamoniaCharacter: DialogueSystem initialized with DataTable: %s"),
+			*DefaultDialogueDataTable->GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("HamoniaCharacter: Failed to initialize DialogueSystem"));
+		UE_LOG(LogTemp, Error, TEXT("DialogueManager: %s"), DialogueManager ? TEXT("Valid") : TEXT("NULL"));
+		UE_LOG(LogTemp, Error, TEXT("DefaultDialogueDataTable: %s"),
+			DefaultDialogueDataTable ? *DefaultDialogueDataTable->GetName() : TEXT("NULL"));
+	}
+}
+
+bool AHamoniaCharacter::IsDialogueSystemReady()
+{
+	return DialogueManager && DialogueManager->DialogueDataTable != nullptr;
 }
 
 void AHamoniaCharacter::Tick(float DeltaTime)
@@ -193,29 +265,58 @@ void AHamoniaCharacter::Tick(float DeltaTime)
 	}
 }
 
-void AHamoniaCharacter::SetupEnhancedInput()
+void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	APlayerController* PlayerController = Cast<APlayerController>(GetController());
-	if (PlayerController && DefaultMappingContext)
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
+	if (EnhancedInputComponent)
 	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+		// Movement
+		if (MoveAction)
 		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Move);
 		}
-		else
+		// Looking
+		if (LookAction)
 		{
-			// 실패한 경우 다시 시도
-			FTimerHandle TimerHandle;
-			GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Look);
 		}
-	}
-	else
-	{
-		// 실패한 경우 다시 시도
-		FTimerHandle TimerHandle;
-		GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+		// Jumping
+		if (JumpAction)
+		{
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		}
+		// Sprinting
+		if (SprintAction)
+		{
+			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::StartSprint);
+			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHamoniaCharacter::StopSprint);
+		}
+		// Crouching
+		if (CrouchAction)
+		{
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::ToggleCrouch);
+		}
+		// 회전 액션 (R 키 → 밀기 기능)
+		if (RotateAction)
+		{
+			EnhancedInputComponent->BindAction(RotateAction, ETriggerEvent::Started, this, &AHamoniaCharacter::PushObject);
+		}
+		// 밀기 액션 (E 키 → 회전 기능)
+		if (PushAction)
+		{
+			EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &AHamoniaCharacter::RotateObject);
+		}
+		// Interaction
+		if (InteractAction)
+		{
+			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHamoniaCharacter::Interact);
+		}
 	}
 }
+
 
 void AHamoniaCharacter::DrawDebugInteractionLine()
 {
@@ -245,65 +346,6 @@ void AHamoniaCharacter::DrawDebugInteractionLine()
 			0,
 			1.0f
 		);
-	}
-}
-
-void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
-	if (EnhancedInputComponent)
-	{
-		// Movement
-		if (MoveAction)
-		{
-			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Move);
-		}
-
-		// Looking
-		if (LookAction)
-		{
-			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Look);
-		}
-
-		// Jumping
-		if (JumpAction)
-		{
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-		}
-
-		// Sprinting
-		if (SprintAction)
-		{
-			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::StartSprint);
-			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHamoniaCharacter::StopSprint);
-		}
-
-		// Crouching
-		if (CrouchAction)
-		{
-			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::ToggleCrouch);
-		}
-
-		// 회전 액션 (R 키 → 밀기 기능)
-		if (RotateAction)
-		{
-			EnhancedInputComponent->BindAction(RotateAction, ETriggerEvent::Started, this, &AHamoniaCharacter::PushObject);
-		}
-
-		// 밀기 액션 (E 키 → 회전 기능)
-		if (PushAction)
-		{
-			EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &AHamoniaCharacter::RotateObject);
-		}
-
-		// Interaction
-		if (InteractAction)
-		{
-			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHamoniaCharacter::Interact);
-		}
 	}
 }
 
@@ -375,15 +417,35 @@ void AHamoniaCharacter::ToggleCrouch(const FInputActionValue& Value)
 
 void AHamoniaCharacter::Interact()
 {
-	if (DialogueManager && DialogueManager->bIsInDialogue)
+	UE_LOG(LogTemp, Warning, TEXT("=== Interact Function Called ==="));
+	UE_LOG(LogTemp, Warning, TEXT("bIsLookingAtInteractable: %s, CurrentInteractableActor: %s"),
+		bIsLookingAtInteractable ? TEXT("True") : TEXT("False"),
+		CurrentInteractableActor ? *CurrentInteractableActor->GetName() : TEXT("NULL"));
+
+	// 대화 시스템 우선 처리 (대화 중일 때만)
+	if (DialogueManager)
 	{
-		OnDialogueProgressRequested.Broadcast();
-		return;
+		UE_LOG(LogTemp, Warning, TEXT("DialogueManager bIsInDialogue: %s"),
+			DialogueManager->bIsInDialogue ? TEXT("True") : TEXT("False"));
+
+		if (DialogueManager->bIsInDialogue)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("In dialogue - progressing dialogue"));
+			OnDialogueProgressRequested.Broadcast();
+			return;
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DialogueManager is NULL"));
 	}
 
-
+	// 기존 상호작용 로직
+	UE_LOG(LogTemp, Warning, TEXT("Starting interaction logic"));
 	if (bIsLookingAtInteractable && CurrentInteractableActor)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("Interaction conditions met - proceeding"));
+
 		// 현재 들고 있는 오브젝트가 있는지 확인
 		AActor* HeldObject = GetHeldObject();
 
@@ -392,12 +454,10 @@ void AHamoniaCharacter::Interact()
 		{
 			UPuzzleInteractionComponent* HeldItemComp =
 				HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
-
 			if (HeldItemComp)
 			{
 				// 받침대인지 확인
 				APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
-
 				if (Pedestal)
 				{
 					// 받침대에 오브젝트 배치
@@ -409,7 +469,6 @@ void AHamoniaCharacter::Interact()
 					FVector DropLocation = GetActorLocation() + (GetActorForwardVector() * 100.0f);
 					HeldItemComp->PutDown(DropLocation, GetActorRotation());
 				}
-
 				// 퀘스트 이벤트 호출 (배치/내려놓기 후)
 				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 				{
@@ -432,12 +491,10 @@ void AHamoniaCharacter::Interact()
 					// 오브젝트의 상호작용 컴포넌트 확인
 					UPuzzleInteractionComponent* InteractionComp =
 						ObjectOnPedestal->FindComponentByClass<UPuzzleInteractionComponent>();
-
 					if (InteractionComp)
 					{
 						// 오브젝트 집기 시도
 						InteractionComp->PickUp(this);
-
 						// 퀘스트 이벤트 호출 (집기 후)
 						if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 						{
@@ -446,10 +503,8 @@ void AHamoniaCharacter::Interact()
 						return;
 					}
 				}
-
 				// 받침대 자체와 상호작용
 				IInteractableInterface::Execute_Interact(Pedestal, this);
-
 				// 퀘스트 이벤트 호출 (받침대 상호작용 후)
 				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 				{
@@ -457,16 +512,13 @@ void AHamoniaCharacter::Interact()
 				}
 				return;
 			}
-
 			// 2.2 현재 바라보는 대상이 PuzzleInteractionComponent를 가진 오브젝트인 경우
 			UPuzzleInteractionComponent* InteractionComp =
 				CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
-
 			if (InteractionComp && InteractionComp->bCanBePickedUp)
 			{
 				// 오브젝트 집기 시도
 				InteractionComp->PickUp(this);
-
 				// 퀘스트 이벤트 호출 (픽업 후)
 				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 				{
@@ -475,8 +527,8 @@ void AHamoniaCharacter::Interact()
 				return;
 			}
 		}
-
 		// 3. 기타 일반 상호작용
+		UE_LOG(LogTemp, Warning, TEXT("Executing general interaction"));
 		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
 
 		// 4. 퀘스트 이벤트 호출 (일반 상호작용 후)
@@ -484,6 +536,12 @@ void AHamoniaCharacter::Interact()
 		{
 			IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
 		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Interaction conditions NOT met"));
+		UE_LOG(LogTemp, Warning, TEXT("bIsLookingAtInteractable: %s"), bIsLookingAtInteractable ? TEXT("True") : TEXT("False"));
+		UE_LOG(LogTemp, Warning, TEXT("CurrentInteractableActor: %s"), CurrentInteractableActor ? TEXT("Valid") : TEXT("NULL"));
 	}
 }
 

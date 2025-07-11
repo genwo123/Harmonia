@@ -200,6 +200,15 @@ public:
 protected:
     virtual void BeginPlay() override;
 
+    // 컴포넌트 초기화 보장 함수 추가
+    UFUNCTION(BlueprintCallable, Category = "Dialogue")
+    void InitializeDialogueSystem();
+
+    // DataTable 설정 확인 함수 추가
+    UFUNCTION(BlueprintCallable, Category = "Dialogue")
+    bool IsDialogueSystemReady();
+
+
 private:
     bool bIsSprinting = false;
 
