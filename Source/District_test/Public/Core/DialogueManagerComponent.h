@@ -124,10 +124,10 @@ public:
     UDataTable* DialogueDataTable;
 
     // 현재 대화 상태
-    UPROPERTY(BlueprintReadOnly, Category = "Dialogue State")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
     bool bIsInDialogue = false;
 
-    UPROPERTY(BlueprintReadOnly, Category = "Dialogue State")
+    UPROPERTY(BlueprintReadWrite, Category = "Dialogue State")
     FString CurrentDialogueID;
 
     // 대화 이벤트들
