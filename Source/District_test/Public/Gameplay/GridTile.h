@@ -1,31 +1,33 @@
-// GridTile.h
+// GridTile.h - Pathfinding Puzzle with Minimal InteractableInterface
 #pragma once
+
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
-#include "Components/BoxComponent.h"
+#include "Components/SphereComponent.h"
 #include "Interaction/InteractableInterface.h"
 #include "GridTile.generated.h"
 
 UENUM(BlueprintType)
 enum class ETileState : uint8
 {
-    Default     UMETA(DisplayName = "Default"),     // 회색 (기본)
-    Correct     UMETA(DisplayName = "Correct"),     // 파란불 (올바른 경로)
-    Wrong       UMETA(DisplayName = "Wrong"),       // 빨간불 (틀린 경로)
-    Start       UMETA(DisplayName = "Start"),       // 시작점
-    Goal        UMETA(DisplayName = "Goal"),        // 도착점
-    Hint        UMETA(DisplayName = "Hint")         // 힌트 표시
+    Default     UMETA(DisplayName = "Default"),     // 회색 - 대기 상태
+    Start       UMETA(DisplayName = "Start"),       // 초록 - 시작 준비 상태  
+    Correct     UMETA(DisplayName = "Correct"),     // 파랑 - 정답 상태
+    Wrong       UMETA(DisplayName = "Wrong"),       // 빨강 - 오답 상태
+    Goal        UMETA(DisplayName = "Goal"),        // 노랑 - 목표점 (미리보기)
+    Hint        UMETA(DisplayName = "Hint"),        // 보라 - 경로 힌트 (미리보기)
+    StartPoint  UMETA(DisplayName = "StartPoint")   // 밝은 초록 - 실제 시작점
 };
 
 // Forward Declaration
 class AGridTile;
 
-// 델리게이트 선언 수정
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTileSteppedDelegate, AGridTile*, SteppedTile, AActor*, SteppedActor);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTileStateChangedDelegate, ETileState, NewState);
 
-UCLASS()
+UCLASS(Blueprintable, BlueprintType)
 class DISTRICT_TEST_API AGridTile : public AActor, public IInteractableInterface
 {
     GENERATED_BODY()
@@ -37,174 +39,248 @@ protected:
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaTime) override;
 
-    // ====== COMPONENTS ======
+    // ====== Basic Components ======
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    USceneComponent* SceneRoot;
+    USceneComponent* RootSceneComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
     UStaticMeshComponent* TileMesh;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
+    UStaticMeshComponent* PillarMesh;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
     UPointLightComponent* TileLight;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UBoxComponent* TriggerBox;
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
+    USphereComponent* InteractionSphere;
 
-    // ====== MANAGER REFERENCE ======
-    UPROPERTY(BlueprintReadOnly, Category = "Manager")
-    class AGridMazeManager* OwnerManager;
-
-    // ====== TILE PROPERTIES ======
+    // ====== Basic Settings ======
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tile Settings")
-    ETileState CurrentState = ETileState::Default;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Tile Settings")
-    int32 GridX = 0;
-
-    UPROPERTY(BlueprintReadOnly, Category = "Tile Settings")
-    int32 GridY = 0;
+    ETileState InitialState = ETileState::Default;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tile Settings")
-    bool bIsPartOfCorrectPath = false;
+    bool bCanBeInteracted = true;
 
-    // ====== VISUAL SETTINGS ======
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
-    FLinearColor DefaultColor = FLinearColor(0.2f, 0.2f, 0.2f, 1.0f); // 어두운 회색
+    // ====== Pathfinding Color Settings ======
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pathfinding Colors")
+    FLinearColor WaitingColor = FLinearColor(0.3f, 0.3f, 0.3f, 1.0f); // 회색 - 대기
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
-    FLinearColor CorrectColor = FLinearColor(0.0f, 0.5f, 1.0f, 1.0f); // 파란색
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pathfinding Colors")
+    FLinearColor ReadyColor = FLinearColor(0.2f, 1.0f, 0.2f, 1.0f); // 초록 - 준비
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
-    FLinearColor WrongColor = FLinearColor(1.0f, 0.2f, 0.2f, 1.0f); // 빨간색
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pathfinding Colors")
+    FLinearColor CorrectColor = FLinearColor(0.2f, 0.2f, 1.0f, 1.0f); // 파랑 - 정답
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
-    FLinearColor StartColor = FLinearColor(0.2f, 1.0f, 0.2f, 1.0f); // 초록색
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pathfinding Colors")
+    FLinearColor WrongColor = FLinearColor(1.0f, 0.2f, 0.2f, 1.0f); // 빨강 - 오답
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
-    FLinearColor GoalColor = FLinearColor(1.0f, 1.0f, 0.2f, 1.0f); // 노란색
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pathfinding Colors")
+    FLinearColor GoalColor = FLinearColor(1.0f, 1.0f, 0.2f, 1.0f); // 노랑 - 목표점
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
-    FLinearColor HintColor = FLinearColor(0.8f, 0.4f, 1.0f, 1.0f); // 보라색
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pathfinding Colors")
+    FLinearColor HintColor = FLinearColor(0.8f, 0.4f, 1.0f, 1.0f); // 보라 - 힌트
 
-    // ====== LIGHT SETTINGS ======
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
-    float DefaultLightIntensity = 100.0f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pathfinding Colors")
+    FLinearColor StartPointColor = FLinearColor(0.4f, 1.0f, 0.4f, 1.0f); // 밝은 초록 - 시작점
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
-    float ActiveLightIntensity = 2000.0f;
+    UFUNCTION(BlueprintCallable, Category = "Manager Connection")
+    void UpdateFromManagerColors();
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
-    float LightRadius = 150.0f;
+    // ====== Light Settings ======
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light Settings")
+    float DefaultLightIntensity = 1500.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light")
-    float LightHeight = 50.0f; // 타일 위쪽 높이
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light Settings")
+    float ActiveLightIntensity = 1500.0f;
 
-    // ====== ANIMATION SETTINGS ======
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light Settings")
+    float LightRadius = 500.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Light Settings")
+    float LightHeight = 100.0f;
+
+    // ====== Animation Settings ======
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation Settings")
     bool bEnableBlinking = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
-    float BlinkSpeed = 2.0f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation Settings")
+    float BlinkSpeed = 3.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
-    bool bEnablePulse = true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation Settings")
+    bool bEnablePulsing = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
-    float PulseSpeed = 1.5f;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation Settings")
+    float PulseSpeed = 2.0f;
 
-    // ====== AUDIO SETTINGS ======
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
-    bool bPlayStepSound = true;
+    // ====== Sound Settings ======
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound Settings")
+    bool bPlayInteractionSound = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
-    class USoundBase* StepSound;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound Settings")
+    class USoundBase* InteractionSound;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound Settings")
+    class USoundBase* CorrectSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound Settings")
+    class USoundBase* WrongSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound Settings")
     float SoundVolume = 1.0f;
 
+    // ====== Current State ======
+    UPROPERTY(BlueprintReadOnly, Category = "Current State")
+    ETileState CurrentState = ETileState::Default;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Current State")
+    int32 GridX = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Current State")
+    int32 GridY = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Current State")
+    bool bIsBlinking = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Current State")
+    bool bIsPulsing = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Current State")
+    bool bIsActivated = false;
+
 public:
-    // ====== EVENTS ======
+    // ====== Blueprint Events ======
     UPROPERTY(BlueprintAssignable, Category = "Events")
     FOnTileSteppedDelegate OnTileStepped;
 
-    // ====== PUBLIC FUNCTIONS ======
-    UFUNCTION(BlueprintCallable, Category = "Tile")
+    UPROPERTY(BlueprintAssignable, Category = "Events")
+    FOnTileStateChangedDelegate OnTileStateChanged;
+
+    // ====== Manager Reference ======
+    UPROPERTY(BlueprintReadOnly, Category = "Manager")
+    class AGridMazeManager* OwnerManager;
+
+    // ====== Blueprint Callable Functions ======
+    UFUNCTION(BlueprintCallable, Category = "Tile Control")
     void SetTileState(ETileState NewState);
 
-    UFUNCTION(BlueprintCallable, Category = "Tile")
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Tile Information")
     ETileState GetTileState() const { return CurrentState; }
 
-    UFUNCTION(BlueprintCallable, Category = "Tile")
+    UFUNCTION(BlueprintCallable, Category = "Tile Control")
     void SetGridPosition(int32 X, int32 Y);
 
-    UFUNCTION(BlueprintCallable, Category = "Tile")
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Tile Information")
     FVector2D GetGridPosition() const { return FVector2D(GridX, GridY); }
-
-    UFUNCTION(BlueprintCallable, Category = "Tile")
-    void SetCorrectPath(bool bIsCorrect);
-
-    UFUNCTION(BlueprintCallable, Category = "Tile")
-    bool IsCorrectPath() const { return bIsPartOfCorrectPath; }
 
     UFUNCTION(BlueprintCallable, Category = "Manager")
     void SetOwnerManager(class AGridMazeManager* Manager);
 
-    UFUNCTION(BlueprintCallable, Category = "Visual")
+    // ====== Light Control ======
+    UFUNCTION(BlueprintCallable, Category = "Light Control")
+    void TurnOnLight(FLinearColor Color);
+
+    UFUNCTION(BlueprintCallable, Category = "Light Control")
+    void TurnOffLight();
+
+    UFUNCTION(BlueprintCallable, Category = "Light Control")
+    void SetLightColor(FLinearColor NewColor);
+
+    UFUNCTION(BlueprintCallable, Category = "Light Control")
+    void SetLightIntensity(float NewIntensity);
+
+    // ====== Animation Control ======
+    UFUNCTION(BlueprintCallable, Category = "Animation")
     void StartBlinking(float Duration = 3.0f);
 
-    UFUNCTION(BlueprintCallable, Category = "Visual")
+    UFUNCTION(BlueprintCallable, Category = "Animation")
     void StopBlinking();
 
-    UFUNCTION(BlueprintCallable, Category = "Visual")
-    void ShowHint(float Duration = 2.0f);
+    UFUNCTION(BlueprintCallable, Category = "Animation")
+    void StartPulsing(float Duration = 3.0f);
 
-protected:
-    // ====== INTERNAL VARIABLES ======
-    UPROPERTY(BlueprintReadOnly, Category = "State")
-    bool bIsBlinking = false;
+    UFUNCTION(BlueprintCallable, Category = "Animation")
+    void StopPulsing();
 
-    UPROPERTY(BlueprintReadOnly, Category = "State")
-    bool bIsShowingHint = false;
+    // ====== Appearance Control ======
+    UFUNCTION(BlueprintCallable, Category = "Appearance")
+    void UpdateTileVisuals();
 
-    UPROPERTY(BlueprintReadOnly, Category = "State")
-    float BlinkTimer = 0.0f;
+    UFUNCTION(BlueprintCallable, Category = "Appearance")
+    void ResetToDefault();
 
-    UPROPERTY(BlueprintReadOnly, Category = "State")
-    float HintTimer = 0.0f;
-
-    UPROPERTY(BlueprintReadOnly, Category = "State")
-    UMaterialInstanceDynamic* DynamicMaterial;
-
-    // Timer Handles
-    FTimerHandle BlinkTimerHandle;
-    FTimerHandle HintTimerHandle;
-
-    // ====== TRIGGER EVENTS ======
-    UFUNCTION()
-    void OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-        UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-        bool bFromSweep, const FHitResult& SweepResult);
-
-    // ====== VISUAL FUNCTIONS ======
-    void UpdateVisuals();
-    void UpdateLightAndMaterial();
-    void UpdateBlinking(float DeltaTime);
-    void UpdateHint(float DeltaTime);
-
-    FLinearColor GetCurrentStateColor();
+    // ====== Sound Control ======
+    UFUNCTION(BlueprintCallable, Category = "Sound")
     void PlayTileSound(USoundBase* Sound);
 
-    // ====== BLUEPRINT EVENTS ======
-    UFUNCTION(BlueprintImplementableEvent, Category = "Events")
-    void OnTileStateChanged(ETileState NewState);
+    UFUNCTION(BlueprintCallable, Category = "Sound")
+    void PlayInteractionSound();
 
-    UFUNCTION(BlueprintImplementableEvent, Category = "Events")
-    void OnPlayerEntered(AActor* Player);
+    UFUNCTION(BlueprintCallable, Category = "Sound")
+    void PlayCorrectSound();
 
-public:
-    // ====== INTERACTABLE INTERFACE ======
+    UFUNCTION(BlueprintCallable, Category = "Sound")
+    void PlayWrongSound();
+
+    // ====== Interaction Control ======
+    UFUNCTION(BlueprintCallable, Category = "Interaction")
+    void SetCanBeInteracted(bool bCanInteract);
+
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Interaction")
+    bool CanBeInteracted() const { return bCanBeInteracted; }
+
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Interaction")
+    bool IsActivated() const { return bIsActivated; }
+
+    // ====== Information Query ======
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
+    FLinearColor GetCurrentStateColor() const;
+
+    UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
+    bool IsAnimating() const { return bIsBlinking || bIsPulsing; }
+
+    // ====== InteractableInterface Implementation (Minimal) ======
     virtual void Interact_Implementation(AActor* Interactor) override;
     virtual bool CanInteract_Implementation(AActor* Interactor) override;
     virtual FString GetInteractionText_Implementation() override;
     virtual EInteractionType GetInteractionType_Implementation() override;
+
+    // ====== Blueprint Events (Implementable in BP) ======
+    UFUNCTION(BlueprintImplementableEvent, Category = "Blueprint Events")
+    void OnPlayerInteracted(AActor* Player);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Blueprint Events")
+    void OnStateChanged(ETileState OldState, ETileState NewState);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Blueprint Events")
+    void OnCorrectInteraction();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Blueprint Events")
+    void OnWrongInteraction();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Blueprint Events")
+    void OnLightTurnedOn(FLinearColor Color);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Blueprint Events")
+    void OnLightTurnedOff();
+
+    // ====== Blueprint Overrideable Functions ======
+    UFUNCTION(BlueprintNativeEvent, Category = "Custom Logic")
+    bool ShouldProcessInteraction(AActor* InteractingActor);
+    virtual bool ShouldProcessInteraction_Implementation(AActor* InteractingActor) { return true; }
+
+    UFUNCTION(BlueprintNativeEvent, Category = "Custom Appearance")
+    FLinearColor GetCustomStateColor(ETileState State) const;
+    virtual FLinearColor GetCustomStateColor_Implementation(ETileState State) const;
+
+protected:
+    // Timer Handles
+    FTimerHandle BlinkTimerHandle;
+    FTimerHandle PulseTimerHandle;
+
+private:
+    // Internal functions
+    void UpdateBlinking(float DeltaTime);
+    void UpdatePulsing(float DeltaTime);
+    void ForceMobilitySettings();
 };
