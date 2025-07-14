@@ -1,289 +1,128 @@
-// GridMazeManager.cpp - 완전한 정리된 버전
+
 #include "Gameplay/GridMazeManager.h"
 #include "Gameplay/GridTile.h"
 #include "Gameplay/MazeDisplay.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
-#include "Sound/SoundBase.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 
 #if WITH_EDITOR
 #include "Editor.h"
-#include "UnrealEd.h"
 #endif
 
 AGridMazeManager::AGridMazeManager()
 {
     PrimaryActorTick.bCanEverTick = true;
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
+
+    // Create Starting Floor Mesh Component
+    StartingFloorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StartingFloorMesh"));
+    StartingFloorMesh->SetupAttachment(RootComponent);
+
+    // Load default cube mesh for floor
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshAsset(TEXT("/Engine/BasicShapes/Cube"));
+    if (CubeMeshAsset.Succeeded())
+    {
+        StartingFloorMesh->SetStaticMesh(CubeMeshAsset.Object);
+    }
+
+    StartingFloorMesh->SetMobility(EComponentMobility::Movable);
+    StartingFloorMesh->SetSimulatePhysics(false);
+    StartingFloorMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    StartingFloorMesh->SetCollisionResponseToAllChannels(ECR_Block);
+
+    // 기본 설정
+    FailResetDelay = 3.0f;
+    bContinueTimeOnFail = true;
+    bKeepProgressOnFail = true;
 }
 
 void AGridMazeManager::BeginPlay()
 {
     Super::BeginPlay();
 
-    // 모든 타일을 완전히 제거
-    UE_LOG(LogTemp, Warning, TEXT("BeginPlay: Clearing ALL tiles"));
-    ClearAllTiles(TEXT(""));
+    // 게임 시작 시 타일 생성
+    CreateTilesInternal();
 
-    //  람다 함수 문법 수정 (this 캡처 추가)
-    FTimerHandle DelayTimer;
-    GetWorld()->GetTimerManager().SetTimer(DelayTimer, [this]()
-        {
-            this->SetupDifficultySettings();
-            this->CreateGameGrid();
-            this->GenerateCorrectPath();
-
-            if (bAutoFindDisplay && !ConnectedDisplay)
-            {
-                this->FindConnectedDisplay();
-            }
-
-            this->SetMazeState(EMazeState::Ready);
-
-        }, 0.1f, false);
-}
-
-AGridMazeManager::~AGridMazeManager()
-{
-    // 소멸자에서 정리
-    UE_LOG(LogTemp, Warning, TEXT("GridMazeManager destructor called"));
-}
-
-void AGridMazeManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-    UE_LOG(LogTemp, Warning, TEXT("GridMazeManager EndPlay called - cleaning up tiles"));
-
-    // 모든 소유한 타일들 강제 삭제
-    if (GetWorld())
+    // 시작 바닥 생성
+    if (bUseStartingFloor)
     {
-        TArray<AActor*> AllGridTiles;
-        UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridTile::StaticClass(), AllGridTiles);
-
-        int32 DeletedCount = 0;
-        for (AActor* Actor : AllGridTiles)
-        {
-            if (Actor && Actor->GetOwner() == this)
-            {
-                Actor->Destroy();
-                DeletedCount++;
-            }
-        }
-
-        UE_LOG(LogTemp, Warning, TEXT("Deleted %d tiles during EndPlay"), DeletedCount);
+        CreateStartingFloor();
     }
 
-    GridTiles.Empty();
+    if (bAutoFindDisplay)
+    {
+        ConnectToDisplay();
+    }
 
-    Super::EndPlay(EndPlayReason);
+    // 경로 유효성 검사
+    ValidateCorrectPath();
+
+    TimeRemaining = PuzzleTimeLimit;
+    SetPuzzleState(EPuzzleState::Ready);
+
+    // 모든 타일을 대기 상태(회색)로 설정
+    SetAllTilesWaiting();
+
+    UE_LOG(LogTemp, Warning, TEXT("GridMazeManager BeginPlay - Path length: %d"), CorrectPath.Num());
 }
 
 void AGridMazeManager::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // 타이머 업데이트
-    if (CurrentState == EMazeState::Running && bHasTimeLimit)
+    // 실패 상태에서도 시간은 계속 흘러야 함! (중요 수정)
+    if ((CurrentState == EPuzzleState::Playing ||
+        (CurrentState == EPuzzleState::Failed && bContinueTimeOnFail)) &&
+        !bGamePaused)
     {
         UpdateTimer(DeltaTime);
     }
 }
 
-// ====== UNIFIED GRID MANAGEMENT ======
-void AGridMazeManager::CreateGameGrid()
+void AGridMazeManager::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    ClearAllTiles(TEXT("GameTile"));
-    CreateTiles(TEXT("GameTile"), true); // 델리게이트 연결
-    UE_LOG(LogTemp, Log, TEXT("Game grid created: %dx%d (%d tiles)"), GridSize, GridSize, GridTiles.Num());
+    DestroyAllTiles();
+    Super::EndPlay(EndPlayReason);
 }
 
-void AGridMazeManager::CreateEditorGrid()
+void AGridMazeManager::Destroyed()
 {
-#if WITH_EDITOR
-    ClearAllTiles(TEXT("EditorPreview"));
-    CreateTiles(TEXT("EditorPreview"), false); // 델리게이트 연결 안함
-    UE_LOG(LogTemp, Log, TEXT("Editor preview created: %dx%d (%d tiles)"), GridSize, GridSize, GridTiles.Num());
-#endif
+    DestroyAllTiles();
+    Super::Destroyed();
 }
 
-void AGridMazeManager::CreateTiles(const FString& TileTag, bool bConnectDelegates)
-{
-    if (!TileClass)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("TileClass is not set in GridMazeManager!"));
-        return;
-    }
-
-    GridTiles.Empty();
-    GridTiles.SetNum(GridSize * GridSize);
-
-    for (int32 X = 0; X < GridSize; X++)
-    {
-        for (int32 Y = 0; Y < GridSize; Y++)
-        {
-            FVector SpawnLocation = CalculateTileWorldPosition(X, Y);
-
-            // 스폰 파라미터 설정
-            FActorSpawnParameters SpawnParams;
-            SpawnParams.Owner = this;
-            SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-            AGridTile* NewTile = GetWorld()->SpawnActor<AGridTile>(
-                TileClass,
-                SpawnLocation,
-                FRotator::ZeroRotator,
-                SpawnParams
-            );
-
-            if (NewTile)
-            {
-                //  핵심: 타일을 Manager에 부착해서 계층 구조 만들기
-                NewTile->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-
-                // 기본 설정
-                NewTile->SetGridPosition(X, Y);
-                NewTile->Tags.Add(*TileTag);
-
-                // 게임용일 때만 Manager 연결 및 델리게이트 연결
-                if (bConnectDelegates)
-                {
-                    NewTile->SetOwnerManager(this);
-                    NewTile->OnTileStepped.AddDynamic(this, &AGridMazeManager::OnTileStepped);
-                }
-
-                int32 Index = CoordinateToIndex(X, Y);
-                GridTiles[Index] = NewTile;
-
-                // 시작점과 목표점 설정
-                if (FVector2D(X, Y) == StartPosition)
-                {
-                    NewTile->SetTileState(ETileState::Start);
-                }
-                else if (FVector2D(X, Y) == GoalPosition)
-                {
-                    NewTile->SetTileState(ETileState::Goal);
-                }
-            }
-        }
-    }
-}
-
-
-
-void AGridMazeManager::ClearAllTiles(const FString& TileTag)
-{
-    UE_LOG(LogTemp, Warning, TEXT("Clearing tiles with tag: %s"), *TileTag);
-
-    if (!GetWorld()) return;
-
-    // 1. GridTiles 배열의 타일들 삭제
-    for (AGridTile* Tile : GridTiles)
-    {
-        if (Tile && IsValid(Tile))
-        {
-            if (TileTag.IsEmpty() || Tile->Tags.Contains(*TileTag))
-            {
-                UE_LOG(LogTemp, Log, TEXT("Destroying tile: %s"), *Tile->GetName());
-                Tile->Destroy();
-            }
-        }
-    }
-
-    // 2. 모든 GridTile 검색해서 내 소유인 것들 삭제
-    TArray<AActor*> AllGridTiles;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridTile::StaticClass(), AllGridTiles);
-
-    int32 RemovedCount = 0;
-    for (AActor* Actor : AllGridTiles)
-    {
-        if (Actor && Actor->GetOwner() == this)
-        {
-            AGridTile* GridTile = Cast<AGridTile>(Actor);
-            if (GridTile && (TileTag.IsEmpty() || GridTile->Tags.Contains(*TileTag)))
-            {
-                UE_LOG(LogTemp, Log, TEXT("Destroying owned tile: %s"), *GridTile->GetName());
-                GridTile->Destroy();
-                RemovedCount++;
-            }
-        }
-    }
-
-    GridTiles.Empty();
-
-    UE_LOG(LogTemp, Warning, TEXT("Cleared tiles - Removed: %d"), RemovedCount);
-}
-// ====== LEGACY FUNCTIONS (호환성을 위해 유지) ======
-void AGridMazeManager::CreateGrid()
-{
-    CreateGameGrid();
-}
-
-void AGridMazeManager::ClearGrid()
-{
-    ClearAllTiles(TEXT("GameTile"));
-}
-
-void AGridMazeManager::EditorCreateGrid()
-{
-#if WITH_EDITOR
-    EditorClearGrid();
-    SetupDifficultySettings();
-    CreateEditorGrid();
-    EditorGeneratePath();
-    UE_LOG(LogTemp, Warning, TEXT("Editor Grid Created: %dx%d"), GridSize, GridSize);
-#endif
-}
-
-void AGridMazeManager::EditorClearGrid()
-{
-#if WITH_EDITOR
-    ClearAllTiles(TEXT("EditorPreview"));
-    UE_LOG(LogTemp, Warning, TEXT("Editor Grid Cleared"));
-#endif
-}
-
-void AGridMazeManager::EditorGeneratePath()
-{
-#if WITH_EDITOR
-    GenerateCorrectPath();
-    UpdatePathVisualization();
-    UE_LOG(LogTemp, Warning, TEXT("Editor Path Generated"));
-#endif
-}
-
-// ====== CLEAN EDITOR PREVIEW FUNCTIONS ======
 #if WITH_EDITOR
 void AGridMazeManager::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
 
     UWorld* World = GetWorld();
-    if (!World || World->WorldType != EWorldType::Editor)
-        return;
-
-    // 이미 타일이 있으면 생성하지 않음
-    if (GridTiles.Num() > 0)
-    {
-        bool bHasValidTiles = false;
-        for (AGridTile* Tile : GridTiles)
-        {
-            if (Tile && IsValid(Tile))
-            {
-                bHasValidTiles = true;
-                break;
-            }
-        }
-        if (bHasValidTiles)
-        {
-            UE_LOG(LogTemp, Log, TEXT("Tiles already exist, skipping OnConstruction"));
-            return;
-        }
-    }
+    if (!World || World->WorldType != EWorldType::Editor) return;
 
     if (bShowPreviewInEditor && TileClass && GridSize > 0)
     {
-        RefreshEditorPreview();
+        ClearGridTiles();
+        CreateTilesInternal();
+
+        if (bUseStartingFloor)
+        {
+            CreateStartingFloor();
+        }
+
+        if (bShowPathInPreview && CorrectPath.Num() > 0)
+        {
+            ValidateCorrectPath();
+            ShowPathPreview();
+        }
+    }
+    else
+    {
+        ClearGridTiles();
     }
 }
 
@@ -291,602 +130,658 @@ void AGridMazeManager::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
 {
     Super::PostEditChangeProperty(PropertyChangedEvent);
 
-    UWorld* World = GetWorld();
-    if (!World || World->WorldType != EWorldType::Editor)
-        return;
+    if (!PropertyChangedEvent.Property) return;
 
-    if (!bAutoUpdatePreview)
-        return;
+    FString PropertyName = PropertyChangedEvent.Property->GetName();
 
-    if (PropertyChangedEvent.Property)
+    // Transform 변경 시 위치만 업데이트
+    if (PropertyName.Contains(TEXT("Location")) ||
+        PropertyName.Contains(TEXT("Rotation")) ||
+        PropertyName.Contains(TEXT("Scale")))
     {
-        FString PropertyName = PropertyChangedEvent.Property->GetName();
-
-        //  Transform 관련 모든 프로퍼티 제외 (더 강화)
-        TArray<FString> TransformProperties = {
-            TEXT("RelativeLocation"), TEXT("RelativeRotation"), TEXT("RelativeScale3D"),
-            TEXT("Location"), TEXT("Rotation"), TEXT("Scale3D"),
-            TEXT("Transform"), TEXT("ActorTransform"), TEXT("RootComponent"),
-            TEXT("AttachParent"), TEXT("AttachSocketName")
-        };
-
-        if (TransformProperties.Contains(PropertyName))
+        UpdateTilePositions();
+        if (bUseStartingFloor)
         {
-            UE_LOG(LogTemp, Log, TEXT("Ignoring transform property change: %s"), *PropertyName);
-            return; // Transform 관련 변경은 완전히 무시
+            CreateStartingFloor();
         }
+        return;
+    }
 
-        TArray<FString> UpdateProperties = {
-            TEXT("GridSize"), TEXT("TileClass")
-        };
+    // CorrectPath 배열 변경 시 자동 검증
+    if (PropertyName == TEXT("CorrectPath"))
+    {
+        ValidateCorrectPath();
+        if (bShowPathInPreview) ShowPathPreview();
+        return;
+    }
 
-        if (UpdateProperties.Contains(PropertyName))
+    // Starting Floor 관련 설정 변경
+    if (PropertyName == TEXT("StartingFloorPosition") ||
+        PropertyName == TEXT("StartingFloorSize") ||
+        PropertyName == TEXT("StartingFloorColor"))
+    {
+        if (bUseStartingFloor)
         {
-            FTimerHandle UpdateTimer;
-            GetWorld()->GetTimerManager().SetTimer(UpdateTimer, [this]()
-                {
-                    RefreshEditorPreview();
-                }, 0.1f, false); // 0.01f → 0.1f로 증가
+            CreateStartingFloor();
+        }
+        return;
+    }
+
+    // bUseStartingFloor 변경 시
+    if (PropertyName == TEXT("bUseStartingFloor"))
+    {
+        if (bUseStartingFloor)
+        {
+            CreateStartingFloor();
+        }
+        else
+        {
+            if (StartingFloorMesh)
+            {
+                StartingFloorMesh->SetVisibility(false);
+            }
+        }
+        return;
+    }
+
+    // 그리드 설정 변경 시 재생성
+    if (PropertyName == TEXT("GridSize") ||
+        PropertyName == TEXT("TileClass") ||
+        PropertyName == TEXT("TileSize") ||
+        PropertyName == TEXT("TileSpacing") ||
+        PropertyName == TEXT("bShowPreviewInEditor"))
+    {
+        if (bShowPreviewInEditor)
+        {
+            ClearGridTiles();
+            CreateTilesInternal();
+            if (bUseStartingFloor)
+            {
+                CreateStartingFloor();
+            }
+            if (bShowPathInPreview && CorrectPath.Num() > 0)
+            {
+                ValidateCorrectPath();
+                ShowPathPreview();
+            }
+        }
+        else
+        {
+            ClearGridTiles();
+        }
+    }
+    else if (PropertyName == TEXT("bShowPathInPreview"))
+    {
+        if (bShowPathInPreview && CorrectPath.Num() > 0)
+        {
+            ShowPathPreview();
         }
     }
 }
-
 #endif
 
-
-void AGridMazeManager::SetStartAndGoalTiles()
+// ====== 퍼즐 제어 (수정된 버전) ======
+void AGridMazeManager::StartPuzzle()
 {
-    // 이전 시작/목표점 초기화
-    for (AGridTile* Tile : GridTiles)
+    if (CurrentState == EPuzzleState::Ready)
     {
-        if (Tile && (Tile->GetTileState() == ETileState::Start || Tile->GetTileState() == ETileState::Goal))
+        // 경로 유효성 재검사
+        if (!ValidateCorrectPath())
         {
-            Tile->SetTileState(ETileState::Default);
+            UE_LOG(LogTemp, Error, TEXT("Cannot start puzzle - invalid path!"));
+            return;
         }
-    }
 
-    // 새로운 시작/목표점 설정
-    AGridTile* StartTile = GetTileAt(ManualStartPosition.X, ManualStartPosition.Y);
-    AGridTile* GoalTile = GetTileAt(ManualGoalPosition.X, ManualGoalPosition.Y);
+        SetPuzzleState(EPuzzleState::Playing);
+        TimeRemaining = PuzzleTimeLimit;
+        CurrentPathIndex = 0;  // 중요: 0부터 시작!
+        bGamePaused = false;
 
-    if (StartTile)
-    {
-        StartTile->SetTileState(ETileState::Start);
-        StartPosition = ManualStartPosition;
-    }
-    if (GoalTile)
-    {
-        ClearAllTiles(TEXT(""));
-        GoalTile->SetTileState(ETileState::Goal);
-        GoalPosition = ManualGoalPosition;
-    }
+        // 진행 기록이 유지되어야 하면 복원
+        if (bKeepProgressOnFail)
+        {
+            RestoreProgressColors();
+        }
+        else
+        {
+            // 모든 타일을 시작 준비 상태(초록색)로 설정
+            SetAllTilesReady();
+        }
 
-    UE_LOG(LogTemp, Warning, TEXT("Start: (%d, %d), Goal: (%d, %d)"),
-        (int32)ManualStartPosition.X, (int32)ManualStartPosition.Y,
-        (int32)ManualGoalPosition.X, (int32)ManualGoalPosition.Y);
+        OnPuzzleStarted();
+
+        UE_LOG(LogTemp, Warning, TEXT("Puzzle started! Expected first step: (%d, %d)"),
+            CorrectPath[0].X, CorrectPath[0].Y);
+    }
 }
 
-
-void AGridMazeManager::RefreshEditorPreview()
+void AGridMazeManager::StartPuzzleWithCountdown()
 {
-#if WITH_EDITOR
-    UWorld* World = GetWorld();
-    if (!World || World->WorldType != EWorldType::Editor)
-        return;
-
-    if (!bShowPreviewInEditor)
+    if (CurrentState == EPuzzleState::Ready && ConnectedDisplay)
     {
-        ClearAllTiles(TEXT("EditorPreview"));
-        return;
-    }
-
-    if (!TileClass || GridSize <= 0 || GridSize > 10)
-    {
-        UE_LOG(LogTemp, Log, TEXT("GridMazeManager: Invalid settings, skipping preview"));
-        return;
-    }
-
-    //  중복 생성 방지 체크 추가
-    bool bAlreadyHasTiles = false;
-    for (AGridTile* Tile : GridTiles)
-    {
-        if (Tile && IsValid(Tile) && Tile->Tags.Contains(TEXT("EditorPreview")))
-        {
-            bAlreadyHasTiles = true;
-            break;
-        }
-    }
-
-    if (bAlreadyHasTiles)
-    {
-        return; // 이미 에디터 프리뷰 타일이 있으면 생성하지 않음
-    }
-
-    // 설정 업데이트 및 타일 생성
-    SetupDifficultySettings();
-    CreateEditorGrid();
-
-    // 경로 생성 및 표시
-    if (bShowPathInPreview)
-    {
-        GenerateCorrectPath();
-        ShowPreviewPath();
-    }
-
-    UE_LOG(LogTemp, Log, TEXT("Editor preview refreshed: %dx%d grid"), GridSize, GridSize);
-#endif
-}
-
-void AGridMazeManager::ManualCreateTiles()
-{
-    UE_LOG(LogTemp, Warning, TEXT("Manual tile creation started"));
-
-    // 기존 타일들 완전 제거
-    ManualClearAllTiles();
-
-    // 설정 적용
-    SetupDifficultySettings();
-
-    // 타일 생성 (에디터에서는 EditorPreview 태그 사용)
-    UWorld* World = GetWorld();
-    if (World && World->WorldType == EWorldType::Editor)
-    {
-        CreateTiles(TEXT("EditorPreview"), false);
+        // Display에게 카운트다운 시작 신호
+        ConnectedDisplay->SetDisplayState(EDisplayState::Countdown);
+        UE_LOG(LogTemp, Warning, TEXT("Puzzle countdown started"));
     }
     else
     {
-        CreateTiles(TEXT("GameTile"), true);
+        // Display가 없으면 바로 시작
+        StartPuzzle();
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("Manual tile creation completed: %d tiles"), GridTiles.Num());
 }
 
-void AGridMazeManager::ManualClearAllTiles()
+void AGridMazeManager::ResetPuzzle()
 {
-    UE_LOG(LogTemp, Warning, TEXT("Manual clear all tiles"));
+    SetPuzzleState(EPuzzleState::Ready);
+    TimeRemaining = PuzzleTimeLimit;
+    CurrentPathIndex = 0;
+    bGamePaused = false;
 
-    // 모든 태그의 타일들 제거
-    ClearAllTiles(TEXT(""));
-
-    // 혹시 남은 GridTile들도 강제 제거
-    TArray<AActor*> AllGridTiles;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridTile::StaticClass(), AllGridTiles);
-
-    for (AActor* Actor : AllGridTiles)
+    // 진행 기록 유지 여부에 따라 다르게 처리
+    if (bKeepProgressOnFail)
     {
-        if (Actor && Actor->GetOwner() == this)
-        {
-            Actor->Destroy();
-        }
+        RestoreProgressColors();  // 성공/실패 기록 유지
+    }
+    else
+    {
+        SetAllTilesWaiting();     // 모든 타일 회색으로
+        ClearProgressHistory();   // 기록 삭제
     }
 
-    GridTiles.Empty();
-}
-void AGridMazeManager::ShowPreviewPath()
-{
-#if WITH_EDITOR
-    if (!bShowPathInPreview || CorrectPath.Num() == 0)
-        return;
+    CustomResetLogic();
 
-    // 정답 경로 타일들을 힌트 색상으로 표시 (시작/끝 제외)
-    for (int32 i = 1; i < CorrectPath.Num() - 1; i++)
+    UE_LOG(LogTemp, Warning, TEXT("Puzzle reset - Keep progress: %s"),
+        bKeepProgressOnFail ? TEXT("Yes") : TEXT("No"));
+}
+
+void AGridMazeManager::CompletePuzzle()
+{
+    SetPuzzleState(EPuzzleState::Success);
+    PlaySound(SuccessSound);
+
+    if (ConnectedDisplay)
     {
-        FVector2D PathPoint = CorrectPath[i];
-        AGridTile* PathTile = GetTileAt(PathPoint.X, PathPoint.Y);
-        if (PathTile)
-        {
-            PathTile->SetTileState(ETileState::Hint);
-        }
+        ConnectedDisplay->ShowMessage(TEXT("SUCCESS!"));
     }
-#endif
+
+    OnPuzzleCompleted();
+
+    UE_LOG(LogTemp, Warning, TEXT("Puzzle completed successfully!"));
 }
 
-// ====== PATH GENERATION ======
-void AGridMazeManager::GenerateCorrectPath()
+void AGridMazeManager::FailPuzzle()
 {
-    CorrectPath.Empty();
+    SetPuzzleState(EPuzzleState::Failed);
+    PlaySound(FailSound);
 
-    // 에디터에서 설정된 타일들의 bIsPartOfCorrectPath를 읽어서 경로 생성
-    for (int32 X = 0; X < GridSize; X++)
+    if (ConnectedDisplay)
     {
-        for (int32 Y = 0; Y < GridSize; Y++)
+        ConnectedDisplay->ShowMessage(TEXT("FAILED!"));
+    }
+
+    OnPuzzleFailed();
+
+    // 설정된 시간 후 플레이어를 시작 위치로 이동 (시간 조절 가능!)
+    GetWorld()->GetTimerManager().SetTimer(ResetTimer, [this]()
         {
-            AGridTile* Tile = GetTileAt(X, Y);
-            if (Tile && Tile->IsCorrectPath())
+            // 플레이어 찾기 및 리스폰
+            APawn* PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
+            if (PlayerPawn)
             {
-                CorrectPath.Add(FVector2D(X, Y));
+                RespawnPlayerToStart(PlayerPawn);
             }
+            ResetToStartPosition();  // ResetPuzzle 대신 부드러운 리셋
+        }, FailResetDelay, false);  // 에디터에서 조절 가능!
+
+    UE_LOG(LogTemp, Warning, TEXT("Puzzle failed - Reset in %.1f seconds"), FailResetDelay);
+}
+
+void AGridMazeManager::PausePuzzle()
+{
+    if (CurrentState == EPuzzleState::Playing)
+    {
+        bGamePaused = true;
+    }
+}
+
+void AGridMazeManager::ResumePuzzle()
+{
+    if (CurrentState == EPuzzleState::Playing)
+    {
+        bGamePaused = false;
+    }
+}
+
+// ====== 타일 상호작용 (수정된 버전) ======
+void AGridMazeManager::OnTileStep(AGridTile* SteppedTile, AActor* Player)
+{
+    if (!SteppedTile) return;
+
+    FVector2D TilePos = SteppedTile->GetGridPosition();
+    FIntPoint IntTilePos = FIntPoint(TilePos.X, TilePos.Y);  // FVector2D를 FIntPoint로 변환
+
+    UE_LOG(LogTemp, Warning, TEXT("Tile stepped: (%d, %d), Expected: (%d, %d), Index: %d"),
+        IntTilePos.X, IntTilePos.Y,
+        CorrectPath.IsValidIndex(CurrentPathIndex) ? CorrectPath[CurrentPathIndex].X : -1,
+        CorrectPath.IsValidIndex(CurrentPathIndex) ? CorrectPath[CurrentPathIndex].Y : -1,
+        CurrentPathIndex);
+
+    if (CurrentState == EPuzzleState::Ready)
+    {
+        if (ShouldStartPuzzle(SteppedTile))
+        {
+            StartPuzzle();
+        }
+        return;
+    }
+
+    if (CurrentState != EPuzzleState::Playing || bGamePaused)
+    {
+        return;
+    }
+
+    // 경로가 설정되어 있는지 확인
+    if (CorrectPath.Num() == 0)
+    {
+        UE_LOG(LogTemp, Error, TEXT("No correct path set!"));
+        return;
+    }
+
+    bool bIsCorrect = IsCorrectNextStep(IntTilePos.X, IntTilePos.Y);
+
+    if (bIsCorrect)
+    {
+        // 정답! - 파란색으로 변경
+        SteppedTile->SetTileState(ETileState::Correct);
+        MarkStepAsCompleted(IntTilePos);  // 성공 기록 저장
+        CurrentPathIndex++;
+        PlaySound(CorrectStepSound);
+        OnCorrectStep(SteppedTile);
+
+        // 진행도 업데이트
+        if (ConnectedDisplay)
+        {
+            ConnectedDisplay->UpdateProgress(CurrentPathIndex, CorrectPath.Num());
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("Correct step! Progress: %d/%d"), CurrentPathIndex, CorrectPath.Num());
+
+        // 퍼즐 완료 체크
+        if (CurrentPathIndex >= CorrectPath.Num())
+        {
+            CompletePuzzle();
+        }
+    }
+    else
+    {
+        // 틀렸음! - 빨간색으로 변경
+        SteppedTile->SetTileState(ETileState::Wrong);
+        MarkStepAsFailed(IntTilePos);  // 실패 기록 저장
+        PlaySound(WrongStepSound);
+        OnWrongStep(SteppedTile);
+
+        UE_LOG(LogTemp, Warning, TEXT("Wrong step! Expected (%d, %d), got (%d, %d)"),
+            CorrectPath[CurrentPathIndex].X, CorrectPath[CurrentPathIndex].Y,
+            IntTilePos.X, IntTilePos.Y);
+
+        FailPuzzle();
+    }
+
+    OnCustomTileStep(SteppedTile, bIsCorrect);
+}
+
+// ====== 진행 기록 관리 (새로운 기능) ======
+void AGridMazeManager::MarkStepAsCompleted(const FIntPoint& Position)
+{
+    if (!CompletedSteps.Contains(Position))
+    {
+        CompletedSteps.Add(Position);
+        UE_LOG(LogTemp, Warning, TEXT("Step (%d, %d) marked as completed"), Position.X, Position.Y);
+    }
+}
+
+void AGridMazeManager::MarkStepAsFailed(const FIntPoint& Position)
+{
+    if (!FailedSteps.Contains(Position))
+    {
+        FailedSteps.Add(Position);
+        UE_LOG(LogTemp, Warning, TEXT("Step (%d, %d) marked as failed"), Position.X, Position.Y);
+    }
+}
+
+bool AGridMazeManager::IsStepCompleted(const FIntPoint& Position) const
+{
+    return CompletedSteps.Contains(Position);
+}
+
+bool AGridMazeManager::IsStepFailed(const FIntPoint& Position) const
+{
+    return FailedSteps.Contains(Position);
+}
+
+void AGridMazeManager::ClearProgressHistory()
+{
+    CompletedSteps.Empty();
+    FailedSteps.Empty();
+    UE_LOG(LogTemp, Warning, TEXT("Progress history cleared"));
+}
+
+void AGridMazeManager::RestoreProgressColors()
+{
+    // 먼저 모든 타일을 초록색으로
+    SetAllTilesReady();
+
+    // 그 다음 저장된 기록에 따라 색상 복원
+    for (const FIntPoint& CompletedPos : CompletedSteps)
+    {
+        AGridTile* Tile = GetTileAt(CompletedPos.X, CompletedPos.Y);
+        if (Tile)
+        {
+            Tile->SetTileState(ETileState::Correct);  // 파란색 유지
         }
     }
 
-    // 자동 시작점/목표점 설정 제거
-    /*
-    if (CorrectPath.Num() > 0)
+    for (const FIntPoint& FailedPos : FailedSteps)
+    {
+        AGridTile* Tile = GetTileAt(FailedPos.X, FailedPos.Y);
+        if (Tile)
+        {
+            Tile->SetTileState(ETileState::Wrong);    // 빨간색 유지
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Progress colors restored - Completed: %d, Failed: %d"),
+        CompletedSteps.Num(), FailedSteps.Num());
+}
+
+// ====== Starting Floor Functions ======
+void AGridMazeManager::CreateStartingFloor()
+{
+    if (!StartingFloorMesh || !bUseStartingFloor) return;
+
+    // 위치 설정 (Manager 기준 상대 위치)
+    StartingFloorMesh->SetRelativeLocation(StartingFloorPosition);
+
+    // 크기 설정 (평평한 바닥 형태)
+    FVector Scale = FVector(
+        StartingFloorSize.X / 100.0f,  // 기본 Cube는 100x100x100
+        StartingFloorSize.Y / 100.0f,
+        StartingFloorSize.Z / 100.0f
+    );
+    StartingFloorMesh->SetRelativeScale3D(Scale);
+
+    // 색상 설정
+    SetStartingFloorColor(StartingFloorColor);
+
+    // 보이기
+    StartingFloorMesh->SetVisibility(true);
+
+    UE_LOG(LogTemp, Warning, TEXT("Starting Floor created at: %s with size: %s"),
+        *StartingFloorPosition.ToString(), *StartingFloorSize.ToString());
+}
+
+void AGridMazeManager::SetStartingFloorColor(FLinearColor NewColor)
+{
+    StartingFloorColor = NewColor;
+
+    if (StartingFloorMesh)
+    {
+        // 동적 머티리얼 인스턴스 생성 및 색상 설정
+        UMaterialInstanceDynamic* DynamicMaterial = StartingFloorMesh->CreateAndSetMaterialInstanceDynamic(0);
+        if (DynamicMaterial)
+        {
+            DynamicMaterial->SetVectorParameterValue(TEXT("Color"), NewColor);
+        }
+    }
+}
+
+FVector AGridMazeManager::GetStartingFloorLocation() const
+{
+    return GetActorLocation() + StartingFloorPosition;
+}
+
+void AGridMazeManager::RespawnPlayerToStart(AActor* Player)
+{
+    if (!Player || !bUseStartingFloor) return;
+
+    FVector SpawnLocation = GetStartingFloorLocation();
+    SpawnLocation.Z += 100.0f; // 바닥 위로 살짝 올리기
+
+    Player->SetActorLocation(SpawnLocation);
+
+    UE_LOG(LogTemp, Warning, TEXT("Player respawned to starting floor at: %s"), *SpawnLocation.ToString());
+}
+
+// GridMazeManager.cpp - Complete Implementation with Access Fixes
+// Add these missing functions to the end of your existing GridMazeManager.cpp file
+
+// ====== Settings Functions ======
+void AGridMazeManager::SetCorrectPath(const TArray<FIntPoint>& NewPath)
+{
+    CorrectPath = NewPath;
+
+    if (CorrectPath.Num() >= 2)
     {
         StartPosition = CorrectPath[0];
         GoalPosition = CorrectPath.Last();
-
-        AGridTile* StartTile = GetTileAt(StartPosition.X, StartPosition.Y);
-        AGridTile* GoalTile = GetTileAt(GoalPosition.X, GoalPosition.Y);
-
-        if (StartTile) StartTile->SetTileState(ETileState::Start);
-        if (GoalTile) GoalTile->SetTileState(ETileState::Goal);
     }
-    */
 
-    UE_LOG(LogTemp, Warning, TEXT("Correct path generated from editor settings: %d tiles"), CorrectPath.Num());
+    // Auto validate path
+    ValidateCorrectPath();
+
+    UE_LOG(LogTemp, Warning, TEXT("Correct path updated - %d steps from (%d, %d) to (%d, %d)"),
+        CorrectPath.Num(),
+        StartPosition.X, StartPosition.Y,
+        GoalPosition.X, GoalPosition.Y);
 }
 
-void AGridMazeManager::UpdatePathVisualization()
+void AGridMazeManager::SetFailResetDelay(float NewDelay)
 {
-#if WITH_EDITOR
-    if (!bShowPathPreview) return;
-
-    // 모든 타일을 기본 상태로 리셋
-    for (AGridTile* Tile : GridTiles)
+    if (NewDelay >= 0.0f)
     {
-        if (Tile)
+        FailResetDelay = NewDelay;
+        UE_LOG(LogTemp, Warning, TEXT("Fail reset delay set to %.1f seconds"), FailResetDelay);
+    }
+}
+
+void AGridMazeManager::SetGridSize(int32 NewSize)
+{
+    if (NewSize > 0 && NewSize <= 10)
+    {
+        GridSize = NewSize;
+
+        // Recreate grid when size changes
+#if WITH_EDITOR
+        if (GetWorld() && GetWorld()->WorldType == EWorldType::Editor)
         {
-            FVector2D TilePos = Tile->GetGridPosition();
-            if (TilePos != StartPosition && TilePos != GoalPosition)
-            {
-                Tile->SetTileState(ETileState::Default);
-            }
+            ClearGridTiles();
+            CreateTilesInternal();
+        }
+#endif
+    }
+}
+
+void AGridMazeManager::SetTimeLimit(float NewTimeLimit)
+{
+    if (NewTimeLimit > 0.0f)
+    {
+        PuzzleTimeLimit = NewTimeLimit;
+        if (CurrentState == EPuzzleState::Ready || CurrentState == EPuzzleState::Playing)
+        {
+            TimeRemaining = NewTimeLimit;
         }
     }
+}
 
-    // 정답 경로 표시
+// ====== Information Query Functions ======
+float AGridMazeManager::GetProgress() const
+{
+    if (CorrectPath.Num() == 0)
+    {
+        return 0.0f;
+    }
+
+    return static_cast<float>(CurrentPathIndex) / static_cast<float>(CorrectPath.Num());
+}
+
+FString AGridMazeManager::GetProgressText() const
+{
+    return FString::Printf(TEXT("(%d/%d)"), CurrentPathIndex, CorrectPath.Num());
+}
+
+FIntPoint AGridMazeManager::GetPathStepAt(int32 Index) const
+{
+    if (CorrectPath.IsValidIndex(Index))
+    {
+        return CorrectPath[Index];
+    }
+    return FIntPoint(-1, -1);
+}
+
+// ====== Tile Management Functions ======
+AGridTile* AGridMazeManager::GetTileAt(int32 X, int32 Y)
+{
+    if (!IsValidPosition(X, Y)) return nullptr;
+    int32 Index = Y * GridSize + X;
+    return GridTiles.IsValidIndex(Index) ? GridTiles[Index] : nullptr;
+}
+
+void AGridMazeManager::CreateGrid()
+{
+    CreateTilesInternal();
+    UE_LOG(LogTemp, Warning, TEXT("Grid created via Blueprint call"));
+}
+
+void AGridMazeManager::ClearGrid()
+{
+    ClearGridTiles();
+    UE_LOG(LogTemp, Warning, TEXT("Grid cleared via Blueprint call"));
+}
+
+void AGridMazeManager::EditorCreateGrid()
+{
+    ClearGridTiles();
+    CreateTilesInternal();
+    if (bUseStartingFloor)
+    {
+        CreateStartingFloor();
+    }
+    if (bShowPathInPreview && CorrectPath.Num() > 0)
+    {
+        ValidateCorrectPath();
+        ShowPathPreview();
+    }
+    UE_LOG(LogTemp, Warning, TEXT("Grid created via Editor"));
+}
+
+void AGridMazeManager::EditorClearGrid()
+{
+    ClearGridTiles();
+    UE_LOG(LogTemp, Warning, TEXT("Grid cleared via Editor"));
+}
+
+// ====== Path Validation ======
+bool AGridMazeManager::ValidateCorrectPath()
+{
+    if (CorrectPath.Num() < 2)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Path validation: Need at least 2 points"));
+        return false;
+    }
+
+    // Check if all coordinates are within grid bounds
     for (int32 i = 0; i < CorrectPath.Num(); i++)
     {
-        FVector2D PathPoint = CorrectPath[i];
-        AGridTile* Tile = GetTileAt(PathPoint.X, PathPoint.Y);
-        if (Tile)
+        FIntPoint Point = CorrectPath[i];
+        if (!IsValidPosition(Point.X, Point.Y))
         {
-            if (PathPoint == StartPosition)
-            {
-                Tile->SetTileState(ETileState::Start);
-            }
-            else if (PathPoint == GoalPosition)
-            {
-                Tile->SetTileState(ETileState::Goal);
-            }
-            else
-            {
-                Tile->SetTileState(ETileState::Hint);
-            }
-        }
-    }
-#endif
-}
-
-// ====== DIFFICULTY SETTINGS ======
-void AGridMazeManager::SetupDifficultySettings()
-{
-    switch (Difficulty)
-    {
-    case EMazeDifficulty::Easy:
-        GridSize = 3;
-        TimeLimit = 60.0f;
-        StartPosition = FVector2D(0, 0);
-        GoalPosition = FVector2D(2, 2);
-        break;
-
-    case EMazeDifficulty::Normal:
-        GridSize = 5;
-        TimeLimit = 180.0f;
-        StartPosition = FVector2D(0, 0);
-        GoalPosition = FVector2D(4, 4);
-        break;
-
-    case EMazeDifficulty::Hard:
-        GridSize = 7;
-        TimeLimit = 300.0f;
-        StartPosition = FVector2D(0, 0);
-        GoalPosition = FVector2D(6, 6);
-        break;
-
-    case EMazeDifficulty::Expert:
-        GridSize = 8;
-        TimeLimit = 420.0f;
-        StartPosition = FVector2D(0, 0);
-        GoalPosition = FVector2D(7, 7);
-        break;
-
-    case EMazeDifficulty::Custom:
-        GridSize = CustomGridSize;
-        // 커스텀의 경우 시작/목표점은 경로에서 자동 추출됨
-        break;
-    }
-}
-
-// ====== UTILITY FUNCTIONS ======
-FVector AGridMazeManager::CalculateTileWorldPosition(int32 X, int32 Y)
-{
-    float TotalSize = TileSize + TileSpacing;
-    float OffsetX = (GridSize - 1) * TotalSize * 0.5f;
-    float OffsetY = (GridSize - 1) * TotalSize * 0.5f;
-
-    FVector Position = GetActorLocation();
-    Position.X += (X * TotalSize) - OffsetX;
-    Position.Y += (Y * TotalSize) - OffsetY;
-
-    return Position;
-}
-
-int32 AGridMazeManager::CoordinateToIndex(int32 X, int32 Y)
-{
-    return Y * GridSize + X;
-}
-
-FVector2D AGridMazeManager::IndexToCoordinate(int32 Index)
-{
-    int32 X = Index % GridSize;
-    int32 Y = Index / GridSize;
-    return FVector2D(X, Y);
-}
-
-bool AGridMazeManager::IsInEditorMode() const
-{
-    UWorld* World = GetWorld();
-    return (World && World->WorldType == EWorldType::Editor);
-}
-
-// ====== GAME CONTROL ======
-void AGridMazeManager::StartMaze()
-{
-    if (CurrentState != EMazeState::Ready)
-    {
-        ResetMaze();
-    }
-
-    SetMazeState(EMazeState::Running);
-    TimeRemaining = TimeLimit;
-    CurrentPathIndex = 0;
-
-    // 첫 번째 힌트 표시 (옵션이 켜져있다면)
-    if (bShowHints && CorrectPath.Num() > 1)
-    {
-        AGridTile* FirstTile = GetTileAt(CorrectPath[1].X, CorrectPath[1].Y);
-        if (FirstTile)
-        {
-            FirstTile->ShowHint(2.0f);
+            UE_LOG(LogTemp, Error, TEXT("Point %d (%d, %d) is outside grid (0,0) to (%d,%d)"),
+                i, Point.X, Point.Y, GridSize - 1, GridSize - 1);
+            return false;
         }
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Maze started!"));
-}
-
-void AGridMazeManager::ResetMaze()
-{
-    SetMazeState(EMazeState::Ready);
-    TimeRemaining = TimeLimit;
-    CurrentPathIndex = 0;
-    AttemptCount++;
-
-    // 모든 타일을 기본 상태로 리셋
-    for (AGridTile* Tile : GridTiles)
+    // Check if adjacent coordinates are connected
+    for (int32 i = 1; i < CorrectPath.Num(); i++)
     {
-        if (Tile)
-        {
-            FVector2D TilePos = Tile->GetGridPosition();
+        FIntPoint Current = CorrectPath[i];
+        FIntPoint Previous = CorrectPath[i - 1];
 
-            if (TilePos == StartPosition)
-            {
-                Tile->SetTileState(ETileState::Start);
-            }
-            else if (TilePos == GoalPosition)
-            {
-                Tile->SetTileState(ETileState::Goal);
-            }
-            else
-            {
-                Tile->SetTileState(ETileState::Default);
-            }
+        int32 DistanceX = FMath::Abs(Current.X - Previous.X);
+        int32 DistanceY = FMath::Abs(Current.Y - Previous.Y);
+
+        // Only allow single step moves (no diagonal)
+        if ((DistanceX > 1) || (DistanceY > 1) || (DistanceX + DistanceY != 1))
+        {
+            UE_LOG(LogTemp, Error, TEXT("Invalid move from (%d, %d) to (%d, %d) - only adjacent moves allowed"),
+                Previous.X, Previous.Y, Current.X, Current.Y);
+            return false;
         }
     }
 
-    BroadcastMazeData();
-    UE_LOG(LogTemp, Warning, TEXT("Maze reset! Attempt: %d"), AttemptCount);
+    // Auto update Start and Goal Position
+    StartPosition = CorrectPath[0];
+    GoalPosition = CorrectPath.Last();
+
+    UE_LOG(LogTemp, Warning, TEXT("Path validated: %d steps from (%d, %d) to (%d, %d)"),
+        CorrectPath.Num(),
+        StartPosition.X, StartPosition.Y,
+        GoalPosition.X, GoalPosition.Y);
+
+    return true;
 }
 
-void AGridMazeManager::PauseMaze()
-{
-    if (CurrentState == EMazeState::Running)
-    {
-        SetMazeState(EMazeState::Ready);
-    }
-}
-
-void AGridMazeManager::ResumeMaze()
-{
-    if (CurrentState == EMazeState::Ready)
-    {
-        SetMazeState(EMazeState::Running);
-    }
-}
-
-void AGridMazeManager::UseHint()
-{
-    if (!bShowHints || UsedHints >= MaxHints || CurrentState != EMazeState::Running)
-        return;
-
-    UsedHints++;
-
-    // 다음에 밟아야 할 타일 힌트 표시
-    if (CurrentPathIndex < CorrectPath.Num())
-    {
-        FVector2D NextPos = CorrectPath[CurrentPathIndex];
-        AGridTile* NextTile = GetTileAt(NextPos.X, NextPos.Y);
-        if (NextTile)
-        {
-            NextTile->ShowHint(3.0f);
-            OnHintUsed(MaxHints - UsedHints);
-        }
-    }
-}
-
-// ====== TILE INTERACTION ======
-void AGridMazeManager::OnTileStepped(AGridTile* SteppedTile, AActor* SteppedActor)
-{
-    if (CurrentState != EMazeState::Running || !SteppedTile)
-        return;
-
-    FVector2D TilePos = SteppedTile->GetGridPosition();
-
-    UE_LOG(LogTemp, Warning, TEXT("Tile stepped: (%d, %d), Expected: (%d, %d)"),
-        (int32)TilePos.X, (int32)TilePos.Y,
-        CurrentPathIndex < CorrectPath.Num() ? (int32)CorrectPath[CurrentPathIndex].X : -1,
-        CurrentPathIndex < CorrectPath.Num() ? (int32)CorrectPath[CurrentPathIndex].Y : -1);
-
-    // 현재 단계에서 밟아야 할 올바른 타일인지 확인
-    if (IsCorrectNextStep(TilePos.X, TilePos.Y))
-    {
-        HandleCorrectStep(SteppedTile);
-    }
-    else
-    {
-        HandleWrongStep(SteppedTile);
-    }
-
-    // 이벤트 브로드캐스트
-    OnTileActivated.Broadcast(TilePos.X, TilePos.Y);
-}
-
-bool AGridMazeManager::IsCorrectNextStep(int32 X, int32 Y)
-{
-    if (CurrentPathIndex >= CorrectPath.Num())
-        return false;
-
-    FVector2D ExpectedPosition = CorrectPath[CurrentPathIndex];
-    return (ExpectedPosition.X == X && ExpectedPosition.Y == Y);
-}
-
-void AGridMazeManager::HandleCorrectStep(AGridTile* Tile)
-{
-    Tile->SetTileState(ETileState::Correct);
-    CurrentPathIndex++;
-    PlaySound(CorrectStepSound);
-
-    UE_LOG(LogTemp, Warning, TEXT("Correct step! Progress: %d/%d"), CurrentPathIndex, CorrectPath.Num());
-
-    // 목표에 도달했는지 확인
-    if (CurrentPathIndex >= CorrectPath.Num())
-    {
-        HandleMazeSuccess();
-    }
-    else
-    {
-        BroadcastMazeData();
-    }
-}
-
-void AGridMazeManager::HandleWrongStep(AGridTile* Tile)
-{
-    Tile->SetTileState(ETileState::Wrong);
-    PlaySound(WrongStepSound);
-
-    UE_LOG(LogTemp, Warning, TEXT("Wrong step! Resetting..."));
-
-    if (bResetOnWrongStep)
-    {
-        // 1초 후 리셋
-        FTimerHandle ResetTimer;
-        GetWorld()->GetTimerManager().SetTimer(ResetTimer, [this]()
-            {
-                ResetMaze();
-            }, 1.0f, false);
-    }
-}
-
-void AGridMazeManager::HandleMazeSuccess()
-{
-    SetMazeState(EMazeState::Success);
-    PlaySound(SuccessSound);
-    OnMazeComplete.Broadcast(true);
-
-    UE_LOG(LogTemp, Warning, TEXT("Maze completed successfully!"));
-}
-
-void AGridMazeManager::HandleMazeFailure()
-{
-    SetMazeState(EMazeState::Failed);
-    PlaySound(FailureSound);
-    OnMazeComplete.Broadcast(false);
-
-    if (bAutoResetOnTimeout)
-    {
-        FTimerHandle ResetTimer;
-        GetWorld()->GetTimerManager().SetTimer(ResetTimer, [this]()
-            {
-                ResetMaze();
-            }, 2.0f, false);
-    }
-}
-
-// ====== TIMER & STATE ======
+// ====== Private Functions Implementation ======
 void AGridMazeManager::UpdateTimer(float DeltaTime)
 {
-    TimeRemaining -= DeltaTime;
-
-    if (TimeRemaining <= 0.0f)
+    if (TimeRemaining > 0.0f)
     {
-        TimeRemaining = 0.0f;
-        SetMazeState(EMazeState::TimeOut);
-        HandleMazeFailure();
+        TimeRemaining -= DeltaTime;
+
+        // Broadcast timer update event
+        OnTimerUpdate.Broadcast(TimeRemaining);
+
+        // Check time warnings
+        if (TimeRemaining <= 10.0f && TimeRemaining > 9.0f)
+        {
+            OnTimeWarning(TimeRemaining);
+        }
+
+        // Check timeout
+        if (TimeRemaining <= 0.0f)
+        {
+            TimeRemaining = 0.0f;
+            OnTimerUpdate.Broadcast(0.0f);
+
+            if (ConnectedDisplay)
+            {
+                ConnectedDisplay->ShowMessage(TEXT("TIME OUT!"), FLinearColor::Red);
+            }
+
+            FailPuzzle();
+        }
     }
-
-    BroadcastMazeData();
 }
 
-void AGridMazeManager::BroadcastMazeData()
-{
-    OnMazeDataUpdate.Broadcast(TimeRemaining, AttemptCount, CurrentState);
-}
-
-void AGridMazeManager::SetMazeState(EMazeState NewState)
+void AGridMazeManager::SetPuzzleState(EPuzzleState NewState)
 {
     if (CurrentState != NewState)
     {
         CurrentState = NewState;
-        OnMazeStateChanged(NewState);
-        BroadcastMazeData();
+        OnPuzzleStateChanged.Broadcast(NewState);
+
+        UE_LOG(LogTemp, Warning, TEXT("Puzzle state changed to: %d"), (int32)NewState);
     }
 }
 
-// ====== UTILITY ======
-AGridTile* AGridMazeManager::GetTileAt(int32 X, int32 Y)
+void AGridMazeManager::ConnectToDisplay()
 {
-    if (!IsValidGridPosition(X, Y))
-        return nullptr;
-
-    int32 Index = CoordinateToIndex(X, Y);
-    return GridTiles.IsValidIndex(Index) ? GridTiles[Index] : nullptr;
-}
-
-bool AGridMazeManager::IsValidGridPosition(int32 X, int32 Y)
-{
-    return (X >= 0 && X < GridSize && Y >= 0 && Y < GridSize);
-}
-
-FVector2D AGridMazeManager::GetPlayerGridPosition() const
-{
-    if (CurrentPathIndex > 0 && CurrentPathIndex <= CorrectPath.Num())
+    if (ConnectedDisplay)
     {
-        return CorrectPath[CurrentPathIndex - 1];
+        return;  // Already connected
     }
-    return StartPosition;
-}
 
-void AGridMazeManager::PlaySound(USoundBase* Sound)
-{
-    if (bPlaySounds && Sound)
-    {
-        UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation());
-    }
-}
-
-void AGridMazeManager::FindConnectedDisplay()
-{
+    // Find MazeDisplay in world
     TArray<AActor*> FoundDisplays;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), AMazeDisplay::StaticClass(), FoundDisplays);
 
@@ -895,7 +790,317 @@ void AGridMazeManager::FindConnectedDisplay()
         ConnectedDisplay = Cast<AMazeDisplay>(FoundDisplays[0]);
         if (ConnectedDisplay)
         {
-            UE_LOG(LogTemp, Log, TEXT("Auto-connected to MazeDisplay"));
+            ConnectedDisplay->ConnectToManager(this);
+            UE_LOG(LogTemp, Warning, TEXT("Auto-connected to MazeDisplay"));
         }
     }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("No MazeDisplay found in world"));
+    }
+}
+
+void AGridMazeManager::ClearGridTiles()
+{
+    DestroyAllTiles();
+}
+
+void AGridMazeManager::UpdateTilePositions()
+{
+    for (int32 i = 0; i < GridTiles.Num(); i++)
+    {
+        AGridTile* Tile = GridTiles[i];
+        if (Tile && IsValid(Tile))
+        {
+            int32 X = Tile->GetGridPosition().X;
+            int32 Y = Tile->GetGridPosition().Y;
+            FVector NewPosition = CalculateTilePosition(X, Y);
+            Tile->SetActorLocation(NewPosition);
+        }
+    }
+}
+
+void AGridMazeManager::ShowPathPreview()
+{
+    if (!bShowPathInPreview || CorrectPath.Num() == 0)
+    {
+        return;
+    }
+
+    // Set all tiles to default state first
+    SetAllTilesWaiting();
+
+    // Highlight path tiles with different colors (Editor preview)
+    for (int32 i = 0; i < CorrectPath.Num(); i++)
+    {
+        FIntPoint PathPoint = CorrectPath[i];
+        AGridTile* Tile = GetTileAt(PathPoint.X, PathPoint.Y);
+
+        if (Tile)
+        {
+            if (i == 0)
+            {
+                // Start point - bright green
+                Tile->SetTileState(ETileState::StartPoint);
+            }
+            else if (i == CorrectPath.Num() - 1)
+            {
+                // Goal point - yellow
+                Tile->SetTileState(ETileState::Goal);
+            }
+            else
+            {
+                // Path - hint color (purple)
+                Tile->SetTileState(ETileState::Hint);
+            }
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Path preview shown for %d steps"), CorrectPath.Num());
+}
+
+FVector AGridMazeManager::CalculateTilePosition(int32 X, int32 Y)
+{
+    float TotalSize = TileSize + TileSpacing;
+    float OffsetX = (GridSize - 1) * TotalSize * 0.5f;
+    float OffsetY = (GridSize - 1) * TotalSize * 0.5f;
+
+    FVector LocalPosition = FVector(
+        X * TotalSize - OffsetX,
+        Y * TotalSize - OffsetY,
+        0.0f
+    );
+
+    return GetActorLocation() + GetActorRotation().RotateVector(LocalPosition);
+}
+
+bool AGridMazeManager::IsValidPosition(int32 X, int32 Y)
+{
+    return X >= 0 && X < GridSize && Y >= 0 && Y < GridSize;
+}
+
+bool AGridMazeManager::IsCorrectNextStep(int32 X, int32 Y)
+{
+    if (!CorrectPath.IsValidIndex(CurrentPathIndex))
+    {
+        UE_LOG(LogTemp, Error, TEXT("CurrentPathIndex %d is invalid for path length %d"), CurrentPathIndex, CorrectPath.Num());
+        return false;
+    }
+
+    FIntPoint ExpectedStep = CorrectPath[CurrentPathIndex];
+    bool bIsCorrect = (X == ExpectedStep.X && Y == ExpectedStep.Y);
+
+    UE_LOG(LogTemp, Warning, TEXT("Checking step (%d, %d) vs expected (%d, %d) at index %d: %s"),
+        X, Y, ExpectedStep.X, ExpectedStep.Y, CurrentPathIndex,
+        bIsCorrect ? TEXT("CORRECT") : TEXT("WRONG"));
+
+    return bIsCorrect;
+}
+
+void AGridMazeManager::PlaySound(USoundBase* Sound)
+{
+    if (Sound && GetWorld())
+    {
+        UGameplayStatics::PlaySoundAtLocation(GetWorld(), Sound, GetActorLocation());
+    }
+}
+
+void AGridMazeManager::ApplyTileColors()
+{
+    // FIXED: Instead of calling UpdateFromManagerColors(), just refresh tile states
+    for (AGridTile* Tile : GridTiles)
+    {
+        if (Tile && IsValid(Tile))
+        {
+            // Force tile to re-evaluate its color using current state
+            ETileState CurrentTileState = Tile->GetTileState();
+            Tile->SetTileState(CurrentTileState);  // This will apply manager colors
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Applied manager colors to %d tiles"), GridTiles.Num());
+}
+
+void AGridMazeManager::DestroyAllTiles()
+{
+    // Delete regular tiles
+    for (int32 i = GridTiles.Num() - 1; i >= 0; i--)
+    {
+        AGridTile* Tile = GridTiles[i];
+        if (Tile && IsValid(Tile))
+        {
+            if (Tile->OnTileStepped.IsBound())
+            {
+                Tile->OnTileStepped.RemoveAll(this);
+            }
+            Tile->Destroy();
+        }
+    }
+    GridTiles.Empty();
+
+    // Find remaining tiles in world and delete them
+    if (GetWorld())
+    {
+        TArray<AActor*> AllActors;
+        UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridTile::StaticClass(), AllActors);
+
+        for (AActor* Actor : AllActors)
+        {
+            if (Actor && Actor->GetOwner() == this)
+            {
+                Actor->Destroy();
+            }
+        }
+    }
+
+    // Delete attached actors
+    TArray<AActor*> AttachedActors;
+    GetAttachedActors(AttachedActors);
+
+    for (AActor* AttachedActor : AttachedActors)
+    {
+        if (AGridTile* GridTile = Cast<AGridTile>(AttachedActor))
+        {
+            AttachedActor->Destroy();
+        }
+    }
+}
+
+// ====== Tile State Management (GridTile Integration) ======
+void AGridMazeManager::SetAllTilesWaiting()
+{
+    for (AGridTile* Tile : GridTiles)
+    {
+        if (Tile && IsValid(Tile))
+        {
+            Tile->SetTileState(ETileState::Default); // Gray (waiting)
+        }
+    }
+    UE_LOG(LogTemp, Warning, TEXT("All tiles set to WAITING (gray)"));
+}
+
+void AGridMazeManager::SetAllTilesReady()
+{
+    for (AGridTile* Tile : GridTiles)
+    {
+        if (Tile && IsValid(Tile))
+        {
+            Tile->SetTileState(ETileState::Start); // Green (ready)
+        }
+    }
+    UE_LOG(LogTemp, Warning, TEXT("All tiles set to READY (green)"));
+}
+
+void AGridMazeManager::ResetToStartPosition()
+{
+    CurrentPathIndex = 0;
+    SetPuzzleState(EPuzzleState::Playing);
+
+    // Restore colors while keeping progress record
+    if (bKeepProgressOnFail)
+    {
+        RestoreProgressColors();
+    }
+    else
+    {
+        SetAllTilesReady();
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Reset to start position - Ready to continue"));
+}
+
+// GridMazeManager.cpp에 추가할 CreateTilesInternal 함수
+
+void AGridMazeManager::CreateTilesInternal()
+{
+    if (!TileClass || GridSize <= 0)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Cannot create tiles - TileClass is null or GridSize is invalid"));
+        return;
+    }
+
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        UE_LOG(LogTemp, Error, TEXT("World is null - cannot create tiles"));
+        return;
+    }
+
+    // Prevent recursive calls
+    static bool bIsCreatingTiles = false;
+    if (bIsCreatingTiles)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Already creating tiles - preventing recursive call"));
+        return;
+    }
+
+    bIsCreatingTiles = true;
+
+    // Clear existing tiles first
+    DestroyAllTiles();
+    GridTiles.SetNum(GridSize * GridSize);
+
+    UE_LOG(LogTemp, Warning, TEXT("Creating %dx%d grid (%d total tiles)"), GridSize, GridSize, GridSize * GridSize);
+
+    // Create grid tiles
+    for (int32 X = 0; X < GridSize; X++)
+    {
+        for (int32 Y = 0; Y < GridSize; Y++)
+        {
+            FVector SpawnLocation = CalculateTilePosition(X, Y);
+
+            FActorSpawnParameters SpawnParams;
+            SpawnParams.Owner = this;
+            SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+            AGridTile* NewTile = World->SpawnActor<AGridTile>(
+                TileClass, SpawnLocation, FRotator::ZeroRotator, SpawnParams);
+
+            if (NewTile && IsValid(NewTile))
+            {
+                // Set up tile properties
+                NewTile->SetOwner(this);
+                NewTile->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+                NewTile->SetOwnerManager(this);
+                NewTile->SetGridPosition(X, Y);
+
+
+                // Store in grid array
+                int32 Index = Y * GridSize + X;
+                if (GridTiles.IsValidIndex(Index))
+                {
+                    GridTiles[Index] = NewTile;
+                }
+
+                // Set initial state
+                NewTile->SetTileState(ETileState::Default);
+
+                UE_LOG(LogTemp, Log, TEXT("Created tile at (%d, %d) - Index: %d"), X, Y, Index);
+            }
+            else
+            {
+                UE_LOG(LogTemp, Error, TEXT("Failed to create tile at (%d, %d)"), X, Y);
+            }
+        }
+    }
+
+    bIsCreatingTiles = false;
+
+    UE_LOG(LogTemp, Warning, TEXT("Grid creation completed - %d tiles created successfully"), GridTiles.Num());
+}
+
+void AGridMazeManager::CompleteReset()
+{
+    SetPuzzleState(EPuzzleState::Ready);
+    TimeRemaining = PuzzleTimeLimit;
+    CurrentPathIndex = 0;
+    bGamePaused = false;
+
+    // 완전 초기화 - 모든 진행 기록 삭제
+    ClearProgressHistory();   // CompletedSteps, FailedSteps 비우기
+    SetAllTilesReady();      // 모든 타일 초록색으로 (Ready 상태)
+
+    CustomResetLogic();
+
+    UE_LOG(LogTemp, Warning, TEXT("Complete reset - Ready for countdown start"));
 }

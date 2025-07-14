@@ -1,12 +1,10 @@
-// MazeDisplay.cpp
+// MazeDisplay.cpp - 모든 기능 완전 구현
 #include "Gameplay/MazeDisplay.h"
 #include "Gameplay/GridMazeManager.h"
-#include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
-#include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/Engine.h"
-#include "Sound/SoundBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 
@@ -14,341 +12,438 @@ AMazeDisplay::AMazeDisplay()
 {
     PrimaryActorTick.bCanEverTick = true;
 
-    // Create scene root
-    SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
-    RootComponent = SceneRoot;
+    // Create root component
+    RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent"));
+    RootComponent = RootSceneComponent;
 
-    InitializeComponents();
+    // Create display mesh
+    DisplayMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DisplayMesh"));
+    DisplayMesh->SetupAttachment(RootSceneComponent);
+
+    // Create time text (상단)
+    TimeText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("TimeText"));
+    TimeText->SetupAttachment(DisplayMesh);
+    TimeText->SetRelativeLocation(FVector(2.0f, 0.0f, 30.0f));
+    TimeText->SetTextRenderColor(FColor::Green);
+    TimeText->SetHorizontalAlignment(EHTA_Center);
+    TimeText->SetVerticalAlignment(EVRTA_TextCenter);
+    TimeText->SetWorldSize(TimeTextSize);
+
+    // Create progress text (중간) - 새로 추가
+    ProgressText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("ProgressText"));
+    ProgressText->SetupAttachment(DisplayMesh);
+    ProgressText->SetRelativeLocation(FVector(2.0f, 0.0f, 0.0f));
+    ProgressText->SetTextRenderColor(ProgressColor.ToFColor(true));
+    ProgressText->SetHorizontalAlignment(EHTA_Center);
+    ProgressText->SetVerticalAlignment(EVRTA_TextCenter);
+    ProgressText->SetWorldSize(ProgressTextSize);
+
+    // Create status text (하단)
+    StatusText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("StatusText"));
+    StatusText->SetupAttachment(DisplayMesh);
+    StatusText->SetRelativeLocation(FVector(2.0f, 0.0f, -30.0f));
+    StatusText->SetTextRenderColor(FColor::Green);
+    StatusText->SetHorizontalAlignment(EHTA_Center);
+    StatusText->SetVerticalAlignment(EVRTA_TextCenter);
+    StatusText->SetWorldSize(StatusTextSize);
+
+    // Create display light
+    DisplayLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("DisplayLight"));
+    DisplayLight->SetupAttachment(DisplayMesh);
+    DisplayLight->SetRelativeLocation(FVector(10.0f, 0.0f, 0.0f));
+    DisplayLight->SetIntensity(1000.0f);
+    DisplayLight->SetAttenuationRadius(200.0f);
+    DisplayLight->SetLightColor(ReadyColor);
 }
 
 void AMazeDisplay::BeginPlay()
 {
     Super::BeginPlay();
 
-    SetupDisplayStyle();
-
-    if (bAutoFindManager && !ConnectedManager)
+    // Auto connect to manager if enabled
+    if (bAutoConnectToManager)
     {
-        FindConnectedManager();
+        AutoConnectToManager();
+    }
+    else if (ManualManager)
+    {
+        ConnectToManager(ManualManager);
     }
 
-    SetDisplayActive(false);
+    // Initialize display to READY state
+    SetDisplayState(EDisplayState::Ready);
+    SetupProgressText();
+
+    // Show ready message immediately
+    ShowMessage(ReadyMessage, ReadyColor);
 }
 
 void AMazeDisplay::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    if (bIsActive && ConnectedManager)
-    {
-        EMazeState CurrentState = ConnectedManager->GetCurrentState();
-        float TimeRemaining = ConnectedManager->GetTimeRemaining();
-        int32 AttemptCount = ConnectedManager->GetAttemptCount();
-
-        UpdateDisplay(TimeRemaining, AttemptCount, CurrentState);
-    }
-
+    // Update blinking animation
     if (bIsBlinking)
     {
-        UpdateBlinking(DeltaTime);
-    }
+        BlinkTimer += DeltaTime;
+        float BlinkFactor = FMath::Sin(BlinkTimer * BlinkSpeed * PI) * 0.5f + 0.5f;
 
-    if (bIsPulsing)
-    {
-        UpdatePulse(DeltaTime);
-    }
-}
-
-void AMazeDisplay::InitializeComponents()
-{
-    // Frame mesh
-    FrameMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FrameMesh"));
-    FrameMesh->SetupAttachment(SceneRoot);
-
-    // Screen mesh
-    ScreenMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ScreenMesh"));
-    ScreenMesh->SetupAttachment(FrameMesh);
-    ScreenMesh->SetRelativeLocation(FVector(1.0f, 0.0f, 0.0f)); // 약간 앞으로
-
-    // Time text
-    TimeText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("TimeText"));
-    TimeText->SetupAttachment(ScreenMesh);
-    TimeText->SetRelativeLocation(FVector(2.0f, 0.0f, 20.0f));
-    TimeText->SetTextRenderColor(FColor::Green);
-    TimeText->SetHorizontalAlignment(EHTA_Center);
-    TimeText->SetVerticalAlignment(EVRTA_TextCenter);
-    TimeText->SetWorldSize(TimeTextSize);
-
-    // Status text
-    StatusText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("StatusText"));
-    StatusText->SetupAttachment(ScreenMesh);
-    StatusText->SetRelativeLocation(FVector(2.0f, 0.0f, 0.0f));
-    StatusText->SetTextRenderColor(FColor::Green);
-    StatusText->SetHorizontalAlignment(EHTA_Center);
-    StatusText->SetVerticalAlignment(EVRTA_TextCenter);
-    StatusText->SetWorldSize(StatusTextSize);
-
-    // Info text
-    InfoText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("InfoText"));
-    InfoText->SetupAttachment(ScreenMesh);
-    InfoText->SetRelativeLocation(FVector(2.0f, 0.0f, -20.0f));
-    InfoText->SetTextRenderColor(FColor::Green);
-    InfoText->SetHorizontalAlignment(EHTA_Center);
-    InfoText->SetVerticalAlignment(EVRTA_TextCenter);
-    InfoText->SetWorldSize(InfoTextSize);
-
-    // Screen light
-    ScreenLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("ScreenLight"));
-    ScreenLight->SetupAttachment(ScreenMesh);
-    ScreenLight->SetRelativeLocation(FVector(10.0f, 0.0f, 0.0f));
-    ScreenLight->SetIntensity(ScreenLightIntensity);
-    ScreenLight->SetAttenuationRadius(LightRadius);
-    ScreenLight->SetLightColor(NormalColor);
-
-    // Back light
-    BackLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("BackLight"));
-    BackLight->SetupAttachment(FrameMesh);
-    BackLight->SetRelativeLocation(FVector(-10.0f, 0.0f, 0.0f));
-    BackLight->SetIntensity(BackLightIntensity);
-    BackLight->SetAttenuationRadius(LightRadius * 0.5f);
-    BackLight->SetLightColor(InactiveColor);
-}
-
-void AMazeDisplay::SetupDisplayStyle()
-{
-    // Create dynamic materials
-    if (ScreenMesh && ScreenMesh->GetMaterial(0))
-    {
-        ScreenMaterial = ScreenMesh->CreateDynamicMaterialInstance(0);
-    }
-
-    if (FrameMesh && FrameMesh->GetMaterial(0))
-    {
-        FrameMaterial = FrameMesh->CreateDynamicMaterialInstance(0);
-    }
-
-    // Apply display style settings
-    switch (DisplayStyle)
-    {
-    case EDisplayStyle::Modern:
-        // 모던 LCD 스타일
-        NormalColor = FLinearColor(0.0f, 1.0f, 0.0f, 1.0f);
-        if (DisplayFont == nullptr)
+        if (DisplayLight)
         {
-            // 기본 폰트 사용
+            float CurrentIntensity = FMath::Lerp(200.0f, 1000.0f, BlinkFactor);
+            DisplayLight->SetIntensity(CurrentIntensity);
         }
-        break;
-
-    case EDisplayStyle::Retro:
-        // 레트로 LED 스타일
-        NormalColor = FLinearColor(1.0f, 0.2f, 0.0f, 1.0f);
-        TimeTextSize *= 1.2f;
-        StatusTextSize *= 1.2f;
-        InfoTextSize *= 1.2f;
-        break;
-
-    case EDisplayStyle::Industrial:
-        // 산업용 스타일
-        NormalColor = FLinearColor(1.0f, 0.5f, 0.0f, 1.0f);
-        break;
-
-    case EDisplayStyle::Hologram:
-        // 홀로그램 스타일
-        NormalColor = FLinearColor(0.0f, 0.8f, 1.0f, 0.8f);
-        bEnablePulse = true;
-        break;
-    }
-
-    // Apply font if set
-    if (DisplayFont)
-    {
-        TimeText->SetFont(DisplayFont);
-        StatusText->SetFont(DisplayFont);
-        InfoText->SetFont(DisplayFont);
     }
 }
 
-void AMazeDisplay::SetDisplayActive(bool bActive)
+// ====== Display Control ======
+void AMazeDisplay::UpdateTime(float TimeRemaining)
 {
-    bIsActive = bActive;
+    CurrentTime = TimeRemaining;
 
-    if (bActive)
+    if (bShowTime && TimeText)
     {
-        OnDisplayActivated();
+        FString TimeString = FormatTime(TimeRemaining);
+        TimeText->SetText(FText::FromString(TimeString));
+    }
+
+    // Handle time-based color changes
+    if (ConnectedManager)
+    {
+        float TotalTime = ConnectedManager->PuzzleTimeLimit;
+        HandleTimeWarnings(TimeRemaining, TotalTime);
+
+        FLinearColor TimeColor = GetTimeColor(TimeRemaining, TotalTime);
+        UpdateTextColors(TimeColor);
+        UpdateLightColor(TimeColor);
+    }
+
+    CustomUpdateDisplay(TimeRemaining, ConnectedManager ? ConnectedManager->GetCurrentState() : EPuzzleState::Ready);
+}
+
+void AMazeDisplay::UpdateProgress(int32 Current, int32 Max)
+{
+    CurrentProgress = Current;
+    MaxProgress = Max;
+
+    if (bShowProgress && ProgressText)
+    {
+        FString ProgressString = FormatProgress(Current, Max);
+        ProgressText->SetText(FText::FromString(ProgressString));
+        ProgressText->SetTextRenderColor(ProgressColor.ToFColor(true));
+    }
+}
+
+void AMazeDisplay::ShowMessage(const FString& Message, FLinearColor Color)
+{
+    if (bShowStatus && StatusText)
+    {
+        StatusText->SetText(FText::FromString(Message));
+        StatusText->SetTextRenderColor(Color.ToFColor(true));
+    }
+
+    UpdateLightColor(Color);
+}
+
+void AMazeDisplay::SetDisplayState(EDisplayState NewState)
+{
+    if (CurrentDisplayState != NewState)
+    {
+        CurrentDisplayState = NewState;
+
+        FString Message;
+        FLinearColor Color;
+
+        switch (NewState)
+        {
+        case EDisplayState::Ready:
+            Message = ReadyMessage;
+            Color = ReadyColor;
+            StopBlinking();
+            StopCountdown();
+            break;
+
+        case EDisplayState::Countdown:
+            Message = CountdownReadyMessage;
+            Color = CountdownColor;
+            StopBlinking();
+            if (bEnableCountdown)
+            {
+                StartCountdown();
+            }
+            break;
+
+        case EDisplayState::Playing:
+            Message = PlayingMessage;
+            Color = PlayingColor;
+            StopBlinking();
+            StopCountdown();
+            break;
+
+        case EDisplayState::Success:
+            Message = SuccessMessage;
+            Color = SuccessColor;
+            if (bEnableSuccessAnimation)
+            {
+                StartBlinking();
+                GetWorld()->GetTimerManager().SetTimer(MessageTimerHandle, [this]()
+                    {
+                        StopBlinking();
+                    }, SuccessAnimationDuration, false);
+            }
+            break;
+
+        case EDisplayState::Failed:
+            Message = FailedMessage;
+            Color = FailedColor;
+            if (bEnableFailAnimation)
+            {
+                StartBlinking();
+                GetWorld()->GetTimerManager().SetTimer(MessageTimerHandle, [this]()
+                    {
+                        StopBlinking();
+                    }, FailAnimationDuration, false);
+            }
+            break;
+
+        case EDisplayState::Custom:
+            // Custom messages are handled separately
+            break;
+        }
+
+        if (NewState != EDisplayState::Custom)
+        {
+            ShowMessage(Message, Color);
+        }
+
+        OnDisplayStateChanged(NewState);
+    }
+}
+
+// ====== Countdown Functions ======
+void AMazeDisplay::StartCountdown()
+{
+    if (!bEnableCountdown) return;
+
+    bIsCountingDown = true;
+    CurrentCountdown = CountdownDuration;
+
+    // 즉시 첫 번째 카운트다운 표시
+    UpdateCountdown();
+
+    // 1초마다 카운트다운 업데이트
+    GetWorld()->GetTimerManager().SetTimer(CountdownTimerHandle, [this]()
+        {
+            UpdateCountdown();
+        }, 1.0f, true);
+
+    UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown started from %d"), CountdownDuration);
+}
+
+void AMazeDisplay::StopCountdown()
+{
+    if (bIsCountingDown)
+    {
+        bIsCountingDown = false;
+        GetWorld()->GetTimerManager().ClearTimer(CountdownTimerHandle);
+        UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown stopped"));
+    }
+}
+
+void AMazeDisplay::UpdateCountdown()
+{
+    if (!bIsCountingDown) return;
+
+    if (CurrentCountdown > 0)
+    {
+        // 카운트다운 표시
+        FString CountdownText = FString::Printf(TEXT("00:0%d"), CurrentCountdown);
+        if (TimeText)
+        {
+            TimeText->SetText(FText::FromString(CountdownText));
+            TimeText->SetTextRenderColor(CountdownColor.ToFColor(true));
+        }
+
+        // 상태 메시지
+        ShowMessage(CountdownReadyMessage, CountdownColor);
+
+        // 블루프린트 이벤트
+        OnCountdownStep(CurrentCountdown);
+
+        CurrentCountdown--;
+
+        UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown %d"), CurrentCountdown + 1);
     }
     else
     {
-        OnDisplayDeactivated();
-        ClearDisplay();
-    }
+        // 카운트다운 완료
+        StopCountdown();
 
-    UpdateLighting(bActive ? NormalColor : InactiveColor);
-}
-
-void AMazeDisplay::UpdateDisplay(float TimeRemaining, int32 AttemptCount, EMazeState MazeState)
-{
-    if (!bIsActive)
-        return;
-
-    // State change detection
-    if (MazeState != LastMazeState)
-    {
-        LastMazeState = MazeState;
-        OnMazeStateChanged(MazeState);
-    }
-
-    // Time warning detection
-    if (TimeRemaining != LastTimeRemaining)
-    {
-        if (TimeRemaining <= WarningTimeThreshold && TimeRemaining > DangerTimeThreshold)
+        // START 메시지 표시
+        ShowMessage(CountdownStartMessage, CountdownColor);
+        if (TimeText)
         {
-            OnTimeWarning(TimeRemaining);
+            TimeText->SetText(FText::FromString(CountdownStartMessage));
         }
-        LastTimeRemaining = TimeRemaining;
-    }
 
-    UpdateTextContent(TimeRemaining, AttemptCount, MazeState);
-    UpdateVisualStyle(TimeRemaining, MazeState);
+        // 블루프린트 이벤트
+        OnCountdownFinished();
+
+        // 실제 퍼즐 시작 (Manager에게 신호)
+        if (ConnectedManager)
+        {
+            // 잠시 후 실제 게임 시작
+            GetWorld()->GetTimerManager().SetTimer(MessageTimerHandle, [this]()
+                {
+                    SetDisplayState(EDisplayState::Playing);
+                    if (ConnectedManager)
+                    {
+                        ConnectedManager->StartPuzzle();  // 기존 함수 사용
+                    }
+                }, 1.0f, false);
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown finished - START!"));
+    }
 }
 
-void AMazeDisplay::UpdateTextContent(float TimeRemaining, int32 AttemptCount, EMazeState MazeState)
+void AMazeDisplay::ClearDisplay()
 {
-    FString TimeDisplayText;
-    FString StatusDisplayText;
-    FString InfoDisplayText;
-
-    // Time display based on mode
-    switch (DisplayMode)
-    {
-    case EDisplayMode::TimeOnly:
-        TimeDisplayText = FormatTime(TimeRemaining);
-        break;
-
-    case EDisplayMode::TimeAndAttempts:
-        TimeDisplayText = FormatTime(TimeRemaining);
-        InfoDisplayText = FString::Printf(TEXT("ATTEMPTS: %d"), AttemptCount);
-        break;
-
-    case EDisplayMode::StatusOnly:
-        StatusDisplayText = GetStatusText(MazeState);
-        break;
-
-    case EDisplayMode::Full:
-        TimeDisplayText = FormatTime(TimeRemaining);
-        StatusDisplayText = GetStatusText(MazeState);
-        InfoDisplayText = FString::Printf(TEXT("ATTEMPTS: %d"), AttemptCount);
-        break;
-    }
-
-    // Handle inactive state
-    if (!bShowWhenInactive && MazeState == EMazeState::Ready)
-    {
-        StatusDisplayText = InactiveMessage;
-        TimeDisplayText = TEXT("");
-        InfoDisplayText = TEXT("");
-    }
-
-    // Set text content
     if (TimeText)
     {
-        TimeText->SetText(FText::FromString(TimeDisplayText));
+        TimeText->SetText(FText::FromString(TEXT("")));
     }
 
     if (StatusText)
     {
-        StatusText->SetText(FText::FromString(StatusDisplayText));
+        StatusText->SetText(FText::FromString(TEXT("")));
     }
 
-    if (InfoText)
+    if (ProgressText)
     {
-        InfoText->SetText(FText::FromString(InfoDisplayText));
+        ProgressText->SetText(FText::FromString(TEXT("")));
+    }
+
+    StopBlinking();
+    StopCountdown();
+    UpdateLightColor(FLinearColor::Black);
+}
+
+void AMazeDisplay::StartBlinking()
+{
+    if (bBlinkOnWarning)
+    {
+        bIsBlinking = true;
+        BlinkTimer = 0.0f;
     }
 }
 
-void AMazeDisplay::UpdateVisualStyle(float TimeRemaining, EMazeState MazeState)
+void AMazeDisplay::StopBlinking()
 {
-    FLinearColor CurrentColor = GetStateColor(TimeRemaining, MazeState);
-    UpdateLighting(CurrentColor);
-
-    // Update text colors
-    FColor TextColor = CurrentColor.ToFColor(true);
-    if (TimeText) TimeText->SetTextRenderColor(TextColor);
-    if (StatusText) StatusText->SetTextRenderColor(TextColor);
-    if (InfoText) InfoText->SetTextRenderColor(TextColor);
-
-    // Start/stop visual effects based on state
-    switch (MazeState)
+    if (bIsBlinking)
     {
-    case EMazeState::Success:
-        if (bEnableBlinking) StartBlinking();
-        if (bEnablePulse) StartPulse();
-        PlayDisplaySound(SuccessSound);
-        break;
+        bIsBlinking = false;
+        BlinkTimer = 0.0f;
 
-    case EMazeState::Failed:
-    case EMazeState::TimeOut:
-        if (bEnableBlinking) StartBlinking();
-        PlayDisplaySound(FailSound);
-        break;
-
-    case EMazeState::Running:
-        if (TimeRemaining <= DangerTimeThreshold && bEnableBlinking)
+        // Reset to normal intensity
+        if (DisplayLight)
         {
-            StartBlinking();
+            DisplayLight->SetIntensity(1000.0f);
         }
-        break;
-
-    default:
-        StopBlinking();
-        StopPulse();
-        break;
     }
 }
 
-FLinearColor AMazeDisplay::GetStateColor(float TimeRemaining, EMazeState MazeState)
+// ====== Connection Management ======
+void AMazeDisplay::ConnectToManager(AGridMazeManager* Manager)
 {
-    switch (MazeState)
+    if (ConnectedManager)
     {
-    case EMazeState::Success:
-        return SuccessColor;
+        DisconnectFromManager();
+    }
 
-    case EMazeState::Failed:
-    case EMazeState::TimeOut:
-        return DangerColor;
+    ConnectedManager = Manager;
 
-    case EMazeState::Running:
-        if (TimeRemaining <= DangerTimeThreshold)
-            return DangerColor;
-        else if (TimeRemaining <= WarningTimeThreshold)
-            return WarningColor;
-        else
-            return NormalColor;
+    if (ConnectedManager)
+    {
+        // Bind to manager events
+        ConnectedManager->OnPuzzleStateChanged.AddDynamic(this, &AMazeDisplay::OnPuzzleStateChanged);
+        ConnectedManager->OnTimerUpdate.AddDynamic(this, &AMazeDisplay::OnTimerUpdate);
 
-    case EMazeState::Ready:
-    default:
-        return bShowWhenInactive ? NormalColor : InactiveColor;
+        OnConnectedToManager(Manager);
     }
 }
 
-void AMazeDisplay::UpdateLighting(FLinearColor Color)
+void AMazeDisplay::DisconnectFromManager()
 {
-    if (ScreenLight)
+    if (ConnectedManager)
     {
-        ScreenLight->SetLightColor(Color);
-    }
+        ConnectedManager->OnPuzzleStateChanged.RemoveDynamic(this, &AMazeDisplay::OnPuzzleStateChanged);
+        ConnectedManager->OnTimerUpdate.RemoveDynamic(this, &AMazeDisplay::OnTimerUpdate);
 
-    if (BackLight)
-    {
-        BackLight->SetLightColor(Color * 0.3f);
-    }
-
-    // Update material emissive color
-    if (ScreenMaterial)
-    {
-        ScreenMaterial->SetVectorParameterValue(TEXT("EmissiveColor"), Color);
+        OnDisconnectedFromManager();
+        ConnectedManager = nullptr;
     }
 }
 
+void AMazeDisplay::AutoConnectToManager()
+{
+    TArray<AActor*> FoundManagers;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridMazeManager::StaticClass(), FoundManagers);
+
+    if (FoundManagers.Num() > 0)
+    {
+        AGridMazeManager* Manager = Cast<AGridMazeManager>(FoundManagers[0]);
+        if (Manager)
+        {
+            ConnectToManager(Manager);
+        }
+    }
+}
+
+// ====== Settings Functions ======
+void AMazeDisplay::SetTimeTextSize(float NewSize)
+{
+    TimeTextSize = NewSize;
+    if (TimeText)
+    {
+        TimeText->SetWorldSize(NewSize);
+    }
+}
+
+void AMazeDisplay::SetStatusTextSize(float NewSize)
+{
+    StatusTextSize = NewSize;
+    if (StatusText)
+    {
+        StatusText->SetWorldSize(NewSize);
+    }
+}
+
+void AMazeDisplay::SetProgressTextSize(float NewSize)
+{
+    ProgressTextSize = NewSize;
+    if (ProgressText)
+    {
+        ProgressText->SetWorldSize(NewSize);
+    }
+}
+
+void AMazeDisplay::SetDisplayColors(FLinearColor Ready, FLinearColor Playing, FLinearColor Success, FLinearColor Failed)
+{
+    ReadyColor = Ready;
+    PlayingColor = Playing;
+    SuccessColor = Success;
+    FailedColor = Failed;
+}
+
+void AMazeDisplay::SetDisplayMessages(const FString& Ready, const FString& Success, const FString& Failed)
+{
+    ReadyMessage = Ready;
+    SuccessMessage = Success;
+    FailedMessage = Failed;
+}
+
+// ====== Information Query ======
 FString AMazeDisplay::FormatTime(float TimeInSeconds)
 {
     if (TimeInSeconds <= 0.0f)
@@ -368,200 +463,141 @@ FString AMazeDisplay::FormatTime(float TimeInSeconds)
     }
 }
 
-FString AMazeDisplay::GetStatusText(EMazeState MazeState)
+FString AMazeDisplay::FormatProgress(int32 Current, int32 Max)
 {
-    switch (MazeState)
+    return FString::Printf(TEXT("(%d/%d)"), Current, Max);
+}
+
+// ====== Event Callbacks ======
+void AMazeDisplay::OnPuzzleStateChanged(EPuzzleState NewState)
+{
+    switch (NewState)
     {
-    case EMazeState::Ready:
-        return InactiveMessage;
-    case EMazeState::Running:
-        return TEXT("ACTIVE");
-    case EMazeState::Success:
-        return SuccessMessage;
-    case EMazeState::Failed:
-        return FailMessage;
-    case EMazeState::TimeOut:
-        return TEXT("TIME OUT!");
-    default:
-        return TEXT("");
+    case EPuzzleState::Ready:
+        SetDisplayState(EDisplayState::Ready);
+        break;
+    case EPuzzleState::Playing:
+        SetDisplayState(EDisplayState::Playing);
+        break;
+    case EPuzzleState::Success:
+        SetDisplayState(EDisplayState::Success);
+        break;
+    case EPuzzleState::Failed:
+        SetDisplayState(EDisplayState::Failed);
+        break;
     }
 }
 
-FString AMazeDisplay::GetInfoText(int32 AttemptCount, EMazeState MazeState)
+void AMazeDisplay::OnTimerUpdate(float TimeRemaining)
 {
-    if (MazeState == EMazeState::Ready && AttemptCount == 0)
-    {
-        return FreePlayMessage;
-    }
-    return FString::Printf(TEXT("ATTEMPTS: %d"), AttemptCount);
-}
+    // 실패 상태에서도 시간은 계속 업데이트 (중요!)
+    UpdateTime(TimeRemaining);
 
-void AMazeDisplay::ShowMessage(const FString& Message, FLinearColor Color, float Duration)
-{
-    if (StatusText)
-    {
-        StatusText->SetText(FText::FromString(Message));
-        StatusText->SetTextRenderColor(Color.ToFColor(true));
-    }
-
-    UpdateLighting(Color);
-
-    // Clear message after duration
-    GetWorld()->GetTimerManager().SetTimer(MessageTimerHandle, [this]()
-        {
-            if (ConnectedManager)
-            {
-                UpdateDisplay(
-                    ConnectedManager->GetTimeRemaining(),
-                    ConnectedManager->GetAttemptCount(),
-                    ConnectedManager->GetCurrentState()
-                );
-            }
-        }, Duration, false);
-}
-
-void AMazeDisplay::ClearDisplay()
-{
-    if (TimeText) TimeText->SetText(FText::FromString(TEXT("")));
-    if (StatusText) StatusText->SetText(FText::FromString(TEXT("")));
-    if (InfoText) InfoText->SetText(FText::FromString(TEXT("")));
-
-    UpdateLighting(InactiveColor);
-    StopBlinking();
-    StopPulse();
-}
-
-void AMazeDisplay::ConnectToManager(AGridMazeManager* Manager)
-{
+    // 진행도도 함께 업데이트
     if (ConnectedManager)
     {
-        DisconnectFromManager();
-    }
-
-    ConnectedManager = Manager;
-
-    if (ConnectedManager)
-    {
-        // Bind to manager events
-        ConnectedManager->OnMazeDataUpdate.AddDynamic(this, &AMazeDisplay::OnMazeDataReceived);
-        ConnectedManager->OnMazeComplete.AddDynamic(this, &AMazeDisplay::OnMazeCompleted);
-
-        UE_LOG(LogTemp, Log, TEXT("MazeDisplay connected to manager"));
+        UpdateProgress(ConnectedManager->GetCurrentPathIndex(), ConnectedManager->GetPathLength());
     }
 }
 
-void AMazeDisplay::DisconnectFromManager()
+// ====== Blueprint Native Events ======
+FString AMazeDisplay::CustomFormatTime_Implementation(float TimeInSeconds)
 {
-    if (ConnectedManager)
-    {
-        ConnectedManager->OnMazeDataUpdate.RemoveDynamic(this, &AMazeDisplay::OnMazeDataReceived);
-        ConnectedManager->OnMazeComplete.RemoveDynamic(this, &AMazeDisplay::OnMazeCompleted);
-        ConnectedManager = nullptr;
+    return FormatTime(TimeInSeconds);
+}
 
-        UE_LOG(LogTemp, Log, TEXT("MazeDisplay disconnected from manager"));
+FLinearColor AMazeDisplay::GetTimeColor_Implementation(float TimeRemaining, float TotalTime)
+{
+    if (TimeRemaining <= DangerTimeThreshold)
+    {
+        return DangerColor;
     }
-}
-
-void AMazeDisplay::StartBlinking()
-{
-    if (!bEnableBlinking || bIsBlinking)
-        return;
-
-    bIsBlinking = true;
-    BlinkTimer = 0.0f;
-}
-
-void AMazeDisplay::StopBlinking()
-{
-    if (bIsBlinking)
+    else if (TimeRemaining <= WarningTimeThreshold)
     {
-        bIsBlinking = false;
-        BlinkTimer = 0.0f;
-    }
-}
-
-void AMazeDisplay::StartPulse()
-{
-    if (!bEnablePulse || bIsPulsing)
-        return;
-
-    bIsPulsing = true;
-    PulseTimer = 0.0f;
-}
-
-void AMazeDisplay::StopPulse()
-{
-    if (bIsPulsing)
-    {
-        bIsPulsing = false;
-        PulseTimer = 0.0f;
-    }
-}
-
-void AMazeDisplay::UpdateBlinking(float DeltaTime)
-{
-    BlinkTimer += DeltaTime;
-
-    float BlinkFactor = FMath::Sin(BlinkTimer * BlinkSpeed * PI) * 0.5f + 0.5f;
-    float CurrentIntensity = FMath::Lerp(ScreenLightIntensity * 0.2f, ScreenLightIntensity, BlinkFactor);
-
-    if (ScreenLight)
-    {
-        ScreenLight->SetIntensity(CurrentIntensity);
-    }
-}
-
-void AMazeDisplay::UpdatePulse(float DeltaTime)
-{
-    PulseTimer += DeltaTime;
-
-    float PulseFactor = FMath::Sin(PulseTimer * PulseSpeed * PI) * 0.3f + 0.7f;
-
-    if (ScreenMaterial)
-    {
-        ScreenMaterial->SetScalarParameterValue(TEXT("EmissiveMultiplier"), PulseFactor);
-    }
-}
-
-void AMazeDisplay::FindConnectedManager()
-{
-    TArray<AActor*> FoundManagers;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridMazeManager::StaticClass(), FoundManagers);
-
-    if (FoundManagers.Num() > 0)
-    {
-        AGridMazeManager* Manager = Cast<AGridMazeManager>(FoundManagers[0]);
-        if (Manager)
-        {
-            ConnectToManager(Manager);
-        }
-    }
-}
-
-void AMazeDisplay::PlayDisplaySound(USoundBase* Sound)
-{
-    if (bPlaySounds && Sound)
-    {
-        UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation(), SoundVolume);
-    }
-}
-
-void AMazeDisplay::OnMazeDataReceived(float TimeRemaining, int32 AttemptCount, EMazeState CurrentState)
-{
-    if (bIsActive)
-    {
-        UpdateDisplay(TimeRemaining, AttemptCount, CurrentState);
-    }
-}
-
-void AMazeDisplay::OnMazeCompleted(bool bSuccess)
-{
-    if (bSuccess)
-    {
-        ShowMessage(SuccessMessage, SuccessColor, 5.0f);
+        return WarningColor;
     }
     else
     {
-        ShowMessage(FailMessage, DangerColor, 3.0f);
+        return PlayingColor;
+    }
+}
+
+// ====== Internal Functions ======
+void AMazeDisplay::UpdateVisuals()
+{
+    // Update text sizes
+    if (TimeText)
+    {
+        TimeText->SetWorldSize(TimeTextSize);
+    }
+
+    if (StatusText)
+    {
+        StatusText->SetWorldSize(StatusTextSize);
+    }
+
+    if (ProgressText)
+    {
+        ProgressText->SetWorldSize(ProgressTextSize);
+    }
+}
+
+void AMazeDisplay::UpdateTextColors(FLinearColor Color)
+{
+    FColor TextColor = Color.ToFColor(true);
+
+    if (TimeText && !bIsCountingDown)  // 카운트다운 중이 아닐 때만 색상 변경
+    {
+        TimeText->SetTextRenderColor(TextColor);
+    }
+
+    // StatusText와 ProgressText는 개별 색상 유지
+}
+
+void AMazeDisplay::UpdateLightColor(FLinearColor Color)
+{
+    if (DisplayLight)
+    {
+        DisplayLight->SetLightColor(Color);
+    }
+}
+
+void AMazeDisplay::HandleTimeWarnings(float TimeRemaining, float TotalTime)
+{
+    // Warning threshold
+    if (TimeRemaining <= WarningTimeThreshold && !bWarningTriggered)
+    {
+        bWarningTriggered = true;
+        OnTimeWarning(TimeRemaining);
+    }
+
+    // Danger threshold
+    if (TimeRemaining <= DangerTimeThreshold && !bDangerTriggered)
+    {
+        bDangerTriggered = true;
+        OnTimeDanger(TimeRemaining);
+
+        if (bBlinkOnWarning)
+        {
+            StartBlinking();
+        }
+    }
+
+    // Reset warnings when time resets
+    if (TimeRemaining > WarningTimeThreshold)
+    {
+        bWarningTriggered = false;
+        bDangerTriggered = false;
+        StopBlinking();
+    }
+}
+
+void AMazeDisplay::SetupProgressText()
+{
+    if (ProgressText)
+    {
+        ProgressText->SetText(FText::FromString(TEXT("(0/0)")));
+        ProgressText->SetTextRenderColor(ProgressColor.ToFColor(true));
+        ProgressText->SetVisibility(bShowProgress);
     }
 }
