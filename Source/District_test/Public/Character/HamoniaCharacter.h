@@ -64,7 +64,8 @@ public:
     void OnDialogueEndedBP();
 
 
-    // Enhanced Input System
+    // Enhanced Input System 
+    
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;
 
@@ -111,6 +112,35 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
     float InteractionDistance = 400.0f;
+
+    // Inventory Input
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
+    UInputAction* InventoryToggleAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
+    UInputAction* InventoryLeftAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
+    UInputAction* InventoryRightAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
+    UInputAction* InventoryUseAction;
+    // E키 통합 처리 함수
+    UFUNCTION(BlueprintCallable, Category = "Input")
+    void OnEKeyPressed();
+    // 인벤토리 관련 함수들
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void OnInventoryToggle();
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void OnInventoryMoveLeft();
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void OnInventoryMoveRight();
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void OnInventoryUse();
+
 
     // 상호작용 UI 정보
     // DialogueTrigger에서 사용할 Getter 함수들
@@ -196,6 +226,39 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
     float DelayBeforeDialogue = 0.0f;
+
+    //Inventory
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    UItem* GetCurrentHeldInventoryItem();
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    bool HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor);
+
+    // EXPANDED: 손에 든 아이템 표시 시스템
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+    UStaticMeshComponent* HeldItemDisplay;
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
+    void ShowHeldItemMeshBP(UItem* Item);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
+    void HideHeldItemMeshBP();
+
+    UPROPERTY(BlueprintReadWrite, Category = "Inventory")
+    UItem* CurrentDisplayedItem;
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void UpdateHeldItemDisplay(UItem* NewItem);
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void ShowHeldItemMesh(UItem* Item);
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void HideHeldItemMesh();
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void OnInventorySelectionChanged(int32 NewSlotIndex);
+
 
 protected:
     virtual void BeginPlay() override;

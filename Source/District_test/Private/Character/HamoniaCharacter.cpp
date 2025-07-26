@@ -40,6 +40,14 @@ AHamoniaCharacter::AHamoniaCharacter()
 	bIsLookingAtInteractable = false;
 	CurrentInteractableActor = nullptr;
 
+	// 손에 든 아이템 표시용 메시 컴포넌트 생성
+	HeldItemDisplay = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeldItemDisplay"));
+	HeldItemDisplay->SetupAttachment(CameraComponent);
+	HeldItemDisplay->SetRelativeLocation(FVector(50.0f, 20.0f, -10.0f));
+	HeldItemDisplay->SetVisibility(false);
+
+	CurrentDisplayedItem = nullptr;
+
 	DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
 
 	// 디버그 표시 기본값
@@ -268,7 +276,6 @@ void AHamoniaCharacter::Tick(float DeltaTime)
 void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
 	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
 	if (EnhancedInputComponent)
 	{
@@ -299,20 +306,34 @@ void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		{
 			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::ToggleCrouch);
 		}
-		// 회전 액션 (R 키 → 밀기 기능)
+		// 회전 액션 (R 키)
 		if (RotateAction)
 		{
 			EnhancedInputComponent->BindAction(RotateAction, ETriggerEvent::Started, this, &AHamoniaCharacter::PushObject);
 		}
-		// 밀기 액션 (E 키 → 회전 기능)
+		// E키 통합 처리 (밀기 + 인벤토리 사용)
 		if (PushAction)
 		{
-			EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &AHamoniaCharacter::RotateObject);
+			EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnEKeyPressed);
 		}
 		// Interaction
 		if (InteractAction)
 		{
 			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHamoniaCharacter::Interact);
+		}
+
+		// 인벤토리 관련 입력 바인딩
+		if (InventoryToggleAction)
+		{
+			EnhancedInputComponent->BindAction(InventoryToggleAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryToggle);
+		}
+		if (InventoryLeftAction)
+		{
+			EnhancedInputComponent->BindAction(InventoryLeftAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryMoveLeft);
+		}
+		if (InventoryRightAction)
+		{
+			EnhancedInputComponent->BindAction(InventoryRightAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryMoveRight);
 		}
 	}
 }
@@ -417,35 +438,19 @@ void AHamoniaCharacter::ToggleCrouch(const FInputActionValue& Value)
 
 void AHamoniaCharacter::Interact()
 {
-	UE_LOG(LogTemp, Warning, TEXT("=== Interact Function Called ==="));
-	UE_LOG(LogTemp, Warning, TEXT("bIsLookingAtInteractable: %s, CurrentInteractableActor: %s"),
-		bIsLookingAtInteractable ? TEXT("True") : TEXT("False"),
-		CurrentInteractableActor ? *CurrentInteractableActor->GetName() : TEXT("NULL"));
-
 	// 대화 시스템 우선 처리 (대화 중일 때만)
 	if (DialogueManager)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("DialogueManager bIsInDialogue: %s"),
-			DialogueManager->bIsInDialogue ? TEXT("True") : TEXT("False"));
-
 		if (DialogueManager->bIsInDialogue)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("In dialogue - progressing dialogue"));
 			OnDialogueProgressRequested.Broadcast();
 			return;
 		}
 	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("DialogueManager is NULL"));
-	}
 
 	// 기존 상호작용 로직
-	UE_LOG(LogTemp, Warning, TEXT("Starting interaction logic"));
 	if (bIsLookingAtInteractable && CurrentInteractableActor)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Interaction conditions met - proceeding"));
-
 		// 현재 들고 있는 오브젝트가 있는지 확인
 		AActor* HeldObject = GetHeldObject();
 
@@ -480,6 +485,14 @@ void AHamoniaCharacter::Interact()
 		// 2. 오브젝트를 들고 있지 않은 경우
 		else
 		{
+			// EXPANDED: 인벤토리 아이템을 사용한 상호작용 체크
+			UItem* HeldInventoryItem = GetCurrentHeldInventoryItem();
+			if (HeldInventoryItem && HandleInventoryItemInteraction(HeldInventoryItem, CurrentInteractableActor))
+			{
+				// 인벤토리 아이템으로 상호작용 성공
+				return;
+			}
+
 			// 2.1 현재 바라보는 대상이 받침대인 경우
 			APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
 			if (Pedestal)
@@ -528,7 +541,6 @@ void AHamoniaCharacter::Interact()
 			}
 		}
 		// 3. 기타 일반 상호작용
-		UE_LOG(LogTemp, Warning, TEXT("Executing general interaction"));
 		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
 
 		// 4. 퀘스트 이벤트 호출 (일반 상호작용 후)
@@ -537,13 +549,8 @@ void AHamoniaCharacter::Interact()
 			IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
 		}
 	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Interaction conditions NOT met"));
-		UE_LOG(LogTemp, Warning, TEXT("bIsLookingAtInteractable: %s"), bIsLookingAtInteractable ? TEXT("True") : TEXT("False"));
-		UE_LOG(LogTemp, Warning, TEXT("CurrentInteractableActor: %s"), CurrentInteractableActor ? TEXT("Valid") : TEXT("NULL"));
-	}
 }
+
 
 AActor* AHamoniaCharacter::GetHeldObject()
 {
@@ -662,4 +669,156 @@ void AHamoniaCharacter::OnDialogueEnded()
 UDialogueManagerComponent* AHamoniaCharacter::GetDialogueManager()
 {
 	return DialogueManager;
+}
+
+
+// EXPANDED: 기존 OnInventoryToggle 함수 수정
+void AHamoniaCharacter::OnInventoryToggle()
+{
+	if (InventoryComponent)
+	{
+		InventoryComponent->ToggleInventory();
+
+		// 인벤토리 열릴 때 현재 선택된 아이템 표시
+		if (InventoryComponent->bIsInventoryOpen)
+		{
+			UItem* SelectedItem = InventoryComponent->GetSelectedItem();
+			UpdateHeldItemDisplay(SelectedItem);
+		}
+		else
+		{
+			// 인벤토리 닫힐 때 아이템 숨기기
+			HideHeldItemMesh();
+		}
+	}
+}
+
+void AHamoniaCharacter::OnInventoryMoveLeft()
+{
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		InventoryComponent->MoveSelection(-1);
+		OnInventorySelectionChanged(InventoryComponent->CurrentSelectedSlot);
+	}
+}
+
+void AHamoniaCharacter::OnInventoryMoveRight()
+{
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		InventoryComponent->MoveSelection(1);
+		OnInventorySelectionChanged(InventoryComponent->CurrentSelectedSlot);
+	}
+}
+
+void AHamoniaCharacter::OnEKeyPressed()
+{
+	// 인벤토리가 열려있으면 선택된 아이템 사용
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		OnInventoryUse();
+	}
+	// 인벤토리가 닫혀있으면 오브젝트 회전
+	else
+	{
+		RotateObject();
+	}
+}
+
+void AHamoniaCharacter::OnInventoryUse()
+{
+	if (InventoryComponent)
+	{
+		InventoryComponent->UseSelectedItem();
+	}
+}
+
+UItem* AHamoniaCharacter::GetCurrentHeldInventoryItem()
+{
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		return InventoryComponent->GetSelectedItem();
+	}
+	return nullptr;
+}
+
+bool AHamoniaCharacter::HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor)
+{
+	if (!Item || !TargetActor)
+	{
+		return false;
+	}
+
+	// 열쇠 + 문 상호작용
+	if (Item->Name.Contains("Key"))
+	{
+		AInteractableMechanism* Door = Cast<AInteractableMechanism>(TargetActor);
+		if (Door && Door->MechanismType == EMechanismType::Door)
+		{
+			if (Door->RequiredKeyName.Equals(Item->Name, ESearchCase::IgnoreCase))
+			{
+				IInteractableInterface::Execute_Interact(Door, this);
+				return true;
+			}
+		}
+	}
+
+	// 도구 + 받침대 상호작용
+	if (Item->Name.Contains("Tool"))
+	{
+		APedestal* Pedestal = Cast<APedestal>(TargetActor);
+		if (Pedestal)
+		{
+			Item->Use(this);
+			return true;
+		}
+	}
+
+	// 기본 아이템 사용
+	if (Item->bCanBeUsed)
+	{
+		Item->Use(this);
+		return true;
+	}
+
+	return false;
+}
+
+void AHamoniaCharacter::UpdateHeldItemDisplay(UItem* NewItem)
+{
+	CurrentDisplayedItem = NewItem;
+
+	if (NewItem && InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		ShowHeldItemMesh(NewItem);
+	}
+	else
+	{
+		HideHeldItemMesh();
+	}
+}
+
+void AHamoniaCharacter::ShowHeldItemMesh(UItem* Item)
+{
+	if (Item && HeldItemDisplay)
+	{
+		ShowHeldItemMeshBP(Item); // 블루프린트로 위임
+	}
+	else
+	{
+		HideHeldItemMeshBP();
+	}
+}
+void AHamoniaCharacter::HideHeldItemMesh()
+{
+	HideHeldItemMeshBP(); // 블루프린트로 위임
+}
+
+void AHamoniaCharacter::OnInventorySelectionChanged(int32 NewSlotIndex)
+{
+	if (InventoryComponent)
+	{
+		UItem* NewSelectedItem = InventoryComponent->GetItemAtSlot(NewSlotIndex);
+		UpdateHeldItemDisplay(NewSelectedItem);
+	}
 }

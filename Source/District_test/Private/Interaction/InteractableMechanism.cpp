@@ -213,7 +213,6 @@ bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)
     return true;
 }
 
-
 FString AInteractableMechanism::GetInteractionText_Implementation()
 {
     return InteractionText;
