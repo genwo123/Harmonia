@@ -82,8 +82,23 @@ void UDialogueManagerComponent::SelectChoice(int32 ChoiceIndex)
     }
 
     FString TargetDialogueID = CurrentDialogue.ChoiceTargetIDs[ChoiceIndex];
-    EndDialogue();
-    StartDialogue(TargetDialogueID);
+    if (TargetDialogueID.IsEmpty())
+    {
+        EndDialogue();
+        return;
+    }
+
+    // 퀘스트 이벤트 처리
+    if (!CurrentDialogue.QuestEventID.IsEmpty())
+    {
+        // ProcessQuestEvent(CurrentDialogue.QuestEventID, ChoiceIndex);
+    }
+
+    // 대화 전환
+    if (!StartDialogue(TargetDialogueID))
+    {
+        EndDialogue();
+    }
 }
 
 TArray<FString> UDialogueManagerComponent::GetCurrentChoices()
