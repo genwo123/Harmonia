@@ -1,235 +1,254 @@
-# 🎮 Harmonia 퍼즐 게임 - 디자이너 협업 가이드
+# 🎭 Harmonia (하모니아)
+> **1인칭 퍼즐 어드벤처 게임 - 졸업전시작**
 
-## 📑 **목차**
-
-1. [Git 설치](#1단계-git-설치)
-2. [SourceTree 설치](#2단계-sourcetree-설치)
-3. [프로젝트 연결](#3단계-프로젝트-연결)
-4. [브랜치 작업](#4단계-브랜치-작업)
-5. [일상 작업 방법](#5단계-일상-작업-방법)
-6. [작업 폴더 안내](#작업-가능한-폴더들)
-7. [주의사항 및 FAQ](#주의사항)
+<div align="center">
+  <img src="./image/harmonia_banner.png" alt="하모니아 게임 배너" width="80%">
+</div>
 
 ---
 
-## 📞 **시작하기 전에**
+## 📋 **프로젝트 개요**
 
-### **GitHub 계정 알려주세요!**
-협업을 위해 **GitHub 계정 아이디**를 프로그래머에게 알려주세요.
-- 예: `designer_kim`, `level_artist` 등
-- **Collaborator로 초대받으셔야 합니다**
+**하모니아**는 언리얼 엔진 5를 기반으로 개발된 1인칭 퍼즐 어드벤처 게임입니다. 플레이어는 신비로운 세계에서 다양한 퍼즐을 해결하며 깊이 있는 스토리를 경험하게 됩니다.
 
----
-
-## 📥 **1단계: Git 설치**
-
-### **Git 다운로드 및 설치**
-> **참고 블로그**: [Git 설치 방법 상세 가이드](https://dev-coco.tistory.com/47)
-
-1. **Git 공식 사이트** 접속: https://git-scm.com/
-2. **"Download for Windows"** 클릭
-3. **설치 파일 실행** 후 기본 설정으로 설치
-4. **설치 완료** (설정은 소스트리에서 자동 처리됩니다)
-
-![Git 사이트](Docs/Image/Git_Site.PNG)
-![Git 다운로드](Docs/Image/Git_Site2.PNG)
-![Git 설치](Docs/Image/Git_Site3.PNG)
+### **게임 정보**
+- **장르**: 1인칭 퍼즐 어드벤처
+- **플랫폼**: PC (Windows)
+- **엔진**: Unreal Engine 5.1+
+- **개발 언어**: C++17, Blueprint Visual Scripting
+- **개발 기간**: 2024.03 ~ 2024.11
+- **개발 규모**: 7인 팀 (기획 2명, 아트 3명, 사운드 1명, 프로그래밍 1명)
 
 ---
 
-## 🛠️ **2단계: SourceTree 설치**
+## 👥 **협업 가이드**
 
-### **SourceTree 다운로드**
-1. **SourceTree 공식 사이트** 접속: https://www.sourcetreeapp.com/
-2. **"Download for Windows"** 클릭
+### 🔗 **[📖 Git & SourceTree 협업 가이드 보기](./COLLABORATION_GUIDE.md)**
 
-![SourceTree 사이트](Docs/Image/Sourcetree_Site1.PNG)
-
-### **라이센스 동의**
-3. **라이센스 체크박스** 선택
-4. **"Download"** 클릭
-
-![라이센스 동의](Docs/Image/Sourcetree_Site2.png)
-
-### **설치 및 초기 설정**
-
-#### **계정 설정 (건너뛰기)**
-5. **Bitbucket 계정** 선택 또는 **"건너뛰기"** 클릭
-
-![계정 설정](Docs/Image/Sourcetree_Site3.PNG)
-
-#### **도구 설치**
-6. **Git 체크 확인** (이미 설치됨)
-7. **Mercurial은 체크 해제**
-8. **"다음"** 클릭
-
-![도구 설치](Docs/Image/Sourcetree_Site4.PNG)
-
-#### **사용자 정보 입력**
-9. **Author Name**: 본인 이름 입력 (예: `김디자인`)
-10. **Author Email**: 본인 이메일 입력
-11. **"다음"** 클릭
-
-![사용자 정보](Docs/Image/Sourcetree_Site5.PNG)
-
-#### **SSH 키 설정**
-12. **"아니오"** 클릭 (나중에 설정 가능)
-
-![SSH 키](Docs/Image/Sourcetree_Site6.PNG)
+**팀원분들을 위한 상세한 협업 가이드입니다:**
+- Git 설치 방법
+- SourceTree 사용법
+- 브랜치 작업 방법
+- 파일 업로드 및 관리
+- 작업 폴더 구조 안내
 
 ---
 
-## 🔗 **3단계: 프로젝트 연결**
+## 🎮 **게임 특징**
 
-### **프로젝트 클론 (복사)**
+### **몰입감 있는 1인칭 시점**
+- Enhanced Input System 기반 현대적 조작감
+- 직관적이고 자연스러운 플레이어 컨트롤
+- 1인칭 시점에 최적화된 UI/UX
 
-#### **Clone 시작**
-1. **SourceTree** 실행
-2. **"Clone"** 버튼 클릭
+### **창의적 퍼즐 시스템**
+- **레이저-거울 퍼즐**: 물리 기반 광선 반사 시뮬레이션
+- **일필휘지 퍼즐**: 격자 기반 경로 찾기 게임
+- **미로 시스템**: 동적 미로 생성 및 해결
+- **키패드 퍼즐**: 논리적 사고를 요구하는 암호 해독
 
-![Clone 시작](Docs/Image/Sourcetree7-1.PNG)
+### **깊이 있는 스토리텔링**
+- DataTable 기반 동적 대화 시스템
+- 플레이어 선택에 따른 스토리 분기
+- 몰입감을 높이는 내러티브 연출
+- 캐릭터별 고유한 성격과 대화 패턴
 
-#### **프로젝트 정보 입력**
-3. **소스 경로/URL**: `https://github.com/genwo123/Harmonia.git`
-4. **목적지 경로**: 원하는 폴더 선택 (예: `C:\Users\본인이름\OneDrive\바탕화면\Harmonia`)
-5. **이름**: `Harmonia`
-6. **"클론"** 클릭
-
-![Clone 설정](Docs/Image/Sourcetree7-2.PNG)
-
-#### **클론 완료**
-7. **프로젝트 로드 완료** 확인
-
-![클론 완료](Docs/Image/Sourcetree7-3.PNG)
-
----
-
-## 🌿 **4단계: 브랜치 작업**
-
-### **본인 브랜치로 전환**
-> **프로그래머가 미리 생성해둔 브랜치 사용**
-
-1. **좌측 브랜치 목록**에서 **origin** 확장
-2. **본인 브랜치** 찾기 (예: `design/김디자인`)
-3. **브랜치 더블클릭** → **체크아웃**
-
-**브랜치가 안 보이면:**
-- **"Pull"** 버튼 클릭하여 최신 정보 가져오기
-
-### **작업 전 확인사항**
-- **"Pull"** 먼저 실행해서 변경사항 확인
-- **바뀐 것이 없으면** 안전하게 작업 시작
-- **합병이 필요할 때는 프로그래머에게 연락**
+### **정교한 상호작용 시스템**
+- 인터페이스 패턴 기반 통합 상호작용
+- 거리 기반 상호작용 감지
+- 동적 상호작용 텍스트 생성
+- 직관적인 피드백 시스템
 
 ---
 
-## 🎯 **5단계: 일상 작업 방법**
+## 🛠️ **기술적 특징**
 
-### **작업 시작하기**
-1. **SourceTree** 열기
-2. **"Pull"** 클릭 (최신 상태 유지)
-3. **본인 브랜치 확인** (좌측에서 굵은 글씨로 표시)
-4. **언리얼 엔진** 열어서 작업
+### **현대적 언리얼 엔진 5 기술 활용**
+- **Enhanced Input System**: 차세대 입력 처리 시스템
+- **Common UI Framework**: 체계적인 UI 관리
+- **DataTable System**: 효율적인 게임 데이터 관리
+- **Component Architecture**: 확장 가능한 시스템 설계
 
-### **작업 완료 후 업로드**
+### **고급 프로그래밍 기법**
+- **C++17 모던 문법**: 타입 안전성과 성능 최적화
+- **Blueprint 연동**: 생산성과 성능의 완벽한 조화
+- **SOLID 원칙**: 유지보수 가능한 코드 아키텍처
+- **인터페이스 패턴**: 확장성 있는 시스템 설계
 
-#### **변경사항 확인**
-1. **언리얼에서 저장** (Ctrl+S)
-2. **SourceTree**로 돌아가기
-3. **"파일 상태"** 탭에서 변경된 파일 확인
-
-![파일 상태](Docs/Image/Sourcetree7-4.PNG)
-
-#### **Stage 및 커밋**
-4. **변경된 파일들 Stage** (+ 버튼 클릭)
-5. **커밋 메시지 작성**:
-   ```
-   Level_01 퍼즐 배치 완료
-   ```
-6. **"커밋"** 클릭
-
-![Stage 및 커밋](Docs/Image/Sourcetree7-5.PNG)
-
-#### **서버에 업로드**
-7. **"Push"** 클릭 (서버에 업로드)
+### **최적화된 퍼즐 엔진**
+- 실시간 물리 계산 기반 레이저 반사
+- 효율적인 격자 알고리즘으로 경로 계산
+- 동적 퍼즐 생성 및 검증 시스템
+- 메모리 효율적인 퍼즐 상태 관리
 
 ---
 
-## 📁 **작업 가능한 폴더들**
+## 📂 **프로젝트 구조**
 
-### **레벨 작업**
-- **Content/Level/** - 레벨 생성 및 수정 (Content/Maps는 사용하지 않음)
-
-### **에셋 작업 및 정리**
-- **Content/Hamoni_mesh/** - 3D 모델들 및 관련 에셋
-  - **폴더별 정리 방식**: 한 오브젝트당 하나의 폴더
-  - **예시 구조**:
-    ```
-    Content/Hamoni_mesh/
-    ├── Floor/
-    │   ├── SM_Floor.uasset        (스태틱 메시)
-    │   ├── M_Floor.uasset         (머티리얼)
-    │   └── T_Floor_Diffuse.uasset (텍스처)
-    ├── Wall/
-    │   ├── SM_Wall.uasset
-    │   ├── M_Wall.uasset
-    │   └── T_Wall_Normal.uasset
-    └── Door/
-        ├── SM_Door.uasset
-        ├── M_Door.uasset
-        └── T_Door_Albedo.uasset
-    ```
-
-### **기타 사용 가능한 에셋들**
-- **Content/Harmonia/** - 퍼즐 시스템 (레이저, 거울, 키패드)
-- **Content/Materials/** - 공용 머티리얼들
-- **Content/Image/** - 공용 텍스처들
-
----
-
-## ⚠️ **주의사항**
-
-### **작업 전 필수사항**
-- **반드시 Pull 먼저** 실행
-- **본인 브랜치에서만 작업**
-- **main 브랜치 직접 수정 금지**
-
-### **커밋 메시지 예시**
 ```
-Level_Tutorial 완성
-Stage1 퍼즐 배치 수정
-에셋 위치 조정
-UI 레이아웃 변경
-Floor 에셋 추가 (SM_Floor, M_Floor, T_Floor)
+Harmonia/
+├── Source/                    # C++ 소스 코드
+│   ├── Harmonia/
+│   │   ├── Characters/        # 캐릭터 관련 클래스
+│   │   ├── Interactions/      # 상호작용 시스템
+│   │   ├── Puzzles/          # 퍼즐 시스템
+│   │   └── UI/               # UI 관련 클래스
+├── Content/                   # 언리얼 에셋
+│   ├── Blueprints/           # 블루프린트 에셋
+│   ├── Levels/               # 게임 레벨
+│   ├── UI/                   # UI 위젯
+│   ├── Hamoni_mesh/          # 3D 모델 및 에셋
+│   ├── Materials/            # 머티리얼
+│   └── DataTables/           # 게임 데이터
+├── Docs/                     # 문서 및 가이드
+└── README.md                 # 프로젝트 소개
 ```
 
-### **문제 발생시**
-- **충돌 발생**: 즉시 작업 중단 후 프로그래머 연락
-- **브랜치 합병 필요시**: 프로그래머에게 연락
-- **파일 사라짐**: 브랜치 확인
+---
+
+## 🎯 **주요 시스템**
+
+### **캐릭터 시스템**
+```cpp
+// Enhanced Input 기반 현대적 입력 처리
+class AHarmoniaCharacter : public ACharacter
+{
+public:
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+    UInputMappingContext* DefaultMappingContext;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+    UInputAction* MoveAction;
+    
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input)
+    UInputAction* LookAction;
+};
+```
+
+### **상호작용 시스템**
+```cpp
+// 인터페이스 기반 확장 가능한 상호작용
+UINTERFACE(MinimalAPI, Blueprintable)
+class UInteractableInterface : public UInterface
+{
+    GENERATED_BODY()
+};
+
+class HARMONIA_API IInteractableInterface
+{
+    GENERATED_BODY()
+public:
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+    void Interact(AActor* Interactor);
+    
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable)
+    FString GetInteractionText();
+};
+```
+
+### **퍼즐 시스템**
+- **레이저 퍼즐**: 실시간 물리 기반 광선 계산
+- **미로 퍼즐**: 동적 생성 및 최적화된 경로 찾기
+- **논리 퍼즐**: 조건부 활성화 및 순서 검증
 
 ---
 
-## 🆘 **자주 사용하는 버튼들**
+## 🏆 **기술적 성과**
 
-| 버튼 | 설명 |
-|------|------|
-| **Pull** | 최신 변경사항 가져오기 |
-| **Commit** | 내 작업 저장 |
-| **Push** | 서버에 업로드 |
-| **파일 상태** | 변경된 파일 확인 |
+### **시스템 아키텍처**
+- 컴포넌트 기반 모듈화 설계로 재사용성 극대화
+- 인터페이스 패턴으로 확장성 확보
+- DataTable 활용으로 기획자 친화적 데이터 관리
+
+### **사용자 경험**
+- Enhanced Input System으로 직관적 조작감 구현
+- 실시간 피드백 시스템으로 몰입감 향상
+- 접근성을 고려한 UI/UX 설계
+
+### **성능 최적화**
+- 효율적인 메모리 관리 및 가비지 컬렉션 최적화
+- 퍼즐 시스템의 계산 복잡도 최소화
+- 렌더링 파이프라인 최적화
 
 ---
 
-## 🎉 **작업 흐름 요약**
+## 🎮 **플레이 가이드**
 
-1. **SourceTree 열기**
-2. **"Pull"** (최신 상태 확인)
-3. **본인 브랜치 확인**
-4. **언리얼에서 레벨/에셋 작업**
-5. **저장 후 SourceTree**
-6. **파일 Stage → 커밋 메시지 → Commit**
-7. **"Push"** (서버 업로드)
-8. **브랜치 합병 필요시 프로그래머에게 연락**
+### **기본 조작**
+- **이동**: WASD 키
+- **시점 변경**: 마우스
+- **상호작용**: E 키
+- **인벤토리**: I 키
+- **메뉴**: ESC 키
 
-**안전하고 체계적인 협업을 위해 가이드를 따라주세요!** 🚀
+### **퍼즐 해결 팁**
+1. **레이저 퍼즐**: 거울의 각도를 조정하여 목표 지점에 레이저 조준
+2. **일필휘지**: 모든 점을 한 번씩 지나가는 경로 찾기
+3. **미로**: 단서를 활용하여 올바른 경로 발견
+
+---
+
+## 📸 **스크린샷**
+
+<div align="center">
+  <table>
+    <tr>
+      <td><img src="./image/screenshot1.png" alt="레이저 퍼즐" width="100%"></td>
+      <td><img src="./image/screenshot2.png" alt="대화 시스템" width="100%"></td>
+    </tr>
+    <tr>
+      <td align="center"><i>레이저-거울 퍼즐 시스템</i></td>
+      <td align="center"><i>동적 대화 시스템</i></td>
+    </tr>
+  </table>
+</div>
+
+---
+
+## 🛠️ **개발 도구**
+
+- **게임 엔진**: Unreal Engine 5.1+
+- **IDE**: Visual Studio 2022
+- **버전 관리**: Git, SourceTree
+- **협업 도구**: Discord, GitHub
+- **문서화**: Markdown, GitHub Wiki
+
+---
+
+## 👨‍💻 **개발팀**
+
+### **프로그래밍**
+- **김건우** - 메인 프로그래머, 시스템 아키텍트
+
+### **게임 기획**
+- **기획자 1** - 게임 디자인, 레벨 디자인
+- **기획자 2** - 스토리 기획, 퍼즐 디자인
+
+### **아트**
+- **아티스트 1** - 3D 모델링, 환경 아트
+- **아티스트 2** - 캐릭터 아트, 애니메이션
+- **아티스트 3** - UI/UX 디자인, 이펙트
+
+### **사운드**
+- **사운드 디자이너** - 음향 효과, 배경음악
+
+---
+
+## 🔗 **링크**
+
+- **GitHub Repository**: [https://github.com/genwo123/Harmonia](링크)
+- **협업 가이드**: [COLLABORATION_GUIDE.md](./COLLABORATION_GUIDE.md)
+- **게임플레이 영상**: [YouTube](링크)
+- **개발 문서**: [Wiki](링크)
+
+---
+
+## 📄 **라이선스**
+
+이 프로젝트는 숙명여자대학교 2025 졸업전시회 작품입니다
+
+---
+
+<div align="center">
+  <i>🎮 하모니아와 함께 퍼즐의 세계를 탐험해보세요! 🎮</i>
+</div>
