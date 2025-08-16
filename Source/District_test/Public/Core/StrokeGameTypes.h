@@ -1,4 +1,3 @@
-// StrokeGameTypes.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -15,7 +14,8 @@ enum class EStrokeCellType : uint8
     Goal        UMETA(DisplayName = "Goal"),
     RedPoint    UMETA(DisplayName = "Red Point"),
     GreenPoint  UMETA(DisplayName = "Green Point"),
-    BluePoint   UMETA(DisplayName = "Blue Point")
+    BluePoint   UMETA(DisplayName = "Blue Point"),
+    Visited     UMETA(DisplayName = "Visited")
 };
 
 // 게임 상태 열거형
@@ -24,165 +24,283 @@ enum class EStrokeGameState : uint8
 {
     Ready       UMETA(DisplayName = "Ready"),
     Playing     UMETA(DisplayName = "Playing"),
-    Success     UMETA(DisplayName = "Success"),
-    Failed      UMETA(DisplayName = "Failed")
+    Won         UMETA(DisplayName = "Won"),
+    Lost        UMETA(DisplayName = "Lost")
 };
 
-// 개별 셀 정보 구조체
+// 텔레포트 포털 구조체
 USTRUCT(BlueprintType)
-struct DISTRICT_TEST_API FStrokeCell
+struct DISTRICT_TEST_API FTeleportPortal
 {
     GENERATED_BODY()
 
-    // 기본 속성
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Teleport")
+    FIntPoint PortalA = FIntPoint(-1, -1);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Teleport")
+    FIntPoint PortalB = FIntPoint(-1, -1);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Teleport")
+    int32 PortalID = 1;
+
+    FTeleportPortal()
+    {
+        PortalA = FIntPoint(-1, -1);
+        PortalB = FIntPoint(-1, -1);
+        PortalID = 1;
+    }
+
+    FTeleportPortal(int32 ID)
+    {
+        PortalA = FIntPoint(-1, -1);
+        PortalB = FIntPoint(-1, -1);
+        PortalID = ID;
+    }
+
+    // 포털이 완성되었는지 확인
+    bool IsComplete() const
+    {
+        return PortalA.X != -1 && PortalB.X != -1;
+    }
+
+    // 포털이 비어있는지 확인
+    bool IsEmpty() const
+    {
+        return PortalA.X == -1 && PortalB.X == -1;
+    }
+
+    // 특정 위치가 이 포털에 포함되는지 확인
+    bool Contains(FIntPoint Position) const
+    {
+        return PortalA == Position || PortalB == Position;
+    }
+
+    // 입구 위치를 주면 출구 위치 반환
+    FIntPoint GetDestination(FIntPoint Entry) const
+    {
+        if (Entry == PortalA && PortalB.X != -1)
+        {
+            return PortalB;
+        }
+        else if (Entry == PortalB && PortalA.X != -1)
+        {
+            return PortalA;
+        }
+        return Entry; // 텔레포트 불가능
+    }
+};
+
+// 셀 데이터 구조체
+USTRUCT(BlueprintType)
+struct DISTRICT_TEST_API FStrokeCellData
+{
+    GENERATED_BODY()
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell")
     EStrokeCellType CellType = EStrokeCellType::Empty;
 
-    // 방문 상태
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "State")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell")
     bool bIsVisited = false;
 
-    // 순서 시스템 (추후 확장용)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Order")
-    int32 RequiredOrder = 0; // 0=순서없음, 1,2,3=순서대로
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell")
+    FIntPoint GridPosition = FIntPoint(0, 0);
 
-    // 생성자
-    FStrokeCell()
+    FStrokeCellData()
     {
         CellType = EStrokeCellType::Empty;
         bIsVisited = false;
-        RequiredOrder = 0;
+        GridPosition = FIntPoint(0, 0);
+    }
+
+    FStrokeCellData(EStrokeCellType InType, FIntPoint InPosition)
+    {
+        CellType = InType;
+        bIsVisited = false;
+        GridPosition = InPosition;
     }
 
     // 편의 함수들
-    bool IsWall() const { return CellType == EStrokeCellType::Wall; }
-    bool IsEmpty() const { return CellType == EStrokeCellType::Empty; }
-    bool IsStart() const { return CellType == EStrokeCellType::Start; }
-    bool IsGoal() const { return CellType == EStrokeCellType::Goal; }
-    bool IsRGBPoint() const {
+    bool IsSpecialCell() const
+    {
+        return CellType != EStrokeCellType::Empty && CellType != EStrokeCellType::Visited;
+    }
+
+    bool IsRequiredPoint() const
+    {
         return CellType == EStrokeCellType::RedPoint ||
             CellType == EStrokeCellType::GreenPoint ||
             CellType == EStrokeCellType::BluePoint;
     }
+
+    bool IsBlockingCell() const
+    {
+        return CellType == EStrokeCellType::Wall;
+    }
 };
 
-// 맵 전체 데이터 구조체
+// 퍼즐 데이터 구조체 (DataTable용)
 USTRUCT(BlueprintType)
-struct DISTRICT_TEST_API FStrokeMapData
+struct DISTRICT_TEST_API FStrokePuzzleData : public FTableRowBase
 {
     GENERATED_BODY()
 
-    // 격자 크기
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map", meta = (ClampMin = "3", ClampMax = "10"))
-    int32 Rows = 5;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Info")
+    FString PuzzleName = TEXT("Untitled Puzzle");
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map", meta = (ClampMin = "3", ClampMax = "10"))
-    int32 Columns = 5;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Info")
+    FString Description = TEXT("Complete the puzzle by visiting all required points");
 
-    // 셀 데이터 배열 (크기: Rows * Columns)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map")
-    TArray<FStrokeCell> Cells;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid",
+        meta = (ClampMin = "3", ClampMax = "20"))
+    FIntPoint GridSize = FIntPoint(5, 5);
 
-    // 시작/도착 지점 (자동으로 찾거나 수동 설정)
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map")
-    FIntPoint StartPos;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Key Points")
+    FIntPoint StartPosition = FIntPoint(2, 4);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Map")
-    FIntPoint GoalPos;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Key Points")
+    FIntPoint GoalPosition = FIntPoint(2, 0);
 
-    // 게임 설정
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings")
-    bool bRequireOrder = false; // true시 RGB 순서대로 방문 필요
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Required Points")
+    TArray<FIntPoint> RequiredPoints;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings")
-    FString MapName = "Untitled Map";
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Obstacles")
+    TArray<FIntPoint> WallPositions;
 
-    // 생성자
-    FStrokeMapData()
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Special Features")
+    TArray<FTeleportPortal> TeleportPortals;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Difficulty",
+        meta = (ClampMin = "1", ClampMax = "10"))
+    int32 DifficultyLevel = 1;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Difficulty",
+        meta = (ClampMin = "0"))
+    float TimeLimit = 0.0f; // 0 = 무제한
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay")
+    bool bAllowRestart = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay")
+    bool bShowHints = false;
+
+    FStrokePuzzleData()
     {
-        Rows = 5;
-        Columns = 5;
-        StartPos = FIntPoint(0, 0);
-        GoalPos = FIntPoint(4, 4);
-        bRequireOrder = false;
-        MapName = "Untitled Map";
-
-        // 기본 빈 셀들로 초기화
-        InitializeEmptyCells();
+        PuzzleName = TEXT("Tutorial Puzzle");
+        Description = TEXT("Learn the basics of one-stroke puzzles");
+        GridSize = FIntPoint(5, 5);
+        StartPosition = FIntPoint(2, 4);
+        GoalPosition = FIntPoint(2, 0);
+        RequiredPoints = {
+            FIntPoint(1, 2),
+            FIntPoint(2, 2),
+            FIntPoint(3, 2)
+        };
+        WallPositions = {
+            FIntPoint(0, 1),
+            FIntPoint(4, 1)
+        };
+        DifficultyLevel = 1;
+        TimeLimit = 0.0f;
+        bAllowRestart = true;
+        bShowHints = false;
     }
 
     // 편의 함수들
-    void InitializeEmptyCells()
+    bool IsValidPuzzle() const
     {
-        Cells.Empty();
-        Cells.SetNum(Rows * Columns);
-        for (int32 i = 0; i < Cells.Num(); i++)
+        // 기본 유효성 검사
+        if (GridSize.X < 3 || GridSize.Y < 3) return false;
+        if (!IsPositionInGrid(StartPosition)) return false;
+        if (!IsPositionInGrid(GoalPosition)) return false;
+        if (StartPosition == GoalPosition) return false;
+
+        // 필수 포인트가 최소 1개는 있어야 함
+        if (RequiredPoints.Num() == 0) return false;
+
+        // 모든 위치가 그리드 내에 있는지 확인
+        for (const FIntPoint& Point : RequiredPoints)
         {
-            Cells[i] = FStrokeCell();
-        }
-    }
-
-    // 2D 좌표를 1D 인덱스로 변환
-    int32 GetIndex(int32 Row, int32 Col) const
-    {
-        if (Row < 0 || Row >= Rows || Col < 0 || Col >= Columns)
-        {
-            return -1; // 유효하지 않은 인덱스
-        }
-        return Row * Columns + Col;
-    }
-
-    // 1D 인덱스를 2D 좌표로 변환
-    FIntPoint GetCoords(int32 Index) const
-    {
-        if (Index < 0 || Index >= Cells.Num())
-        {
-            return FIntPoint(-1, -1); // 유효하지 않은 좌표
-        }
-        return FIntPoint(Index / Columns, Index % Columns);
-    }
-
-    // 특정 좌표의 셀 가져오기
-    FStrokeCell* GetCell(int32 Row, int32 Col)
-    {
-        int32 Index = GetIndex(Row, Col);
-        return (Index >= 0) ? &Cells[Index] : nullptr;
-    }
-
-    // 특정 좌표의 셀 가져오기 (const)
-    const FStrokeCell* GetCell(int32 Row, int32 Col) const
-    {
-        int32 Index = GetIndex(Row, Col);
-        return (Index >= 0) ? &Cells[Index] : nullptr;
-    }
-
-    // 인접한 셀인지 확인 (상하좌우만)
-    bool AreAdjacent(FIntPoint From, FIntPoint To) const
-    {
-        int32 DeltaX = FMath::Abs(From.X - To.X);
-        int32 DeltaY = FMath::Abs(From.Y - To.Y);
-        return (DeltaX == 1 && DeltaY == 0) || (DeltaX == 0 && DeltaY == 1);
-    }
-
-    // 맵 유효성 검사
-    bool IsValidMap() const
-    {
-        // 시작점과 도착점이 유효한지 확인
-        if (StartPos.X < 0 || StartPos.X >= Rows || StartPos.Y < 0 || StartPos.Y >= Columns)
-            return false;
-        if (GoalPos.X < 0 || GoalPos.X >= Rows || GoalPos.Y < 0 || GoalPos.Y >= Columns)
-            return false;
-
-        // RGB 포인트가 각각 최소 1개씩 있는지 확인
-        bool bHasRed = false, bHasGreen = false, bHasBlue = false;
-        for (const FStrokeCell& Cell : Cells)
-        {
-            if (Cell.CellType == EStrokeCellType::RedPoint) bHasRed = true;
-            if (Cell.CellType == EStrokeCellType::GreenPoint) bHasGreen = true;
-            if (Cell.CellType == EStrokeCellType::BluePoint) bHasBlue = true;
+            if (!IsPositionInGrid(Point)) return false;
         }
 
-        return bHasRed && bHasGreen && bHasBlue;
+        for (const FIntPoint& Wall : WallPositions)
+        {
+            if (!IsPositionInGrid(Wall)) return false;
+        }
+
+        // 텔레포트 포털 유효성 확인
+        for (const FTeleportPortal& Portal : TeleportPortals)
+        {
+            if (Portal.IsComplete())
+            {
+                if (!IsPositionInGrid(Portal.PortalA) || !IsPositionInGrid(Portal.PortalB))
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool IsPositionInGrid(FIntPoint Position) const
+    {
+        return Position.X >= 0 && Position.X < GridSize.X &&
+            Position.Y >= 0 && Position.Y < GridSize.Y;
+    }
+
+    bool IsPositionBlocked(FIntPoint Position) const
+    {
+        return WallPositions.Contains(Position);
+    }
+
+    bool IsRequiredPosition(FIntPoint Position) const
+    {
+        return RequiredPoints.Contains(Position);
+    }
+
+    FTeleportPortal* FindPortalContaining(FIntPoint Position)
+    {
+        for (FTeleportPortal& Portal : TeleportPortals)
+        {
+            if (Portal.Contains(Position))
+            {
+                return &Portal;
+            }
+        }
+        return nullptr;
+    }
+
+    const FTeleportPortal* FindPortalContaining(FIntPoint Position) const
+    {
+        for (const FTeleportPortal& Portal : TeleportPortals)
+        {
+            if (Portal.Contains(Position))
+            {
+                return &Portal;
+            }
+        }
+        return nullptr;
+    }
+
+    int32 GetEstimatedMoves() const
+    {
+        // 간단한 추정: 시작점 -> 모든 필수점 -> 골점
+        return RequiredPoints.Num() + 2;
+    }
+
+    TArray<FIntPoint> GetAllSpecialPositions() const
+    {
+        TArray<FIntPoint> SpecialPositions;
+        SpecialPositions.Add(StartPosition);
+        SpecialPositions.Add(GoalPosition);
+        SpecialPositions.Append(RequiredPoints);
+
+        for (const FTeleportPortal& Portal : TeleportPortals)
+        {
+            if (Portal.PortalA.X != -1) SpecialPositions.Add(Portal.PortalA);
+            if (Portal.PortalB.X != -1) SpecialPositions.Add(Portal.PortalB);
+        }
+
+        return SpecialPositions;
     }
 };
 
@@ -192,58 +310,75 @@ struct DISTRICT_TEST_API FStrokeGameProgress
 {
     GENERATED_BODY()
 
-    // 현재 상태
     UPROPERTY(BlueprintReadWrite, Category = "Progress")
     EStrokeGameState GameState = EStrokeGameState::Ready;
 
-    // 현재 위치
     UPROPERTY(BlueprintReadWrite, Category = "Progress")
-    FIntPoint CurrentPos;
+    FIntPoint CurrentPosition = FIntPoint(0, 0);
 
-    // 이동 경로
     UPROPERTY(BlueprintReadWrite, Category = "Progress")
     TArray<FIntPoint> MovementPath;
 
-    // RGB 수집 상태
     UPROPERTY(BlueprintReadWrite, Category = "Progress")
-    bool bRedCollected = false;
+    TArray<FIntPoint> VisitedRequiredPoints;
 
     UPROPERTY(BlueprintReadWrite, Category = "Progress")
-    bool bGreenCollected = false;
+    float ElapsedTime = 0.0f;
 
     UPROPERTY(BlueprintReadWrite, Category = "Progress")
-    bool bBlueCollected = false;
+    int32 MoveCount = 0;
 
-    // 순서 모드용
     UPROPERTY(BlueprintReadWrite, Category = "Progress")
-    int32 NextRequiredOrder = 1;
+    int32 TeleportCount = 0;
 
-    // 생성자
     FStrokeGameProgress()
     {
         GameState = EStrokeGameState::Ready;
-        CurrentPos = FIntPoint(-1, -1);
-        bRedCollected = false;
-        bGreenCollected = false;
-        bBlueCollected = false;
-        NextRequiredOrder = 1;
+        CurrentPosition = FIntPoint(0, 0);
+        ElapsedTime = 0.0f;
+        MoveCount = 0;
+        TeleportCount = 0;
     }
 
-    // 편의 함수들
-    bool AllRGBCollected() const
-    {
-        return bRedCollected && bGreenCollected && bBlueCollected;
-    }
-
-    void Reset()
+    void Reset(FIntPoint StartPosition)
     {
         GameState = EStrokeGameState::Ready;
-        CurrentPos = FIntPoint(-1, -1);
+        CurrentPosition = StartPosition;
         MovementPath.Empty();
-        bRedCollected = false;
-        bGreenCollected = false;
-        bBlueCollected = false;
-        NextRequiredOrder = 1;
+        VisitedRequiredPoints.Empty();
+        ElapsedTime = 0.0f;
+        MoveCount = 0;
+        TeleportCount = 0;
+    }
+
+    bool AllRequiredPointsVisited(const TArray<FIntPoint>& RequiredPoints) const
+    {
+        for (const FIntPoint& Required : RequiredPoints)
+        {
+            if (!VisitedRequiredPoints.Contains(Required))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    float GetCompletionPercentage(const TArray<FIntPoint>& RequiredPoints) const
+    {
+        if (RequiredPoints.Num() == 0) return 100.0f;
+        return (float)VisitedRequiredPoints.Num() / RequiredPoints.Num() * 100.0f;
+    }
+
+    void AddMove(FIntPoint NewPosition, bool bWasTeleport = false)
+    {
+        MovementPath.Add(CurrentPosition);
+        CurrentPosition = NewPosition;
+        MoveCount++;
+
+        if (bWasTeleport)
+        {
+            TeleportCount++;
+        }
     }
 };
 
@@ -261,30 +396,56 @@ struct DISTRICT_TEST_API FStrokeGameSettings
     float CellSpacing = 2.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
-    FLinearColor LineColor = FLinearColor::White;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
-    float LineThickness = 3.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
     bool bShowGrid = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
+    bool bShowCoordinates = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
+    bool bShowPath = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
+    bool bAnimateMovement = true;
 
     // 게임플레이 설정
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay")
     bool bAllowDiagonalMovement = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay")
-    bool bShowPath = true;
+    bool bShowHints = false;
 
-    // 생성자
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay")
+    float MovementSpeed = 1.0f;
+
+    // 색상 설정
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
+    FLinearColor EmptyColor = FLinearColor::White;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
+    FLinearColor WallColor = FLinearColor::Black;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
+    FLinearColor StartColor = FLinearColor::Green;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
+    FLinearColor GoalColor = FLinearColor::Red;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
+    FLinearColor VisitedColor = FLinearColor(0.5f, 0.5f, 0.5f, 1.0f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
+    FLinearColor PlayerColor = FLinearColor::Yellow;
+
     FStrokeGameSettings()
     {
         CellSize = 50.0f;
         CellSpacing = 2.0f;
-        LineColor = FLinearColor::White;
-        LineThickness = 3.0f;
         bShowGrid = true;
-        bAllowDiagonalMovement = false;
+        bShowCoordinates = false;
         bShowPath = true;
+        bAnimateMovement = true;
+        bAllowDiagonalMovement = false;
+        bShowHints = false;
+        MovementSpeed = 1.0f;
     }
 };
