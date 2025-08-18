@@ -157,43 +157,36 @@ void UStrokeCell::OnCellClicked()
 void UStrokeCell::UpdatePathConnections(const TArray<FIntPoint>& VisitedPath, FIntPoint CurrentPos)
 {
     ConnectedDirections.Empty();
-
     FIntPoint MyPos = CellData.GridPosition;
 
-    // 방문한 경로에서 내 위치의 인덱스 찾기
     int32 MyIndex = VisitedPath.Find(MyPos);
 
     if (MyIndex != INDEX_NONE)
     {
-        // 이전 위치와 연결
+        // 들어온 방향 (라인이 표시될 방향)
         if (MyIndex > 0)
         {
             FIntPoint PrevPos = VisitedPath[MyIndex - 1];
-            FIntPoint Direction = MyPos - PrevPos;
-            ConnectedDirections.Add(Direction);
+            FIntPoint IncomingLineDirection = PrevPos - MyPos;  // 방향 뒤집기!
+            ConnectedDirections.Add(IncomingLineDirection);
         }
 
-        // 다음 위치와 연결
+        // 나가는 방향 (이건 맞다고 하셨으니 그대로)
         if (MyIndex < VisitedPath.Num() - 1)
         {
             FIntPoint NextPos = VisitedPath[MyIndex + 1];
-            FIntPoint Direction = NextPos - MyPos;
-            ConnectedDirections.Add(Direction);
+            FIntPoint OutgoingDirection = NextPos - MyPos;
+            ConnectedDirections.Add(OutgoingDirection);
+        }
+        else if (MyIndex == VisitedPath.Num() - 1)
+        {
+            FIntPoint OutgoingDirection = CurrentPos - MyPos;
+            ConnectedDirections.Add(OutgoingDirection);
         }
     }
 
-    // 현재 플레이어 위치에서 마지막 방문 위치로의 연결
-    if (CurrentPos == MyPos && VisitedPath.Num() > 0)
-    {
-        FIntPoint LastPos = VisitedPath.Last();
-        FIntPoint Direction = MyPos - LastPos;
-        ConnectedDirections.Add(Direction);
-    }
-
-    // Blueprint 이벤트 호출
     DrawPathLines();
 }
-
 FLinearColor UStrokeCell::GetCustomCellColor() const
 {
     if (!ParentGrid)
