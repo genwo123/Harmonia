@@ -56,22 +56,22 @@ FReply UStrokeGrid::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent
 
     if (PressedKey == EKeys::W || PressedKey == EKeys::Up)
     {
-        MovePlayer(FIntPoint(0, -1));
+        MovePlayer(FIntPoint(-1, 0)); // 위로 = X 감소
         return FReply::Handled();
     }
     else if (PressedKey == EKeys::S || PressedKey == EKeys::Down)
     {
-        MovePlayer(FIntPoint(0, 1));
+        MovePlayer(FIntPoint(1, 0));  // 아래로 = X 증가
         return FReply::Handled();
     }
     else if (PressedKey == EKeys::A || PressedKey == EKeys::Left)
     {
-        MovePlayer(FIntPoint(-1, 0));
+        MovePlayer(FIntPoint(0, -1)); // 왼쪽 = Y 감소
         return FReply::Handled();
     }
     else if (PressedKey == EKeys::D || PressedKey == EKeys::Right)
     {
-        MovePlayer(FIntPoint(1, 0));
+        MovePlayer(FIntPoint(0, 1));  // 오른쪽 = Y 증가
         return FReply::Handled();
     }
     else if (PressedKey == EKeys::R)
@@ -324,19 +324,17 @@ void UStrokeGrid::CreateCells()
         return;
     }
 
-    // 사용할 클래스 결정 (Blueprint 우선, C++ fallback)
     UClass* ClassToUse = StrokeCellWidgetClass ? StrokeCellWidgetClass.Get() : UStrokeCell::StaticClass();
-
     CellWidgets.Empty();
 
-    for (int32 Y = 0; Y < CurrentPuzzle.GridSize.Y; Y++)
+    // X와 Y 루프 순서 바꾸기 - X가 먼저 (열 우선)
+    for (int32 X = 0; X < CurrentPuzzle.GridSize.X; X++)
     {
-        for (int32 X = 0; X < CurrentPuzzle.GridSize.X; X++)
+        for (int32 Y = 0; Y < CurrentPuzzle.GridSize.Y; Y++)
         {
             UStrokeCell* NewCell = CreateWidget<UStrokeCell>(this, ClassToUse);
             if (!NewCell)
             {
-                UE_LOG(LogTemp, Error, TEXT("Failed to create cell at (%d,%d)"), X, Y);
                 continue;
             }
 
@@ -348,15 +346,13 @@ void UStrokeGrid::CreateCells()
             NewCell->SetCellData(CellData);
             NewCell->ParentGrid = this;
 
-            GridPanel->AddChildToUniformGrid(NewCell, Y, X);
+            // GridPanel 배치도 Row=X, Column=Y로 변경
+            GridPanel->AddChildToUniformGrid(NewCell, X, Y);
             CellWidgets.Add(NewCell);
         }
     }
 
     UpdateEditorVisuals();
-
-    UE_LOG(LogTemp, Log, TEXT("Created %d cells for %dx%d grid"),
-        CellWidgets.Num(), CurrentPuzzle.GridSize.X, CurrentPuzzle.GridSize.Y);
 }
 
 EStrokeCellType UStrokeGrid::GetCellTypeAtPosition(FIntPoint Position) const
@@ -413,7 +409,11 @@ void UStrokeGrid::ClearGrid()
 
 bool UStrokeGrid::MovePlayer(FIntPoint Direction)
 {
+    
+
     FIntPoint NewPosition = CurrentPlayerPosition + Direction;
+
+
 
     if (!IsValidMove(NewPosition))
     {
@@ -508,7 +508,7 @@ int32 UStrokeGrid::GetCellIndex(FIntPoint Position) const
         return -1;
     }
 
-    return Position.Y * CurrentPuzzle.GridSize.X + Position.X;
+    return Position.X * CurrentPuzzle.GridSize.Y + Position.Y;
 }
 
 FIntPoint UStrokeGrid::CheckTeleport(FIntPoint Position)
@@ -625,12 +625,18 @@ void UStrokeGrid::UpdatePathDisplay()
 {
     if (!bShowPath) return;
 
-    // 모든 셀에게 경로 정보 업데이트
+    // 현재 플레이어 위치가 아닌 셀들만 업데이트
     for (UStrokeCell* Cell : CellWidgets)
     {
-        if (Cell)
+        if (Cell && Cell->CellData.GridPosition != CurrentPlayerPosition)
         {
             Cell->UpdatePathConnections(VisitedPositions, CurrentPlayerPosition);
+        }
+        else if (Cell)
+        {
+            // 현재 플레이어 위치는 라인 없음
+            Cell->ConnectedDirections.Empty();
+            Cell->DrawPathLines();
         }
     }
 }
