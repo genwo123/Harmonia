@@ -242,19 +242,15 @@ bool UPuzzleInteractionComponent::RemoveFromPedestal()
 {
     if (!CurrentPedestal)
     {
-        UE_LOG(LogTemp, Warning, TEXT("RemoveFromPedestal failed - no current pedestal"));
         return false;
     }
 
     AActor* Owner = GetOwner();
     if (!Owner)
     {
-        UE_LOG(LogTemp, Warning, TEXT("RemoveFromPedestal failed - no owner"));
+
         return false;
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("Attempting to remove %s from pedestal %s"),
-        *Owner->GetName(), *CurrentPedestal->GetName());
 
     // 받침대에서 제거
     AActor* RemovedObject = CurrentPedestal->RemoveObject();
@@ -262,10 +258,10 @@ bool UPuzzleInteractionComponent::RemoveFromPedestal()
     if (RemovedObject == Owner)
     {
         CurrentPedestal = nullptr;
-        UE_LOG(LogTemp, Warning, TEXT("RemoveFromPedestal successful"));
+ 
         return true;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("RemoveFromPedestal failed - wrong object returned"));
+    
     return false;
 }
