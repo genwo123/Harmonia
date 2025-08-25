@@ -49,11 +49,6 @@ void AInteractableMechanism::BeginPlay()
 {
     Super::BeginPlay();
 
-    UE_LOG(LogTemp, Error, TEXT("=== %s BeginPlay ==="), *GetName());
-    UE_LOG(LogTemp, Error, TEXT("MeshComponent Collision: %d"),
-        MeshComponent ? static_cast<int32>(MeshComponent->GetCollisionEnabled()) : -1);
-    UE_LOG(LogTemp, Error, TEXT("InteractionSphere Collision: %d"),
-        InteractionSphere ? static_cast<int32>(InteractionSphere->GetCollisionEnabled()) : -1);
 }
 
 void AInteractableMechanism::Tick(float DeltaTime)
@@ -124,10 +119,9 @@ void AInteractableMechanism::HideInteractionWidget()
 
 void AInteractableMechanism::OnWidgetInteractionSuccess()
 {
-    UE_LOG(LogTemp, Error, TEXT("=== OnWidgetInteractionSuccess called ==="));
     bIsCompleted = true;
     OnInteractionSuccess(UGameplayStatics::GetPlayerPawn(this, 0));
-    UE_LOG(LogTemp, Error, TEXT("=== OnInteractionSuccess called ==="));
+
 }
 
 void AInteractableMechanism::OnWidgetInteractionFailed()
@@ -145,14 +139,14 @@ bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)
     // 기본 상호작용 가능 여부 확인
     if (!bCanInteract)
     {
-        UE_LOG(LogTemp, Warning, TEXT("bCanInteract is FALSE"));
+
         return false;
     }
 
     // 이미 완료되었고 재사용 불가능하면 상호작용 차단
     if (bIsCompleted && !bCanBeUsedAgain)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Mechanism already completed and cannot be reused"));
+
         return false;
     }
 
@@ -167,7 +161,7 @@ bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)
             bool bAllKeypadCompleted = CheckRequiredKeypads();
             if (!bAllKeypadCompleted)
             {
-                UE_LOG(LogTemp, Warning, TEXT("Required keypads not completed"));
+    
                 return false;
             }
         }
@@ -178,7 +172,7 @@ bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)
             UInventoryComponent* InventoryComponent = Interactor->FindComponentByClass<UInventoryComponent>();
             if (!InventoryComponent)
             {
-                UE_LOG(LogTemp, Warning, TEXT("No inventory component found"));
+    
                 return false;
             }
 
@@ -189,7 +183,6 @@ bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)
             }
         }
 
-        UE_LOG(LogTemp, Warning, TEXT("Door interaction allowed"));
     }
     break;
 
@@ -197,11 +190,11 @@ bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)
         // 위젯의 경우 완료 상태가 아니라면 상호작용 가능
         if (bIsCompleted)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Widget mechanism already completed"));
+
             return bCanBeUsedAgain; // 재사용 가능 여부에 따라 결정
         }
 
-        UE_LOG(LogTemp, Warning, TEXT("Widget mechanism - interaction allowed"));
+
         return true;
 
     default:
@@ -209,10 +202,9 @@ bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)
         break;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("CanInteract returning TRUE"));
+
     return true;
 }
-
 
 FString AInteractableMechanism::GetInteractionText_Implementation()
 {
@@ -254,7 +246,6 @@ bool AInteractableMechanism::CheckRequiredKeypads()
 {
     if (RequiredKeypadIDs.Num() == 0)
     {
-        UE_LOG(LogTemp, Warning, TEXT("No required keypads specified"));
         return true; // 요구사항이 없으면 통과
     }
 
@@ -281,18 +272,17 @@ bool AInteractableMechanism::CheckRequiredKeypads()
 
         if (!bFoundCompleted)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Required keypad not completed: %s"), *RequiredID);
+ 
             return false;
         }
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("All required keypads completed"));
+
     return true;
 }
 
 void AInteractableMechanism::HandleDoorInteraction(AActor* Interactor)
 {
-    UE_LOG(LogTemp, Error, TEXT("=== HandleDoorInteraction called ==="));
 
     if (InteractionSound)
     {
@@ -307,25 +297,25 @@ void AInteractableMechanism::AutoCloseDoor()
 {
     if (bIsOpen)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Auto-closing door"));
+
         ToggleDoor();
     }
 }
 
 void AInteractableMechanism::ToggleDoor()
 {
-    UE_LOG(LogTemp, Error, TEXT("=== ToggleDoor called, bIsOpen: %s ==="), bIsOpen ? TEXT("TRUE") : TEXT("FALSE"));
+
 
     if (bIsOpen)
     {
         bIsOpen = false;
-        UE_LOG(LogTemp, Error, TEXT("=== Calling OnDoorClosed ==="));
+
         OnDoorClosed();
     }
     else
     {
         bIsOpen = true;
-        UE_LOG(LogTemp, Error, TEXT("=== Calling OnDoorOpened ==="));
+
         OnDoorOpened();
     }
 }
