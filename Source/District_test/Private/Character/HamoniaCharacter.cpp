@@ -14,6 +14,7 @@
 #include "Gameplay/Pedestal.h"
 #include "Interaction/InteractableMechanism.h"
 #include "Gameplay/PickupActor.h"
+#include "TimerManager.h"
 #include <Core/EnhancedQuestComponent.h>
 
 AHamoniaCharacter::AHamoniaCharacter()
@@ -39,10 +40,42 @@ AHamoniaCharacter::AHamoniaCharacter()
 	bIsLookingAtInteractable = false;
 	CurrentInteractableActor = nullptr;
 
+	// 손에 든 아이템 표시용 메시 컴포넌트 생성
+	HeldItemDisplay = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeldItemDisplay"));
+	HeldItemDisplay->SetupAttachment(CameraComponent);
+	HeldItemDisplay->SetRelativeLocation(FVector(50.0f, 20.0f, -10.0f));
+	HeldItemDisplay->SetVisibility(false);
+
+	CurrentDisplayedItem = nullptr;
+
 	DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
 
 	// 디버그 표시 기본값
 	bShowDebugLines = true;
+}
+
+void AHamoniaCharacter::SetupEnhancedInput()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (PlayerController && DefaultMappingContext)
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+		}
+		else
+		{
+			// 실패한 경우 다시 시도
+			FTimerHandle TimerHandle;
+			GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+		}
+	}
+	else
+	{
+		// 실패한 경우 다시 시도
+		FTimerHandle TimerHandle;
+		GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+	}
 }
 
 void AHamoniaCharacter::BeginPlay()
@@ -64,17 +97,40 @@ void AHamoniaCharacter::BeginPlay()
 	FTimerHandle InputTimerHandle;
 	GetWorldTimerManager().SetTimer(InputTimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
 
-	// DialogueManager 이벤트 바인딩
+	// 입력 모드 강제 설정
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->SetInputMode(FInputModeGameOnly());
+	}
+
+	// Enhanced Input 강제 재설정 (대화 후에만 작동하는 문제 해결)
+	FTimerHandle ForceInputTimerHandle;
+	GetWorldTimerManager().SetTimer(ForceInputTimerHandle, [this]()
+		{
+			if (APlayerController* PC = Cast<APlayerController>(GetController()))
+			{
+				if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+					ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+				{
+					if (DefaultMappingContext)
+					{
+						Subsystem->RemoveMappingContext(DefaultMappingContext);
+						Subsystem->AddMappingContext(DefaultMappingContext, 0);
+					}
+				}
+			}
+		}, 1.0f, false);
+
+	// DialogueManager 설정
 	if (DialogueManager)
 	{
+		// 이벤트 바인딩
 		DialogueManager->OnDialogueStarted.AddDynamic(this, &AHamoniaCharacter::OnDialogueStarted);
 		DialogueManager->OnDialogueEnded.AddDynamic(this, &AHamoniaCharacter::OnDialogueEnded);
 
-		// DataTable 설정 (클래스 디폴트에서 설정된 경우)
-		if (DefaultDialogueDataTable)
-		{
-			DialogueManager->DialogueDataTable = DefaultDialogueDataTable;
-		}
+		// DataTable 설정 초기화
+		FTimerHandle DialogueInitTimerHandle;
+		GetWorldTimerManager().SetTimer(DialogueInitTimerHandle, this, &AHamoniaCharacter::InitializeDialogueSystem, 0.1f, false);
 	}
 
 	// 기본 대화 자동 시작 설정
@@ -89,6 +145,30 @@ void AHamoniaCharacter::BeginPlay()
 				}
 			}, DelayBeforeDialogue, false);
 	}
+}
+
+void AHamoniaCharacter::InitializeDialogueSystem()
+{
+	if (DialogueManager && DefaultDialogueDataTable)
+	{
+		// 블루프린트에서 설정한 DataTable을 컴포넌트에 설정
+		DialogueManager->DialogueDataTable = DefaultDialogueDataTable;
+
+		UE_LOG(LogTemp, Warning, TEXT("HamoniaCharacter: DialogueSystem initialized with DataTable: %s"),
+			*DefaultDialogueDataTable->GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("HamoniaCharacter: Failed to initialize DialogueSystem"));
+		UE_LOG(LogTemp, Error, TEXT("DialogueManager: %s"), DialogueManager ? TEXT("Valid") : TEXT("NULL"));
+		UE_LOG(LogTemp, Error, TEXT("DefaultDialogueDataTable: %s"),
+			DefaultDialogueDataTable ? *DefaultDialogueDataTable->GetName() : TEXT("NULL"));
+	}
+}
+
+bool AHamoniaCharacter::IsDialogueSystemReady()
+{
+	return DialogueManager && DialogueManager->DialogueDataTable != nullptr;
 }
 
 void AHamoniaCharacter::Tick(float DeltaTime)
@@ -193,29 +273,71 @@ void AHamoniaCharacter::Tick(float DeltaTime)
 	}
 }
 
-void AHamoniaCharacter::SetupEnhancedInput()
+void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	APlayerController* PlayerController = Cast<APlayerController>(GetController());
-	if (PlayerController && DefaultMappingContext)
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
+	if (EnhancedInputComponent)
 	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+		// Movement
+		if (MoveAction)
 		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Move);
 		}
-		else
+		// Looking
+		if (LookAction)
 		{
-			// 실패한 경우 다시 시도
-			FTimerHandle TimerHandle;
-			GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Look);
 		}
-	}
-	else
-	{
-		// 실패한 경우 다시 시도
-		FTimerHandle TimerHandle;
-		GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+		// Jumping
+		if (JumpAction)
+		{
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		}
+		// Sprinting
+		if (SprintAction)
+		{
+			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::StartSprint);
+			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHamoniaCharacter::StopSprint);
+		}
+		// Crouching
+		if (CrouchAction)
+		{
+			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::ToggleCrouch);
+		}
+		// 회전 액션 (R 키)
+		if (RotateAction)
+		{
+			EnhancedInputComponent->BindAction(RotateAction, ETriggerEvent::Started, this, &AHamoniaCharacter::PushObject);
+		}
+		// E키 통합 처리 (밀기 + 인벤토리 사용)
+		if (PushAction)
+		{
+			EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnEKeyPressed);
+		}
+		// Interaction
+		if (InteractAction)
+		{
+			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHamoniaCharacter::Interact);
+		}
+
+		// 인벤토리 관련 입력 바인딩
+		if (InventoryToggleAction)
+		{
+			EnhancedInputComponent->BindAction(InventoryToggleAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryToggle);
+		}
+		if (InventoryLeftAction)
+		{
+			EnhancedInputComponent->BindAction(InventoryLeftAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryMoveLeft);
+		}
+		if (InventoryRightAction)
+		{
+			EnhancedInputComponent->BindAction(InventoryRightAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryMoveRight);
+		}
 	}
 }
+
 
 void AHamoniaCharacter::DrawDebugInteractionLine()
 {
@@ -245,65 +367,6 @@ void AHamoniaCharacter::DrawDebugInteractionLine()
 			0,
 			1.0f
 		);
-	}
-}
-
-void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
-	if (EnhancedInputComponent)
-	{
-		// Movement
-		if (MoveAction)
-		{
-			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Move);
-		}
-
-		// Looking
-		if (LookAction)
-		{
-			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Look);
-		}
-
-		// Jumping
-		if (JumpAction)
-		{
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-		}
-
-		// Sprinting
-		if (SprintAction)
-		{
-			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::StartSprint);
-			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHamoniaCharacter::StopSprint);
-		}
-
-		// Crouching
-		if (CrouchAction)
-		{
-			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::ToggleCrouch);
-		}
-
-		// 회전 액션 (R 키 → 밀기 기능)
-		if (RotateAction)
-		{
-			EnhancedInputComponent->BindAction(RotateAction, ETriggerEvent::Started, this, &AHamoniaCharacter::PushObject);
-		}
-
-		// 밀기 액션 (E 키 → 회전 기능)
-		if (PushAction)
-		{
-			EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &AHamoniaCharacter::RotateObject);
-		}
-
-		// Interaction
-		if (InteractAction)
-		{
-			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHamoniaCharacter::Interact);
-		}
 	}
 }
 
@@ -375,6 +438,17 @@ void AHamoniaCharacter::ToggleCrouch(const FInputActionValue& Value)
 
 void AHamoniaCharacter::Interact()
 {
+	// 대화 시스템 우선 처리 (대화 중일 때만)
+	if (DialogueManager)
+	{
+		if (DialogueManager->bIsInDialogue)
+		{
+			OnDialogueProgressRequested.Broadcast();
+			return;
+		}
+	}
+
+	// 기존 상호작용 로직
 	if (bIsLookingAtInteractable && CurrentInteractableActor)
 	{
 		// 현재 들고 있는 오브젝트가 있는지 확인
@@ -385,12 +459,10 @@ void AHamoniaCharacter::Interact()
 		{
 			UPuzzleInteractionComponent* HeldItemComp =
 				HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
-
 			if (HeldItemComp)
 			{
 				// 받침대인지 확인
 				APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
-
 				if (Pedestal)
 				{
 					// 받침대에 오브젝트 배치
@@ -402,7 +474,6 @@ void AHamoniaCharacter::Interact()
 					FVector DropLocation = GetActorLocation() + (GetActorForwardVector() * 100.0f);
 					HeldItemComp->PutDown(DropLocation, GetActorRotation());
 				}
-
 				// 퀘스트 이벤트 호출 (배치/내려놓기 후)
 				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 				{
@@ -414,6 +485,14 @@ void AHamoniaCharacter::Interact()
 		// 2. 오브젝트를 들고 있지 않은 경우
 		else
 		{
+			// EXPANDED: 인벤토리 아이템을 사용한 상호작용 체크
+			UItem* HeldInventoryItem = GetCurrentHeldInventoryItem();
+			if (HeldInventoryItem && HandleInventoryItemInteraction(HeldInventoryItem, CurrentInteractableActor))
+			{
+				// 인벤토리 아이템으로 상호작용 성공
+				return;
+			}
+
 			// 2.1 현재 바라보는 대상이 받침대인 경우
 			APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
 			if (Pedestal)
@@ -425,12 +504,10 @@ void AHamoniaCharacter::Interact()
 					// 오브젝트의 상호작용 컴포넌트 확인
 					UPuzzleInteractionComponent* InteractionComp =
 						ObjectOnPedestal->FindComponentByClass<UPuzzleInteractionComponent>();
-
 					if (InteractionComp)
 					{
 						// 오브젝트 집기 시도
 						InteractionComp->PickUp(this);
-
 						// 퀘스트 이벤트 호출 (집기 후)
 						if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 						{
@@ -439,10 +516,8 @@ void AHamoniaCharacter::Interact()
 						return;
 					}
 				}
-
 				// 받침대 자체와 상호작용
 				IInteractableInterface::Execute_Interact(Pedestal, this);
-
 				// 퀘스트 이벤트 호출 (받침대 상호작용 후)
 				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 				{
@@ -450,16 +525,13 @@ void AHamoniaCharacter::Interact()
 				}
 				return;
 			}
-
 			// 2.2 현재 바라보는 대상이 PuzzleInteractionComponent를 가진 오브젝트인 경우
 			UPuzzleInteractionComponent* InteractionComp =
 				CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
-
 			if (InteractionComp && InteractionComp->bCanBePickedUp)
 			{
 				// 오브젝트 집기 시도
 				InteractionComp->PickUp(this);
-
 				// 퀘스트 이벤트 호출 (픽업 후)
 				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 				{
@@ -468,7 +540,6 @@ void AHamoniaCharacter::Interact()
 				return;
 			}
 		}
-
 		// 3. 기타 일반 상호작용
 		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
 
@@ -479,6 +550,7 @@ void AHamoniaCharacter::Interact()
 		}
 	}
 }
+
 
 AActor* AHamoniaCharacter::GetHeldObject()
 {
@@ -597,4 +669,156 @@ void AHamoniaCharacter::OnDialogueEnded()
 UDialogueManagerComponent* AHamoniaCharacter::GetDialogueManager()
 {
 	return DialogueManager;
+}
+
+
+// EXPANDED: 기존 OnInventoryToggle 함수 수정
+void AHamoniaCharacter::OnInventoryToggle()
+{
+	if (InventoryComponent)
+	{
+		InventoryComponent->ToggleInventory();
+
+		// 인벤토리 열릴 때 현재 선택된 아이템 표시
+		if (InventoryComponent->bIsInventoryOpen)
+		{
+			UItem* SelectedItem = InventoryComponent->GetSelectedItem();
+			UpdateHeldItemDisplay(SelectedItem);
+		}
+		else
+		{
+			// 인벤토리 닫힐 때 아이템 숨기기
+			HideHeldItemMesh();
+		}
+	}
+}
+
+void AHamoniaCharacter::OnInventoryMoveLeft()
+{
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		InventoryComponent->MoveSelection(-1);
+		OnInventorySelectionChanged(InventoryComponent->CurrentSelectedSlot);
+	}
+}
+
+void AHamoniaCharacter::OnInventoryMoveRight()
+{
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		InventoryComponent->MoveSelection(1);
+		OnInventorySelectionChanged(InventoryComponent->CurrentSelectedSlot);
+	}
+}
+
+void AHamoniaCharacter::OnEKeyPressed()
+{
+	// 인벤토리가 열려있으면 선택된 아이템 사용
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		OnInventoryUse();
+	}
+	// 인벤토리가 닫혀있으면 오브젝트 회전
+	else
+	{
+		RotateObject();
+	}
+}
+
+void AHamoniaCharacter::OnInventoryUse()
+{
+	if (InventoryComponent)
+	{
+		InventoryComponent->UseSelectedItem();
+	}
+}
+
+UItem* AHamoniaCharacter::GetCurrentHeldInventoryItem()
+{
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		return InventoryComponent->GetSelectedItem();
+	}
+	return nullptr;
+}
+
+bool AHamoniaCharacter::HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor)
+{
+	if (!Item || !TargetActor)
+	{
+		return false;
+	}
+
+	// 열쇠 + 문 상호작용
+	if (Item->Name.Contains("Key"))
+	{
+		AInteractableMechanism* Door = Cast<AInteractableMechanism>(TargetActor);
+		if (Door && Door->MechanismType == EMechanismType::Door)
+		{
+			if (Door->RequiredKeyName.Equals(Item->Name, ESearchCase::IgnoreCase))
+			{
+				IInteractableInterface::Execute_Interact(Door, this);
+				return true;
+			}
+		}
+	}
+
+	// 도구 + 받침대 상호작용
+	if (Item->Name.Contains("Tool"))
+	{
+		APedestal* Pedestal = Cast<APedestal>(TargetActor);
+		if (Pedestal)
+		{
+			Item->Use(this);
+			return true;
+		}
+	}
+
+	// 기본 아이템 사용
+	if (Item->bCanBeUsed)
+	{
+		Item->Use(this);
+		return true;
+	}
+
+	return false;
+}
+
+void AHamoniaCharacter::UpdateHeldItemDisplay(UItem* NewItem)
+{
+	CurrentDisplayedItem = NewItem;
+
+	if (NewItem && InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		ShowHeldItemMesh(NewItem);
+	}
+	else
+	{
+		HideHeldItemMesh();
+	}
+}
+
+void AHamoniaCharacter::ShowHeldItemMesh(UItem* Item)
+{
+	if (Item && HeldItemDisplay)
+	{
+		ShowHeldItemMeshBP(Item); // 블루프린트로 위임
+	}
+	else
+	{
+		HideHeldItemMeshBP();
+	}
+}
+void AHamoniaCharacter::HideHeldItemMesh()
+{
+	HideHeldItemMeshBP(); // 블루프린트로 위임
+}
+
+void AHamoniaCharacter::OnInventorySelectionChanged(int32 NewSlotIndex)
+{
+	if (InventoryComponent)
+	{
+		UItem* NewSelectedItem = InventoryComponent->GetItemAtSlot(NewSlotIndex);
+		UpdateHeldItemDisplay(NewSelectedItem);
+	}
 }
