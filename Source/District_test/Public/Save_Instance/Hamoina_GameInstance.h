@@ -26,6 +26,20 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save System")
     FString AutoSaveSlotName = TEXT("HarmoniaContinue");
 
+    // 자동저장 관련 변수
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Auto Save Settings")
+    int32 MaxAutoSaveSlots = 5;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Auto Save Settings")
+    float AutoSaveInterval = 600.0f; // 10분 (초 단위)
+
+    UPROPERTY(BlueprintReadOnly, Category = "Auto Save")
+    int32 CurrentAutoSaveSlot = 1;
+
+protected:
+    FTimerHandle AutoSaveTimerHandle;
+
+public:
     UFUNCTION(BlueprintCallable, Category = "Save System")
     bool SaveGame(bool bIsAutoSave = true, const FString& CustomSlotName = TEXT(""));
 
@@ -55,6 +69,25 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "Save System")
     UHamonia_SaveGame* GetCurrentSaveData() const { return CurrentSaveData; }
+
+    // 자동저장 함수들
+    UFUNCTION(BlueprintCallable, Category = "Auto Save")
+    bool SaveToAutoSlot();
+
+    UFUNCTION(BlueprintCallable, Category = "Auto Save")
+    FString GetLatestAutoSaveFile();
+
+    UFUNCTION(BlueprintCallable, Category = "Auto Save")
+    TArray<FString> GetAutoSaveFileList();
+
+    UFUNCTION(BlueprintCallable, Category = "Auto Save")
+    void StartAutoSaveTimer();
+
+    UFUNCTION(BlueprintCallable, Category = "Auto Save")
+    void StopAutoSaveTimer();
+
+    UFUNCTION(BlueprintCallable, Category = "Auto Save")
+    void SetAutoSaveInterval(float NewInterval);
 
     UFUNCTION(BlueprintCallable, Category = "Player Data")
     void UpdatePlayerLocation(const FString& LevelName, const FVector& Location, const FRotator& Rotation);
@@ -109,6 +142,12 @@ public:
 
     UPROPERTY(BlueprintAssignable)
     FOnGameLoaded OnGameLoaded;
+
+    UFUNCTION(BlueprintCallable, Category = "Load System")
+    bool LoadStageAndOpenLevel(int32 StageNumber);
+
+    UFUNCTION(BlueprintCallable, Category = "Save System")
+    void ApplyLoadedGameState();
 
 protected:
     void InitializeNewSaveData();

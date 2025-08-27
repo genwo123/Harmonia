@@ -16,6 +16,7 @@ void UHamoina_GameInstance::Init()
 {
     Super::Init();
     InitializeNewSaveData();
+    StartAutoSaveTimer();
 }
 
 void UHamoina_GameInstance::InitializeNewSaveData()
@@ -63,12 +64,10 @@ bool UHamoina_GameInstance::LoadGame(const FString& SlotName)
 
     if (SlotName.IsEmpty())
     {
-        // 자동저장 로드
         LoadPath = GetAutoSaveDirectory() + TEXT("/") + LoadSlotName + TEXT(".sav");
     }
     else
     {
-        // 스테이지 파일 로드
         LoadPath = GetCustomSaveDirectory() + TEXT("/") + LoadSlotName + TEXT(".sav");
     }
 
@@ -93,6 +92,51 @@ bool UHamoina_GameInstance::LoadFromStageSlot(int32 StageNumber)
 
     FString StageSlotName = GetStageSlotName(StageNumber);
     return LoadGame(StageSlotName);
+}
+
+bool UHamoina_GameInstance::LoadStageAndOpenLevel(int32 StageNumber)
+{
+    bool bLoadSuccess = LoadFromStageSlot(StageNumber);
+
+    if (bLoadSuccess && CurrentSaveData)
+    {
+        FString SavedLevelName = CurrentSaveData->PlayerData.CurrentLevel;
+
+        if (SavedLevelName.IsEmpty())
+        {
+            SavedLevelName = GetLevelNameFromStage(StageNumber);
+        }
+
+        UGameplayStatics::OpenLevel(this, *SavedLevelName);
+        return true;
+    }
+
+    return false;
+}
+
+FString UHamoina_GameInstance::GetLevelNameFromStage(int32 StageNumber) const
+{
+    return FString::Printf(TEXT("Level_Main_%d"), StageNumber);
+}
+
+void UHamoina_GameInstance::ApplyLoadedGameState()
+{
+    if (!CurrentSaveData)
+        return;
+
+    UWorld* World = GetWorld();
+    if (!World)
+        return;
+
+    APlayerController* PC = World->GetFirstPlayerController();
+    if (PC && PC->GetPawn())
+    {
+        FVector PlayerLocation = CurrentSaveData->PlayerData.PlayerLocation;
+        FRotator PlayerRotation = CurrentSaveData->PlayerData.PlayerRotation;
+
+        PC->GetPawn()->SetActorLocation(PlayerLocation);
+        PC->GetPawn()->SetActorRotation(PlayerRotation);
+    }
 }
 
 bool UHamoina_GameInstance::DoesStageSlotExist(int32 StageNumber) const
@@ -128,11 +172,49 @@ void UHamoina_GameInstance::SaveContinueGame()
 
 bool UHamoina_GameInstance::LoadContinueGame()
 {
-    return LoadGame();
+    FString LatestAutoSave = GetLatestAutoSaveFile();
+    if (LatestAutoSave.IsEmpty())
+    {
+        // 기존 방식 시도 (HarmoniaContinue.sav)
+        bool bLoadSuccess = LoadGame();
+        if (bLoadSuccess && CurrentSaveData)
+        {
+            FString SavedLevelName = CurrentSaveData->PlayerData.CurrentLevel;
+            if (!SavedLevelName.IsEmpty())
+            {
+                UGameplayStatics::OpenLevel(this, *SavedLevelName);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 파일명에서 확장자 제거
+    FString SlotName = LatestAutoSave.Replace(TEXT(".sav"), TEXT(""));
+    bool bLoadSuccess = LoadGame(SlotName);
+
+    if (bLoadSuccess && CurrentSaveData)
+    {
+        FString SavedLevelName = CurrentSaveData->PlayerData.CurrentLevel;
+
+        if (!SavedLevelName.IsEmpty())
+        {
+            UGameplayStatics::OpenLevel(this, *SavedLevelName);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool UHamoina_GameInstance::HasContinueGame() const
 {
+    // 새로운 자동저장 파일들 확인
+    TArray<FString> AutoSaveFiles = const_cast<UHamoina_GameInstance*>(this)->GetAutoSaveFileList();
+    if (AutoSaveFiles.Num() > 0)
+        return true;
+
+    // 기존 자동저장 파일 확인
     FString FilePath = GetAutoSaveDirectory() + TEXT("/") + AutoSaveSlotName + TEXT(".sav");
     return FPlatformFileManager::Get().GetPlatformFile().FileExists(*FilePath);
 }
@@ -249,26 +331,83 @@ int32 UHamoina_GameInstance::GetStageNumberFromLevel(const FString& LevelName) c
 {
     if (LevelName.Contains(TEXT("Level_Main_")))
     {
-        FString NumberPart = LevelName.Replace(TEXT("Level_Main_"), TEXT(""));
-        if (NumberPart.IsNumeric())
+        int32 MainIndex = LevelName.Find(TEXT("Level_Main_"), ESearchCase::IgnoreCase);
+        if (MainIndex != INDEX_NONE)
         {
-            return FCString::Atoi(*NumberPart);
+            FString AfterMain = LevelName.Mid(MainIndex + 11);
+            FString NumberPart;
+            for (int32 i = 0; i < AfterMain.Len(); i++)
+            {
+                TCHAR Ch = AfterMain[i];
+                if (FChar::IsDigit(Ch))
+                {
+                    NumberPart += Ch;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (!NumberPart.IsEmpty())
+            {
+                return FCString::Atoi(*NumberPart);
+            }
         }
     }
-    return 1;
-}
 
-FString UHamoina_GameInstance::GetLevelNameFromStage(int32 StageNumber) const
-{
-    return FString::Printf(TEXT("Level_Main_%d"), StageNumber);
+    if (LevelName.Contains(TEXT("MainMenu")))
+    {
+        return 0;
+    }
+
+    return 1;
 }
 
 int32 UHamoina_GameInstance::GetCurrentStageNumber() const
 {
-    if (CurrentSaveData)
+    UWorld* World = GetWorld();
+    if (!World)
     {
-        return GetStageNumberFromLevel(CurrentSaveData->PlayerData.CurrentLevel);
+        return 1;
     }
+
+    FString MapName = World->GetMapName();
+    FString WorldName = World->GetName();
+    FString StreamingPrefix = World->StreamingLevelsPrefix;
+    FString PackageName = World->GetOutermost() ? World->GetOutermost()->GetName() : TEXT("NoPackage");
+
+    int32 MapNameStage = GetStageNumberFromLevel(MapName);
+    int32 WorldNameStage = GetStageNumberFromLevel(WorldName);
+    int32 PackageNameStage = GetStageNumberFromLevel(PackageName);
+
+    FString CleanMapName = MapName;
+    CleanMapName.RemoveFromStart(StreamingPrefix);
+    int32 CleanMapStage = GetStageNumberFromLevel(CleanMapName);
+
+    FString LevelOnlyName;
+    if (PackageName.Split(TEXT("/"), nullptr, &LevelOnlyName, ESearchCase::IgnoreCase, ESearchDir::FromEnd))
+    {
+        int32 LevelOnlyStage = GetStageNumberFromLevel(LevelOnlyName);
+        if (LevelOnlyStage > 1)
+        {
+            return LevelOnlyStage;
+        }
+    }
+
+    if (CleanMapStage > 1)
+    {
+        return CleanMapStage;
+    }
+    if (WorldNameStage > 1)
+    {
+        return WorldNameStage;
+    }
+    if (MapNameStage > 1)
+    {
+        return MapNameStage;
+    }
+
     return 1;
 }
 
@@ -287,11 +426,10 @@ void UHamoina_GameInstance::CollectCurrentGameState()
         FVector PlayerLocation = PC->GetPawn()->GetActorLocation();
         FRotator PlayerRotation = PC->GetPawn()->GetActorRotation();
 
-        FString WorldName = World->GetName();
         FString MapName = World->GetMapName();
-        FString CurrentLevel = MapName.IsEmpty() ? WorldName : MapName;
+        MapName.RemoveFromStart(World->StreamingLevelsPrefix);
 
-        CurrentSaveData->SetPlayerLocation(CurrentLevel, PlayerLocation, PlayerRotation);
+        CurrentSaveData->SetPlayerLocation(MapName, PlayerLocation, PlayerRotation);
     }
 
     CurrentSaveData->UpdatePlayTime(World->GetDeltaSeconds());
@@ -322,7 +460,6 @@ bool UHamoina_GameInstance::SaveGameToCustomPath(USaveGame* SaveGame, const FStr
     {
         if (!FPlatformFileManager::Get().GetPlatformFile().CreateDirectoryTree(*Directory))
         {
-            UE_LOG(LogTemp, Error, TEXT("Failed to create directory: %s"), *Directory);
             return false;
         }
     }
@@ -330,42 +467,28 @@ bool UHamoina_GameInstance::SaveGameToCustomPath(USaveGame* SaveGame, const FStr
     TArray<uint8> SaveData;
     FMemoryWriter MemoryWriter(SaveData, true);
 
-    // 언리얼 5에서는 FObjectAndNameAsStringProxyArchive 생성자가 다릅니다
     FObjectAndNameAsStringProxyArchive Ar(MemoryWriter, false);
     Ar.ArIsSaveGame = true;
 
     SaveGame->Serialize(Ar);
 
-    if (FFileHelper::SaveArrayToFile(SaveData, *FilePath))
-    {
-        UE_LOG(LogTemp, Log, TEXT("Game saved successfully to: %s"), *FilePath);
-        return true;
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("Failed to save game to: %s"), *FilePath);
-        return false;
-    }
+    return FFileHelper::SaveArrayToFile(SaveData, *FilePath);
 }
 
 bool UHamoina_GameInstance::LoadGameFromCustomPath(const FString& FilePath)
 {
     if (!FPlatformFileManager::Get().GetPlatformFile().FileExists(*FilePath))
     {
-        UE_LOG(LogTemp, Warning, TEXT("Save file does not exist: %s"), *FilePath);
         return false;
     }
 
     TArray<uint8> SaveData;
     if (!FFileHelper::LoadFileToArray(SaveData, *FilePath))
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to load save file: %s"), *FilePath);
         return false;
     }
 
     FMemoryReader MemoryReader(SaveData, true);
-
-    // 언리얼 5에서는 FObjectAndNameAsStringProxyArchive 생성자가 다릅니다
     FObjectAndNameAsStringProxyArchive Ar(MemoryReader, true);
     Ar.ArIsSaveGame = true;
 
@@ -374,11 +497,111 @@ bool UHamoina_GameInstance::LoadGameFromCustomPath(const FString& FilePath)
 
     if (!LoadedData->IsValidSaveData())
     {
-        UE_LOG(LogTemp, Error, TEXT("Loaded save data is invalid"));
         return false;
     }
 
     CurrentSaveData = LoadedData;
-    UE_LOG(LogTemp, Log, TEXT("Game loaded successfully from: %s"), *FilePath);
     return true;
+}
+
+
+bool UHamoina_GameInstance::SaveToAutoSlot()
+{
+    if (!CurrentSaveData)
+        return false;
+
+    CollectCurrentGameState();
+
+    // 현재 슬롯에 저장
+    FString AutoSlotName = FString::Printf(TEXT("AutoSave_%d"), CurrentAutoSaveSlot);
+    FString SavePath = GetAutoSaveDirectory() + TEXT("/") + AutoSlotName + TEXT(".sav");
+
+    CurrentSaveData->SetSaveInfo(AutoSlotName, true);
+    bool bSaveSuccess = SaveGameToCustomPath(CurrentSaveData, SavePath);
+
+    if (bSaveSuccess)
+    {
+        // 다음 슬롯으로 이동 (순환)
+        CurrentAutoSaveSlot = (CurrentAutoSaveSlot % MaxAutoSaveSlots) + 1;
+    }
+
+    OnGameSaved.Broadcast(bSaveSuccess);
+    return bSaveSuccess;
+}
+
+FString UHamoina_GameInstance::GetLatestAutoSaveFile()
+{
+    TArray<FString> AutoSaveFiles = GetAutoSaveFileList();
+    if (AutoSaveFiles.Num() == 0)
+        return TEXT("");
+
+    // 파일 생성시간으로 정렬해서 최신 파일 반환
+    FString LatestFile;
+    FDateTime LatestTime = FDateTime::MinValue();
+
+    for (const FString& FileName : AutoSaveFiles)
+    {
+        FString FullPath = GetAutoSaveDirectory() + TEXT("/") + FileName;
+        FDateTime FileTime = FPlatformFileManager::Get().GetPlatformFile().GetTimeStamp(*FullPath);
+
+        if (FileTime > LatestTime)
+        {
+            LatestTime = FileTime;
+            LatestFile = FileName;
+        }
+    }
+
+    return LatestFile;
+}
+
+TArray<FString> UHamoina_GameInstance::GetAutoSaveFileList()
+{
+    TArray<FString> AutoSaveFiles;
+    FString AutoSaveDir = GetAutoSaveDirectory();
+
+    for (int32 i = 1; i <= MaxAutoSaveSlots; i++)
+    {
+        FString FileName = FString::Printf(TEXT("AutoSave_%d.sav"), i);
+        FString FullPath = AutoSaveDir + TEXT("/") + FileName;
+
+        if (FPlatformFileManager::Get().GetPlatformFile().FileExists(*FullPath))
+        {
+            AutoSaveFiles.Add(FileName);
+        }
+    }
+
+    return AutoSaveFiles;
+}
+
+void UHamoina_GameInstance::StartAutoSaveTimer()
+{
+    if (GetWorld())
+    {
+        GetWorld()->GetTimerManager().SetTimer(
+            AutoSaveTimerHandle,
+            [this]() { SaveToAutoSlot(); },
+            AutoSaveInterval,
+            true
+        );
+    }
+}
+
+void UHamoina_GameInstance::StopAutoSaveTimer()
+{
+    if (GetWorld())
+    {
+        GetWorld()->GetTimerManager().ClearTimer(AutoSaveTimerHandle);
+    }
+}
+
+void UHamoina_GameInstance::SetAutoSaveInterval(float NewInterval)
+{
+    AutoSaveInterval = NewInterval;
+
+    // 타이머가 실행 중이면 재시작
+    if (AutoSaveTimerHandle.IsValid())
+    {
+        StopAutoSaveTimer();
+        StartAutoSaveTimer();
+    }
 }
