@@ -1,10 +1,8 @@
 # 언리얼 엔진 5 .gitignore - 진짜 최대한 풀어서 간단하게
 # 거의 모든 것 포함하고 필요한 것만 제외
-
 # ========================================
 # 시스템 파일들만 제외
 # ========================================
-
 # Visual Studio
 .vs/
 *.VC.db
@@ -13,12 +11,16 @@
 *.vcxproj.filters
 *.sln
 *.suo
+*.user
 
 # 컴파일된 파일들
 *.exe
 *.dll
 *.obj
 *.lib
+*.pdb
+*.idb
+*.ilk
 
 # 언리얼 엔진 생성 파일들
 Binaries/*
@@ -33,28 +35,47 @@ DerivedDataCache/*
 *.tmp
 *.temp
 *.bak
+*.cache
 
 # 시스템 파일들
 .DS_Store
 Thumbs.db
 Desktop.ini
+*.swp
+*.swo
+*~
 
 # 하모니아 변환기
 node_modules/
 output/
 package-lock.json
 
+# 추가 언리얼 엔진 파일들
+*.crashdumps
+*.pch
+*.generated.h
+*.generated.cpp
+AutomationTool/
+*.automation
+ShaderAutogen/
+
+# Rider/JetBrains
+.idea/
+*.iml
+
+# 패키징 관련
+Packages/
+PackagedBuilds/
+
 # ========================================
 # 제외할 폴더들 (극소수만)
 # ========================================
-
 # Dialogue 폴더 제외 (삭제 예정)
 Content/Dialogue/
 
 # ========================================
 # 10MB 넘는 개별 파일들 제외 (에러 발생시 여기에 추가)
 # ========================================
-
 # 큰 파일들 에러 발생시 여기에 추가:
 # Content/FirstPersonArms/Character/Textures/Manny/T_Manny_01_MSK.uasset
 # Content/StarterContent/SomeHugeFile.uasset
@@ -64,7 +85,6 @@ Content/Dialogue/
 # ========================================
 # 나머지는 모든 것 포함!
 # ========================================
-
 # Content 폴더의 모든 것이 포함됩니다:
 # - Maps, Level, LevelPrototyping
 # - Hamoni_mesh 
