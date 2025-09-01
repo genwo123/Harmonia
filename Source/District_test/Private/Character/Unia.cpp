@@ -120,17 +120,30 @@ void AUnia::StartDialogue(AActor* Interactor)
 	FString DialogueIDToUse;
 	UDataTable* TableToUse = nullptr;
 
+	// 1순위: 메인 스토리 대화
 	if (ShouldShowMainStoryDialogue())
 	{
 		DialogueIDToUse = GetCurrentStoryDialogueID();
 		TableToUse = MainStoryDialogueTable;
 		UE_LOG(LogTemp, Log, TEXT("Unia showing story dialogue: %s"), *DialogueIDToUse);
 	}
+	// 2순위: 퀘스트 매크로 대화 (새로 추가!)
 	else
 	{
-		DialogueIDToUse = GetRandomDialogueID();
-		TableToUse = UniaRandomDialogueTable;
-		UE_LOG(LogTemp, Log, TEXT("Unia showing random dialogue: %s"), *DialogueIDToUse);
+		FString MacroDialogue = GetQuestMacroDialogue();
+		if (!MacroDialogue.IsEmpty())
+		{
+			DialogueIDToUse = MacroDialogue;
+			TableToUse = MainStoryDialogueTable; // 또는 별도 테이블 사용 가능
+			UE_LOG(LogTemp, Log, TEXT("Unia showing quest macro dialogue: %s"), *DialogueIDToUse);
+		}
+		// 3순위: 랜덤 대화
+		else
+		{
+			DialogueIDToUse = GetRandomDialogueID();
+			TableToUse = UniaRandomDialogueTable;
+			UE_LOG(LogTemp, Log, TEXT("Unia showing random dialogue: %s"), *DialogueIDToUse);
+		}
 	}
 
 	if (TableToUse)
@@ -215,6 +228,47 @@ FString AUnia::GetRandomDialogueID()
 
 	UE_LOG(LogTemp, Log, TEXT("Selected random dialogue: %s"), *SelectedDialogueID);
 	return SelectedDialogueID;
+}
+
+// 새로 추가된 핵심 함수!
+FString AUnia::GetQuestMacroDialogue()
+{
+	// 퀘스트 매크로 리스트를 순회하면서 활성 퀘스트 확인
+	for (const FUniaQuestMacro& Macro : QuestMacroList)
+	{
+		if (Macro.QuestID.IsEmpty())
+		{
+			continue;
+		}
+
+		// 퀘스트가 활성 상태인지 확인
+		if (IsQuestActive(Macro.QuestID))
+		{
+			// 퀘스트가 완료되었는지 확인
+			if (IsQuestCompleted(Macro.QuestID))
+			{
+				// 완료 대화를 이미 보여줬는지 확인
+				if (!CompletedMacroDialogues.Contains(Macro.QuestID))
+				{
+					// 완료 대화 표시하고 기록에 추가
+					CompletedMacroDialogues.Add(Macro.QuestID);
+					UE_LOG(LogTemp, Log, TEXT("Quest %s completed, showing completion dialogue: %s"),
+						*Macro.QuestID, *Macro.CompletionDialogueID);
+					return Macro.CompletionDialogueID;
+				}
+			}
+			else
+			{
+				// 퀘스트 진행 중이면 진행 대화 표시
+				UE_LOG(LogTemp, Log, TEXT("Quest %s in progress, showing progress dialogue: %s"),
+					*Macro.QuestID, *Macro.ProgressDialogueID);
+				return Macro.ProgressDialogueID;
+			}
+		}
+	}
+
+	// 활성 퀘스트 매크로가 없으면 빈 문자열 반환
+	return FString();
 }
 
 void AUnia::UpdateStoryProgress(const FString& NewStoryDialogueID)

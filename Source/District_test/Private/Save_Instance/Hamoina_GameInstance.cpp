@@ -10,6 +10,13 @@
 UHamoina_GameInstance::UHamoina_GameInstance()
 {
     AutoSaveSlotName = TEXT("HarmoniaContinue");
+
+    UnlockedNotePages.SetNum(5);
+    for (int32 i = 0; i < 5; i++)
+    {
+        UnlockedNotePages[i] = false;
+    }
+
 }
 
 void UHamoina_GameInstance::Init()
@@ -189,14 +196,13 @@ bool UHamoina_GameInstance::LoadContinueGame()
         return false;
     }
 
-    // 파일명에서 확장자 제거
-    FString SlotName = LatestAutoSave.Replace(TEXT(".sav"), TEXT(""));
-    bool bLoadSuccess = LoadGame(SlotName);
+    // 직접 경로로 로드 (LoadGame 대신 LoadGameFromCustomPath 사용)
+    FString FullPath = GetAutoSaveDirectory() + TEXT("/") + LatestAutoSave;
+    bool bLoadSuccess = LoadGameFromCustomPath(FullPath);
 
     if (bLoadSuccess && CurrentSaveData)
     {
         FString SavedLevelName = CurrentSaveData->PlayerData.CurrentLevel;
-
         if (!SavedLevelName.IsEmpty())
         {
             UGameplayStatics::OpenLevel(this, *SavedLevelName);
@@ -604,4 +610,22 @@ void UHamoina_GameInstance::SetAutoSaveInterval(float NewInterval)
         StopAutoSaveTimer();
         StartAutoSaveTimer();
     }
+}
+
+void UHamoina_GameInstance::UnlockNotePage(int32 PageIndex)
+{
+    if (PageIndex >= 0 && PageIndex < UnlockedNotePages.Num())
+    {
+        UnlockedNotePages[PageIndex] = true;
+        //SaveContinueGame(); // 자동 저장
+    }
+}
+
+bool UHamoina_GameInstance::IsNotePageUnlocked(int32 PageIndex) const
+{
+    if (PageIndex >= 0 && PageIndex < UnlockedNotePages.Num())
+    {
+        return UnlockedNotePages[PageIndex];
+    }
+    return false;
 }
