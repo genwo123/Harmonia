@@ -149,6 +149,16 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Save System")
     void ApplyLoadedGameState();
 
+    UFUNCTION(BlueprintCallable, Category = "Note System")
+    void UnlockNotePage(int32 PageIndex);
+
+    UFUNCTION(BlueprintPure, Category = "Note System")
+    bool IsNotePageUnlocked(int32 PageIndex) const;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Note System")
+    TArray<bool> UnlockedNotePages;
+
+
 protected:
     void InitializeNewSaveData();
     void CollectCurrentGameState();

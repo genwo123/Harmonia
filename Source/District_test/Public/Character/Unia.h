@@ -1,16 +1,47 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
-#include "Interaction/InteractableInterface.h"
 #include "Components/SphereComponent.h"
+#include "Interaction/InteractableInterface.h"
+#include "Interaction/InteractionEnums.h"
 #include "Engine/DataTable.h"
 #include "Unia.generated.h"
 
-// Forward Declarations
 class UDialogueManagerComponent;
+
+// 우니아 대화 타입 열거형
+UENUM(BlueprintType)
+enum class EUniaDialogueType : uint8
+{
+	MainStory   UMETA(DisplayName = "Main Story"),
+	QuestMacro  UMETA(DisplayName = "Quest Macro"),
+	Random      UMETA(DisplayName = "Random")
+};
+
+// 퀘스트 매크로 구조체
+USTRUCT(BlueprintType)
+struct FUniaQuestMacro
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
+	FString QuestID;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
+	FString ProgressDialogueID;    // "~~를 깨고 와"
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
+	FString CompletionDialogueID;  // "잘했어!"
+
+	// 기본 생성자
+	FUniaQuestMacro()
+	{
+		QuestID = TEXT("");
+		ProgressDialogueID = TEXT("");
+		CompletionDialogueID = TEXT("");
+	}
+};
 
 UCLASS()
 class DISTRICT_TEST_API AUnia : public ACharacter, public IInteractableInterface
@@ -18,13 +49,33 @@ class DISTRICT_TEST_API AUnia : public ACharacter, public IInteractableInterface
 	GENERATED_BODY()
 
 public:
-	// Sets default values for this character's properties
 	AUnia();
 
 protected:
-	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+public:
+	virtual void Tick(float DeltaTime) override;
+	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+
+	// IInteractableInterface 구현
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+	void Interact(AActor* Interactor);
+	virtual void Interact_Implementation(AActor* Interactor) override;
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+	bool CanInteract(AActor* Interactor);
+	virtual bool CanInteract_Implementation(AActor* Interactor) override;
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+	FString GetInteractionText();
+	virtual FString GetInteractionText_Implementation() override;
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+	EInteractionType GetInteractionType();
+	virtual EInteractionType GetInteractionType_Implementation() override;
+
+protected:
 	// Components
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
 	USphereComponent* InteractionSphere;
@@ -37,10 +88,7 @@ protected:
 	FString NPCName = TEXT("Unia");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC Settings")
-	float InteractionRange = 150.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC Settings")
-	bool bCanFollow = true;
+	float InteractionRange = 200.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC Settings")
 	bool bLookAtPlayer = true;
@@ -50,93 +98,87 @@ protected:
 
 	// Dialogue Tables
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
-	UDataTable* MainStoryDialogueTable; // 하모니아 데이터 테이블 (스크립트 순서)
+	UDataTable* MainStoryDialogueTable;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
-	UDataTable* UniaRandomDialogueTable; // 우니아 전용 테이블 (랜덤 선택)
+	UDataTable* UniaRandomDialogueTable;
 
-	// Current Story Progress
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story")
-	FString CurrentStoryDialogueID = TEXT(""); // 현재 진행 중인 스토리 대화 ID
+	// Story Progress
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story Progress")
+	FString RequiredQuestID;
 
-	// Quest Settings (BP_DialogueTrigger 방식과 동일)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest")
-	FString RequiredQuestID = TEXT("");
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story Progress")
+	FString CurrentStoryDialogueID;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest")
-	bool bRequireQuestCompletion = false;
+	// Quest Macro System - 새로 추가된 부분
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
+	TArray<FUniaQuestMacro> QuestMacroList;
 
-	// Player Reference
-	UPROPERTY(BlueprintReadOnly, Category = "NPC")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
+	TArray<FString> CompletedMacroDialogues;
+
+	// Following System
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Following")
+	bool bCanFollow = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Following")
+	bool bIsFollowingPlayer;
+
+	// Private
 	APawn* PlayerPawn;
 
-	// AI State
-	UPROPERTY(BlueprintReadWrite, Category = "AI")
-	bool bIsFollowingPlayer = false;
-
 public:
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
-
-	// Called to bind functionality to input
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
-	// IInteractableInterface Implementation
-	virtual void Interact_Implementation(AActor* Interactor) override;
-	virtual bool CanInteract_Implementation(AActor* Interactor) override;
-	virtual FString GetInteractionText_Implementation() override;
-	virtual EInteractionType GetInteractionType_Implementation() override;
-
-	// NPC Core Functions
-	UFUNCTION(BlueprintCallable, Category = "NPC")
+	// Dialogue Functions
+	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	void StartDialogue(AActor* Interactor);
 
-	UFUNCTION(BlueprintCallable, Category = "NPC")
-	void SetFollowPlayer(bool bShouldFollow);
-
-	UFUNCTION(BlueprintCallable, Category = "NPC")
-	void LookAtPlayer();
-
-	// Dialogue Logic
-	UFUNCTION(BlueprintCallable, Category = "Dialogue")
-	bool ShouldShowMainStoryDialogue();
-
-	UFUNCTION(BlueprintCallable, Category = "Dialogue")
-	FString GetCurrentStoryDialogueID();
-
-	UFUNCTION(BlueprintCallable, Category = "Dialogue")
-	FString GetRandomDialogueID();
-
-	UFUNCTION(BlueprintCallable, Category = "Dialogue")
-	void UpdateStoryProgress(const FString& NewStoryDialogueID);
-
-	// Blueprint Events
-	UFUNCTION(BlueprintImplementableEvent, Category = "NPC")
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Dialogue")
 	void OnDialogueStarted();
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "NPC")
-	void OnDialogueEnded();
+	// Following Functions
+	UFUNCTION(BlueprintCallable, Category = "Following")
+	void SetFollowPlayer(bool bShouldFollow);
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "AI")
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Following")
 	void StartFollowingPlayer();
 
-	UFUNCTION(BlueprintImplementableEvent, Category = "AI")
+	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Following")
 	void StopFollowingPlayer();
+
+	// Look At Functions
+	UFUNCTION(BlueprintCallable, Category = "Look At")
+	void LookAtPlayer();
+
+	// Story Progress Functions
+	UFUNCTION(BlueprintCallable, Category = "Story Progress")
+	void UpdateStoryProgress(const FString& NewStoryDialogueID);
+
+	UFUNCTION(BlueprintPure, Category = "Dialogue State")
+	bool IsInDialogue() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Dialogue State")
+	void SetDialogueState(bool bInDialogue);
+
+	// Quest Functions - 새로 추가된 부분
+	UFUNCTION(BlueprintImplementableEvent, Category = "Quest")
+	bool IsQuestActive(const FString& QuestID);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Quest")
+	bool IsQuestCompleted(const FString& QuestID);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Quest")
 	bool CheckQuestRequirement(const FString& QuestID);
 
-	// Getter Functions
-	UFUNCTION(BlueprintPure, Category = "NPC")
-	FString GetNPCName() const { return NPCName; }
+protected:
+	// Story Logic
+	bool ShouldShowMainStoryDialogue();
+	FString GetCurrentStoryDialogueID();
+	FString GetRandomDialogueID();
 
-	UFUNCTION(BlueprintPure, Category = "NPC")
-	bool IsInDialogue() const;
+	// Quest Macro Logic - 새로 추가된 부분
+	FString GetQuestMacroDialogue();
 
-	UFUNCTION(BlueprintCallable, Category = "NPC")
-	void SetDialogueState(bool bInDialogue);
-
-private:
+	// Helper Functions
 	void UpdateLookAtPlayer(float DeltaTime);
 	void FindPlayerPawn();
 };
