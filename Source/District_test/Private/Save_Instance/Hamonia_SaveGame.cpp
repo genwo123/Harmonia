@@ -54,6 +54,8 @@ void UHamonia_SaveGame::ResetToDefault()
     ProgressData.LevelProgress.Empty();
     ProgressData.ClearedLevels.Empty();
     ProgressData.EventFlags.Empty();
+    ProgressData.LevelStoryStep.Empty();
+    ProgressData.PendingTriggerDialogue = TEXT("");
 
     UniaData.UniaLocation = FVector::ZeroVector;
     UniaData.UniaRotation = FRotator::ZeroRotator;
@@ -304,7 +306,7 @@ void UHamonia_SaveGame::IncrementStat(const FString& StatName, int32 Amount)
 
 float UHamonia_SaveGame::CalculateGameProgress() const
 {
-    int32 TotalLevels = 10; // Level_Main_1 ~ Level_Main_10
+    int32 TotalLevels = 10;
     int32 CompletedLevels = ProgressData.ClearedLevels.Num();
 
     return TotalLevels > 0 ? (float)CompletedLevels / (float)TotalLevels : 0.0f;
@@ -380,17 +382,6 @@ void UHamonia_SaveGame::SetGameCompleted()
     StatsData.GameProgress = 1.0f;
 }
 
-void UHamonia_SaveGame::PrintSaveDataInfo() const
-{
-    UE_LOG(LogTemp, Log, TEXT("=== Save Data Info ==="));
-    UE_LOG(LogTemp, Log, TEXT("Current Level: %s"), *PlayerData.CurrentLevel);
-    UE_LOG(LogTemp, Log, TEXT("Inventory Items: %d"), PlayerData.InventoryItems.Num());
-    UE_LOG(LogTemp, Log, TEXT("Completed Puzzles: %d"), ProgressData.CompletedPuzzles.Num());
-    UE_LOG(LogTemp, Log, TEXT("Unlocked Levels: %d"), GetUnlockedLevelCount());
-    UE_LOG(LogTemp, Log, TEXT("Game Progress: %.2f%%"), CalculateGameProgress() * 100.0f);
-    UE_LOG(LogTemp, Log, TEXT("Total Play Time: %.2f minutes"), StatsData.TotalPlayTime / 60.0f);
-}
-
 bool UHamonia_SaveGame::CheckVersionCompatibility() const
 {
     return GameVersion.Equals(TEXT("1.0.0"));
@@ -403,5 +394,32 @@ bool UHamonia_SaveGame::ValidateDataIntegrity() const
 
 void UHamonia_SaveGame::SetupDefaultLevels()
 {
-    UnlockLevel(TEXT("Level_Main_1")); // 첫 번째 레벨만 기본 해금
+    UnlockLevel(TEXT("Level_Main_1"));
+}
+
+void UHamonia_SaveGame::SetLevelStep(const FString& LevelName, int32 Step)
+{
+    ProgressData.LevelStoryStep.FindOrAdd(LevelName) = Step;
+}
+
+int32 UHamonia_SaveGame::GetLevelStep(const FString& LevelName) const
+{
+    const int32* Step = ProgressData.LevelStoryStep.Find(LevelName);
+    return Step ? *Step : 0;
+}
+
+FString UHamonia_SaveGame::GetCurrentDialogueForLevel(const FString& LevelName) const
+{
+    int32 CurrentStep = GetLevelStep(LevelName);
+    return FString::Printf(TEXT("%s_Step%d_001"), *LevelName, CurrentStep);
+}
+
+void UHamonia_SaveGame::SetPendingTriggerDialogue(const FString& DialogueID)
+{
+    ProgressData.PendingTriggerDialogue = DialogueID;
+}
+
+FString UHamonia_SaveGame::GetPendingTriggerDialogue() const
+{
+    return ProgressData.PendingTriggerDialogue;
 }

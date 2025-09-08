@@ -43,7 +43,7 @@ protected:
 	FOnDialogueTriggerActivated OnDialogueTriggerActivated;
 
 	// State
-	UPROPERTY(BlueprintReadOnly, Category = "State")
+	UPROPERTY(BlueprintReadWrite, Category = "State")
 	bool bHasTriggered = false;
 
 	// Quest Requirements (for future use)

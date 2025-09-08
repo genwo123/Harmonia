@@ -174,3 +174,18 @@ FString ALevelQuestManager::GetCurrentMainObjective()
     FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
     return LevelData ? LevelData->MainObjective : "";
 }
+
+int32 ALevelQuestManager::GetCurrentSubStep()
+{
+    // 완료되지 않은 첫 번째 단계를 반환
+    for (int32 i = 0; i < SubStepCompletionStatus.Num(); i++)
+    {
+        if (!SubStepCompletionStatus[i])
+        {
+            return i;  // 첫 번째 미완료 단계 반환
+        }
+    }
+
+    // 모든 단계가 완료되었으면 마지막 인덱스 반환
+    return FMath::Max(0, SubStepCompletionStatus.Num() - 1);
+}

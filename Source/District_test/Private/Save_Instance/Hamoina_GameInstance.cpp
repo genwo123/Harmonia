@@ -16,7 +16,6 @@ UHamoina_GameInstance::UHamoina_GameInstance()
     {
         UnlockedNotePages[i] = false;
     }
-
 }
 
 void UHamoina_GameInstance::Init()
@@ -182,7 +181,6 @@ bool UHamoina_GameInstance::LoadContinueGame()
     FString LatestAutoSave = GetLatestAutoSaveFile();
     if (LatestAutoSave.IsEmpty())
     {
-        // 기존 방식 시도 (HarmoniaContinue.sav)
         bool bLoadSuccess = LoadGame();
         if (bLoadSuccess && CurrentSaveData)
         {
@@ -196,7 +194,6 @@ bool UHamoina_GameInstance::LoadContinueGame()
         return false;
     }
 
-    // 직접 경로로 로드 (LoadGame 대신 LoadGameFromCustomPath 사용)
     FString FullPath = GetAutoSaveDirectory() + TEXT("/") + LatestAutoSave;
     bool bLoadSuccess = LoadGameFromCustomPath(FullPath);
 
@@ -215,14 +212,58 @@ bool UHamoina_GameInstance::LoadContinueGame()
 
 bool UHamoina_GameInstance::HasContinueGame() const
 {
-    // 새로운 자동저장 파일들 확인
     TArray<FString> AutoSaveFiles = const_cast<UHamoina_GameInstance*>(this)->GetAutoSaveFileList();
     if (AutoSaveFiles.Num() > 0)
         return true;
 
-    // 기존 자동저장 파일 확인
     FString FilePath = GetAutoSaveDirectory() + TEXT("/") + AutoSaveSlotName + TEXT(".sav");
     return FPlatformFileManager::Get().GetPlatformFile().FileExists(*FilePath);
+}
+
+void UHamoina_GameInstance::SetCurrentLevelStep(int32 Step)
+{
+    if (CurrentSaveData)
+    {
+        FString CurrentLevel = GetLevelNameFromStage(GetCurrentStageNumber());
+        CurrentSaveData->SetLevelStep(CurrentLevel, Step);
+    }
+}
+
+int32 UHamoina_GameInstance::GetCurrentLevelStep() const
+{
+    if (CurrentSaveData)
+    {
+        FString CurrentLevel = GetLevelNameFromStage(GetCurrentStageNumber());
+        return CurrentSaveData->GetLevelStep(CurrentLevel);
+    }
+    return 0;
+}
+
+void UHamoina_GameInstance::SetLevelStoryStep(const FString& LevelName, int32 Step)
+{
+    if (CurrentSaveData)
+    {
+        CurrentSaveData->SetLevelStep(LevelName, Step);
+    }
+}
+
+int32 UHamoina_GameInstance::GetLevelStoryStep(const FString& LevelName) const
+{
+    if (CurrentSaveData)
+    {
+        return CurrentSaveData->GetLevelStep(LevelName);
+    }
+    return 0;
+}
+
+FString UHamoina_GameInstance::GetCurrentDialogueID() const
+{
+    if (CurrentSaveData)
+    {
+        FString CurrentLevel = GetLevelNameFromStage(GetCurrentStageNumber());
+        return CurrentSaveData->GetCurrentDialogueForLevel(CurrentLevel);
+    }
+    return TEXT("");
 }
 
 void UHamoina_GameInstance::UpdatePlayerLocation(const FString& LevelName, const FVector& Location, const FRotator& Rotation)
@@ -510,7 +551,6 @@ bool UHamoina_GameInstance::LoadGameFromCustomPath(const FString& FilePath)
     return true;
 }
 
-
 bool UHamoina_GameInstance::SaveToAutoSlot()
 {
     if (!CurrentSaveData)
@@ -518,7 +558,6 @@ bool UHamoina_GameInstance::SaveToAutoSlot()
 
     CollectCurrentGameState();
 
-    // 현재 슬롯에 저장
     FString AutoSlotName = FString::Printf(TEXT("AutoSave_%d"), CurrentAutoSaveSlot);
     FString SavePath = GetAutoSaveDirectory() + TEXT("/") + AutoSlotName + TEXT(".sav");
 
@@ -527,7 +566,6 @@ bool UHamoina_GameInstance::SaveToAutoSlot()
 
     if (bSaveSuccess)
     {
-        // 다음 슬롯으로 이동 (순환)
         CurrentAutoSaveSlot = (CurrentAutoSaveSlot % MaxAutoSaveSlots) + 1;
     }
 
@@ -541,7 +579,6 @@ FString UHamoina_GameInstance::GetLatestAutoSaveFile()
     if (AutoSaveFiles.Num() == 0)
         return TEXT("");
 
-    // 파일 생성시간으로 정렬해서 최신 파일 반환
     FString LatestFile;
     FDateTime LatestTime = FDateTime::MinValue();
 
@@ -604,7 +641,6 @@ void UHamoina_GameInstance::SetAutoSaveInterval(float NewInterval)
 {
     AutoSaveInterval = NewInterval;
 
-    // 타이머가 실행 중이면 재시작
     if (AutoSaveTimerHandle.IsValid())
     {
         StopAutoSaveTimer();
@@ -617,7 +653,6 @@ void UHamoina_GameInstance::UnlockNotePage(int32 PageIndex)
     if (PageIndex >= 0 && PageIndex < UnlockedNotePages.Num())
     {
         UnlockedNotePages[PageIndex] = true;
-        //SaveContinueGame(); // 자동 저장
     }
 }
 

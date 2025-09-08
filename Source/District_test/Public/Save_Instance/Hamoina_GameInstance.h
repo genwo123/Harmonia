@@ -26,12 +26,11 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Save System")
     FString AutoSaveSlotName = TEXT("HarmoniaContinue");
 
-    // 자동저장 관련 변수
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Auto Save Settings")
     int32 MaxAutoSaveSlots = 5;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Auto Save Settings")
-    float AutoSaveInterval = 600.0f; // 10분 (초 단위)
+    float AutoSaveInterval = 600.0f;
 
     UPROPERTY(BlueprintReadOnly, Category = "Auto Save")
     int32 CurrentAutoSaveSlot = 1;
@@ -70,7 +69,6 @@ public:
     UFUNCTION(BlueprintPure, Category = "Save System")
     UHamonia_SaveGame* GetCurrentSaveData() const { return CurrentSaveData; }
 
-    // 자동저장 함수들
     UFUNCTION(BlueprintCallable, Category = "Auto Save")
     bool SaveToAutoSlot();
 
@@ -88,6 +86,21 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Auto Save")
     void SetAutoSaveInterval(float NewInterval);
+
+    UFUNCTION(BlueprintCallable, Category = "Story Progress")
+    void SetCurrentLevelStep(int32 Step);
+
+    UFUNCTION(BlueprintPure, Category = "Story Progress")
+    int32 GetCurrentLevelStep() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Story Progress")
+    void SetLevelStoryStep(const FString& LevelName, int32 Step);
+
+    UFUNCTION(BlueprintPure, Category = "Story Progress")
+    int32 GetLevelStoryStep(const FString& LevelName) const;
+
+    UFUNCTION(BlueprintPure, Category = "Story Progress")
+    FString GetCurrentDialogueID() const;
 
     UFUNCTION(BlueprintCallable, Category = "Player Data")
     void UpdatePlayerLocation(const FString& LevelName, const FVector& Location, const FRotator& Rotation);
@@ -157,7 +170,6 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Note System")
     TArray<bool> UnlockedNotePages;
-
 
 protected:
     void InitializeNewSaveData();

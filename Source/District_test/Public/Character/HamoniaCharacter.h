@@ -7,9 +7,11 @@
 #include "Gameplay/PuzzleInteractionComponent.h" 
 #include "Gameplay/Pedestal.h"
 #include "Interaction/InteractionEnums.h"
+#include "Character/Unia.h"
 #include "Core/DialogueManagerComponent.h" 
 #include "HamoniaCharacter.generated.h"
 
+class AUnia;
 class UInventoryComponent;
 class UCameraComponent;
 class UInputMappingContext;
@@ -259,6 +261,18 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void OnInventorySelectionChanged(int32 NewSlotIndex);
 
+    UFUNCTION(BlueprintCallable, Category = "Interaction")
+    void SetCurrentInteractableNPC(AUnia* NPC);
+
+    UFUNCTION(BlueprintCallable, Category = "Interaction")
+    void RemoveInteractableNPC(AUnia* NPC);
+
+    UFUNCTION(BlueprintPure, Category = "Interaction")
+    AUnia* GetCurrentInteractableNPC() const { return CurrentInteractableNPC; }
+
+    UFUNCTION(BlueprintPure, Category = "Interaction")
+    bool HasInteractableNPC() const { return CurrentInteractableNPC != nullptr; }
+
 
 protected:
     virtual void BeginPlay() override;
@@ -270,6 +284,14 @@ protected:
     // DataTable 설정 확인 함수 추가
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     bool IsDialogueSystemReady();
+
+    UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+    TArray<AUnia*> InteractableNPCs;
+
+    // 현재 가장 가까운 NPC
+    UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+    AUnia* CurrentInteractableNPC;
+
 
 
 private:

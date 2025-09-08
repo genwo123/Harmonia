@@ -51,6 +51,10 @@ public:
     virtual void BeginPlay() override;
     ALevelQuestManager();
 
+
+    UFUNCTION(BlueprintCallable)
+    int32 GetCurrentSubStep();
+
     // 데이터 테이블 - 이제 에디터에서 설정 가능
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest")
     UDataTable* LevelDataTable;

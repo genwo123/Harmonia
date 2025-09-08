@@ -30,6 +30,8 @@ AHamoniaCharacter::AHamoniaCharacter()
 	CameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
 	CameraComponent->bUsePawnControlRotation = true;
 
+
+	CurrentInteractableNPC = nullptr;
 	// Set capsule size
 	GetCapsuleComponent()->InitCapsuleSize(36.0f, 88.0f);
 
@@ -438,7 +440,6 @@ void AHamoniaCharacter::ToggleCrouch(const FInputActionValue& Value)
 
 void AHamoniaCharacter::Interact()
 {
-	// 대화 시스템 우선 처리 (대화 중일 때만)
 	if (DialogueManager)
 	{
 		if (DialogueManager->bIsInDialogue)
@@ -448,33 +449,32 @@ void AHamoniaCharacter::Interact()
 		}
 	}
 
-	// 기존 상호작용 로직
+	if (CurrentInteractableNPC)
+	{
+		CurrentInteractableNPC->HandlePlayerInteraction();
+		return;
+	}
+
 	if (bIsLookingAtInteractable && CurrentInteractableActor)
 	{
-		// 현재 들고 있는 오브젝트가 있는지 확인
 		AActor* HeldObject = GetHeldObject();
 
-		// 1. 오브젝트를 들고 있는 경우
 		if (HeldObject)
 		{
 			UPuzzleInteractionComponent* HeldItemComp =
 				HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
 			if (HeldItemComp)
 			{
-				// 받침대인지 확인
 				APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
 				if (Pedestal)
 				{
-					// 받침대에 오브젝트 배치
 					HeldItemComp->PlaceOnPedestal(Pedestal);
 				}
 				else
 				{
-					// 바닥에 내려놓기
 					FVector DropLocation = GetActorLocation() + (GetActorForwardVector() * 100.0f);
 					HeldItemComp->PutDown(DropLocation, GetActorRotation());
 				}
-				// 퀘스트 이벤트 호출 (배치/내려놓기 후)
 				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 				{
 					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
@@ -482,33 +482,25 @@ void AHamoniaCharacter::Interact()
 				return;
 			}
 		}
-		// 2. 오브젝트를 들고 있지 않은 경우
 		else
 		{
-			// EXPANDED: 인벤토리 아이템을 사용한 상호작용 체크
 			UItem* HeldInventoryItem = GetCurrentHeldInventoryItem();
 			if (HeldInventoryItem && HandleInventoryItemInteraction(HeldInventoryItem, CurrentInteractableActor))
 			{
-				// 인벤토리 아이템으로 상호작용 성공
 				return;
 			}
 
-			// 2.1 현재 바라보는 대상이 받침대인 경우
 			APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
 			if (Pedestal)
 			{
-				// 받침대 위에 오브젝트가 있는지 확인
 				AActor* ObjectOnPedestal = Pedestal->GetPlacedObject();
 				if (ObjectOnPedestal)
 				{
-					// 오브젝트의 상호작용 컴포넌트 확인
 					UPuzzleInteractionComponent* InteractionComp =
 						ObjectOnPedestal->FindComponentByClass<UPuzzleInteractionComponent>();
 					if (InteractionComp)
 					{
-						// 오브젝트 집기 시도
 						InteractionComp->PickUp(this);
-						// 퀘스트 이벤트 호출 (집기 후)
 						if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 						{
 							IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
@@ -516,23 +508,19 @@ void AHamoniaCharacter::Interact()
 						return;
 					}
 				}
-				// 받침대 자체와 상호작용
 				IInteractableInterface::Execute_Interact(Pedestal, this);
-				// 퀘스트 이벤트 호출 (받침대 상호작용 후)
 				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 				{
 					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
 				}
 				return;
 			}
-			// 2.2 현재 바라보는 대상이 PuzzleInteractionComponent를 가진 오브젝트인 경우
+
 			UPuzzleInteractionComponent* InteractionComp =
 				CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
 			if (InteractionComp && InteractionComp->bCanBePickedUp)
 			{
-				// 오브젝트 집기 시도
 				InteractionComp->PickUp(this);
-				// 퀘스트 이벤트 호출 (픽업 후)
 				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 				{
 					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
@@ -540,10 +528,8 @@ void AHamoniaCharacter::Interact()
 				return;
 			}
 		}
-		// 3. 기타 일반 상호작용
-		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
 
-		// 4. 퀘스트 이벤트 호출 (일반 상호작용 후)
+		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
 		if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 		{
 			IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
@@ -802,7 +788,7 @@ void AHamoniaCharacter::ShowHeldItemMesh(UItem* Item)
 {
 	if (Item && HeldItemDisplay)
 	{
-		ShowHeldItemMeshBP(Item); // 블루프린트로 위임
+		ShowHeldItemMeshBP(Item); 
 	}
 	else
 	{
@@ -811,7 +797,7 @@ void AHamoniaCharacter::ShowHeldItemMesh(UItem* Item)
 }
 void AHamoniaCharacter::HideHeldItemMesh()
 {
-	HideHeldItemMeshBP(); // 블루프린트로 위임
+	HideHeldItemMeshBP(); 
 }
 
 void AHamoniaCharacter::OnInventorySelectionChanged(int32 NewSlotIndex)
@@ -820,5 +806,24 @@ void AHamoniaCharacter::OnInventorySelectionChanged(int32 NewSlotIndex)
 	{
 		UItem* NewSelectedItem = InventoryComponent->GetItemAtSlot(NewSlotIndex);
 		UpdateHeldItemDisplay(NewSelectedItem);
+	}
+}
+
+void AHamoniaCharacter::SetCurrentInteractableNPC(AUnia* NPC)
+{
+	if (NPC && !InteractableNPCs.Contains(NPC))
+	{
+		InteractableNPCs.Add(NPC);
+	}
+	CurrentInteractableNPC = NPC;
+}
+
+void AHamoniaCharacter::RemoveInteractableNPC(AUnia* NPC)
+{
+	InteractableNPCs.Remove(NPC);
+
+	if (CurrentInteractableNPC == NPC)
+	{
+		CurrentInteractableNPC = InteractableNPCs.Num() > 0 ? InteractableNPCs[0] : nullptr;
 	}
 }

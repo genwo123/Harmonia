@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "Character/Unia.h"
 #include "Engine/Engine.h"
 #include "GameFramework/PlayerController.h"
@@ -7,6 +5,7 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Core/DialogueManagerComponent.h"
+#include "Character/HamoniaCharacter.h"
 
 AUnia::AUnia()
 {
@@ -18,6 +17,8 @@ AUnia::AUnia()
 	InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	InteractionSphere->SetGenerateOverlapEvents(true);
+	InteractionSphere->bHiddenInGame = false;
 
 	DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
 
@@ -28,17 +29,20 @@ AUnia::AUnia()
 	GetCharacterMovement()->AirControl = 0.0f;
 
 	bIsFollowingPlayer = false;
+	bPlayerInRange = false;
 }
 
 void AUnia::BeginPlay()
 {
 	Super::BeginPlay();
 	FindPlayerPawn();
+
 	if (InteractionSphere)
 	{
 		InteractionSphere->SetSphereRadius(InteractionRange);
+		InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &AUnia::OnInteractionSphereBeginOverlap);
+		InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &AUnia::OnInteractionSphereEndOverlap);
 	}
-	UE_LOG(LogTemp, Log, TEXT("Unia NPC initialized with DialogueManager"));
 }
 
 void AUnia::Tick(float DeltaTime)
@@ -55,6 +59,43 @@ void AUnia::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 }
 
+void AUnia::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	AHamoniaCharacter* HamoniaCharacter = Cast<AHamoniaCharacter>(OtherActor);
+	if (HamoniaCharacter)
+	{
+		bPlayerInRange = true;
+		PlayerPawn = HamoniaCharacter;
+
+		HamoniaCharacter->SetCurrentInteractableNPC(this);
+
+		OnPlayerEnterRange(HamoniaCharacter);
+	}
+}
+
+void AUnia::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex)
+{
+	AHamoniaCharacter* HamoniaCharacter = Cast<AHamoniaCharacter>(OtherActor);
+	if (HamoniaCharacter)
+	{
+		bPlayerInRange = false;
+
+		HamoniaCharacter->RemoveInteractableNPC(this);
+
+		OnPlayerExitRange(HamoniaCharacter);
+	}
+}
+
+void AUnia::HandlePlayerInteraction()
+{
+	if (bPlayerInRange && PlayerPawn)
+	{
+		Interact_Implementation(PlayerPawn);
+	}
+}
+
 void AUnia::Interact_Implementation(AActor* Interactor)
 {
 	if (!CanInteract_Implementation(Interactor))
@@ -66,13 +107,8 @@ void AUnia::Interact_Implementation(AActor* Interactor)
 
 bool AUnia::CanInteract_Implementation(AActor* Interactor)
 {
-	if (IsInDialogue())
-	{
-		return false;
-	}
-
-	APawn* CurrentPlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
-	if (Interactor != CurrentPlayerPawn)
+	AHamoniaCharacter* HamoniaCharacter = Cast<AHamoniaCharacter>(Interactor);
+	if (!HamoniaCharacter)
 	{
 		return false;
 	}
@@ -87,7 +123,7 @@ FString AUnia::GetInteractionText_Implementation()
 	{
 		return TEXT("Dialogue...");
 	}
-	return FString::Printf(TEXT("%s And Dialogue"), *NPCName);
+	return FString::Printf(TEXT("Talk to %s"), *NPCName);
 }
 
 EInteractionType AUnia::GetInteractionType_Implementation()
@@ -99,9 +135,10 @@ void AUnia::StartDialogue(AActor* Interactor)
 {
 	if (!DialogueManager)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("DialogueManager is null!"));
 		return;
 	}
+
+	DialogueManager->bIsInDialogue = false;
 
 	if (bIsFollowingPlayer)
 	{
@@ -120,29 +157,23 @@ void AUnia::StartDialogue(AActor* Interactor)
 	FString DialogueIDToUse;
 	UDataTable* TableToUse = nullptr;
 
-	// 1순위: 메인 스토리 대화
 	if (ShouldShowMainStoryDialogue())
 	{
 		DialogueIDToUse = GetCurrentStoryDialogueID();
 		TableToUse = MainStoryDialogueTable;
-		UE_LOG(LogTemp, Log, TEXT("Unia showing story dialogue: %s"), *DialogueIDToUse);
 	}
-	// 2순위: 퀘스트 매크로 대화 (새로 추가!)
 	else
 	{
 		FString MacroDialogue = GetQuestMacroDialogue();
 		if (!MacroDialogue.IsEmpty())
 		{
 			DialogueIDToUse = MacroDialogue;
-			TableToUse = MainStoryDialogueTable; // 또는 별도 테이블 사용 가능
-			UE_LOG(LogTemp, Log, TEXT("Unia showing quest macro dialogue: %s"), *DialogueIDToUse);
+			TableToUse = UniaRandomDialogueTable;
 		}
-		// 3순위: 랜덤 대화
 		else
 		{
 			DialogueIDToUse = GetRandomDialogueID();
 			TableToUse = UniaRandomDialogueTable;
-			UE_LOG(LogTemp, Log, TEXT("Unia showing random dialogue: %s"), *DialogueIDToUse);
 		}
 	}
 
@@ -151,10 +182,24 @@ void AUnia::StartDialogue(AActor* Interactor)
 		DialogueManager->DialogueDataTable = TableToUse;
 	}
 
-	DialogueManager->bIsInDialogue = true;
+	if (DialogueIDToUse.IsEmpty())
+	{
+		DialogueIDToUse = DialogueSceneID;
+	}
 
+	AHamoniaCharacter* HamoniaCharacter = Cast<AHamoniaCharacter>(Interactor);
+	if (HamoniaCharacter)
+	{
+		UDialogueManagerComponent* PlayerDialogueManager = HamoniaCharacter->GetDialogueManagerComponent();
+		if (PlayerDialogueManager && PlayerDialogueManager->DialogueDataTable)
+		{
+			TableToUse = PlayerDialogueManager->DialogueDataTable;
+		}
+	}
+
+	DialogueManager->bIsInDialogue = true;
+	OnUniaDialogueActivated.Broadcast(DialogueIDToUse, TableToUse);
 	OnDialogueStarted();
-	UE_LOG(LogTemp, Log, TEXT("Unia started dialogue with ID: %s"), *DialogueIDToUse);
 }
 
 void AUnia::SetFollowPlayer(bool bShouldFollow)
@@ -163,13 +208,11 @@ void AUnia::SetFollowPlayer(bool bShouldFollow)
 	{
 		bIsFollowingPlayer = true;
 		StartFollowingPlayer();
-		UE_LOG(LogTemp, Log, TEXT("Unia started following player"));
 	}
 	else
 	{
 		bIsFollowingPlayer = false;
 		StopFollowingPlayer();
-		UE_LOG(LogTemp, Log, TEXT("Unia stopped following player"));
 	}
 }
 
@@ -211,29 +254,24 @@ FString AUnia::GetRandomDialogueID()
 {
 	if (!UniaRandomDialogueTable)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UniaRandomDialogueTable is null"));
-		return TEXT("Unia_Default_001");
+		return DialogueSceneID;
 	}
 
 	TArray<FName> RowNames = UniaRandomDialogueTable->GetRowNames();
 
 	if (RowNames.Num() == 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No rows found in UniaRandomDialogueTable"));
-		return TEXT("Unia_Default_001");
+		return DialogueSceneID;
 	}
 
 	int32 RandomIndex = FMath::RandRange(0, RowNames.Num() - 1);
 	FString SelectedDialogueID = RowNames[RandomIndex].ToString();
 
-	UE_LOG(LogTemp, Log, TEXT("Selected random dialogue: %s"), *SelectedDialogueID);
 	return SelectedDialogueID;
 }
 
-// 새로 추가된 핵심 함수!
 FString AUnia::GetQuestMacroDialogue()
 {
-	// 퀘스트 매크로 리스트를 순회하면서 활성 퀘스트 확인
 	for (const FUniaQuestMacro& Macro : QuestMacroList)
 	{
 		if (Macro.QuestID.IsEmpty())
@@ -241,40 +279,28 @@ FString AUnia::GetQuestMacroDialogue()
 			continue;
 		}
 
-		// 퀘스트가 활성 상태인지 확인
 		if (IsQuestActive(Macro.QuestID))
 		{
-			// 퀘스트가 완료되었는지 확인
 			if (IsQuestCompleted(Macro.QuestID))
 			{
-				// 완료 대화를 이미 보여줬는지 확인
 				if (!CompletedMacroDialogues.Contains(Macro.QuestID))
 				{
-					// 완료 대화 표시하고 기록에 추가
 					CompletedMacroDialogues.Add(Macro.QuestID);
-					UE_LOG(LogTemp, Log, TEXT("Quest %s completed, showing completion dialogue: %s"),
-						*Macro.QuestID, *Macro.CompletionDialogueID);
 					return Macro.CompletionDialogueID;
 				}
 			}
 			else
 			{
-				// 퀘스트 진행 중이면 진행 대화 표시
-				UE_LOG(LogTemp, Log, TEXT("Quest %s in progress, showing progress dialogue: %s"),
-					*Macro.QuestID, *Macro.ProgressDialogueID);
 				return Macro.ProgressDialogueID;
 			}
 		}
 	}
-
-	// 활성 퀘스트 매크로가 없으면 빈 문자열 반환
 	return FString();
 }
 
 void AUnia::UpdateStoryProgress(const FString& NewStoryDialogueID)
 {
 	CurrentStoryDialogueID = NewStoryDialogueID;
-	UE_LOG(LogTemp, Log, TEXT("Story progress updated to: %s"), *CurrentStoryDialogueID);
 }
 
 bool AUnia::IsInDialogue() const
@@ -317,8 +343,4 @@ void AUnia::UpdateLookAtPlayer(float DeltaTime)
 void AUnia::FindPlayerPawn()
 {
 	PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
-	if (!PlayerPawn)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Could not find PlayerPawn"));
-	}
 }

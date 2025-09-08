@@ -20,6 +20,23 @@ class DISTRICT_TEST_API UHamonia_SaveGame : public USaveGame
 public:
     UHamonia_SaveGame();
 
+    // Story Progress Functions
+    UFUNCTION(BlueprintCallable, Category = "Story Progress")
+    void SetLevelStep(const FString& LevelName, int32 Step);
+
+    UFUNCTION(BlueprintPure, Category = "Story Progress")
+    int32 GetLevelStep(const FString& LevelName) const;
+
+    UFUNCTION(BlueprintPure, Category = "Story Progress")
+    FString GetCurrentDialogueForLevel(const FString& LevelName) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Story Progress")
+    void SetPendingTriggerDialogue(const FString& DialogueID);
+
+    UFUNCTION(BlueprintPure, Category = "Story Progress")
+    FString GetPendingTriggerDialogue() const;
+
+    // Save Info
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Save Info")
     FString SaveSlotName = TEXT("HarmoniaAutoSave");
 
@@ -38,6 +55,7 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Save Info")
     FString SaveDescription = TEXT("Auto Save");
 
+    // Game Data
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Game Data")
     FPlayerSaveData PlayerData;
 
@@ -56,6 +74,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level System")
     TMap<FString, bool> UnlockedLevels;
 
+    // Save System Functions
     UFUNCTION(BlueprintCallable, Category = "Save System")
     void UpdateSaveTime();
 
@@ -68,9 +87,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Save System")
     void SetSaveInfo(const FString& SlotName, bool bAuto = true, const FString& Description = TEXT(""));
 
+    // Player Data Functions
     UFUNCTION(BlueprintCallable, Category = "Player Data")
     void SetPlayerLocation(const FString& LevelName, const FVector& Location, const FRotator& Rotation);
 
+    // Inventory Functions
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void AddItem(const FString& ItemID, int32 Quantity = 1);
 
@@ -80,12 +101,14 @@ public:
     UFUNCTION(BlueprintPure, Category = "Inventory")
     bool HasItem(const FString& ItemID, int32 MinQuantity = 1) const;
 
+    // Notes Functions
     UFUNCTION(BlueprintCallable, Category = "Notes")
     void AddNote(const FString& NoteID);
 
     UFUNCTION(BlueprintCallable, Category = "Notes")
     void MarkNoteAsRead(const FString& NoteID);
 
+    // Progress Functions
     UFUNCTION(BlueprintCallable, Category = "Progress")
     void CompletePuzzle(const FString& PuzzleID, float CompletionTime = 0.0f);
 
@@ -104,21 +127,25 @@ public:
     UFUNCTION(BlueprintPure, Category = "Progress")
     bool GetEventFlag(const FString& FlagName) const;
 
+    // Unia Functions
     UFUNCTION(BlueprintCallable, Category = "Unia")
     void SetUniaLocation(const FString& LevelName, const FVector& Location, const FRotator& Rotation);
 
     UFUNCTION(BlueprintCallable, Category = "Unia")
     void SetUniaState(EUniaSaveState NewState);
 
+    // Dialogue Functions
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     void CompleteDialogue(const FString& DialogueID, bool bIsStoryDialogue = false);
 
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     void SaveDialogueChoice(const FString& DialogueID, const FString& ChoiceResult);
 
+    // Quest Functions
     UFUNCTION(BlueprintCallable, Category = "Quest")
     void SetCurrentQuest(const FString& QuestPhase, const FString& QuestID);
 
+    // Level System Functions
     UFUNCTION(BlueprintCallable, Category = "Level System")
     void UnlockLevel(const FString& LevelName);
 
@@ -128,6 +155,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Level System")
     void UnlockNextLevel(const FString& CompletedLevel);
 
+    // Stats Functions
     UFUNCTION(BlueprintCallable, Category = "Stats")
     void UpdatePlayTime(float DeltaTime);
 
@@ -140,6 +168,7 @@ public:
     UFUNCTION(BlueprintPure, Category = "Stats")
     int32 GetUnlockedLevelCount() const;
 
+    // Debug Functions
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void UnlockAllLevels();
 
@@ -152,8 +181,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void SetGameCompleted();
 
-    UFUNCTION(BlueprintCallable, Category = "Debug")
-    void PrintSaveDataInfo() const;
 
 protected:
     bool CheckVersionCompatibility() const;

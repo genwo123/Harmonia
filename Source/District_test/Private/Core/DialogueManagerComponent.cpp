@@ -1,14 +1,18 @@
-// DialogueManagerComponent.cpp
 #include "Core/DialogueManagerComponent.h"
+#include "Core/LevelQuestManager.h"
+#include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 
 UDialogueManagerComponent::UDialogueManagerComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
+    CachedQuestManager = nullptr;
 }
 
 void UDialogueManagerComponent::BeginPlay()
 {
     Super::BeginPlay();
+    CachedQuestManager = FindLevelQuestManager();
 }
 
 bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
@@ -65,6 +69,18 @@ void UDialogueManagerComponent::ProgressDialogue()
     }
 
     FString NextID = CurrentDialogue.NextDialogueID;
+
+    if (!CanProgressToDialogue(NextID))
+    {
+        FString MacroDialogue = GetMacroDialogue(GetCurrentLevelName(), GetCurrentSubStep());
+        if (!MacroDialogue.IsEmpty())
+        {
+            EndDialogue();
+            StartDialogue(MacroDialogue);
+            return;
+        }
+    }
+
     EndDialogue();
     StartDialogue(NextID);
 }
@@ -88,13 +104,6 @@ void UDialogueManagerComponent::SelectChoice(int32 ChoiceIndex)
         return;
     }
 
-    // 퀘스트 이벤트 처리
-    if (!CurrentDialogue.QuestEventID.IsEmpty())
-    {
-        // ProcessQuestEvent(CurrentDialogue.QuestEventID, ChoiceIndex);
-    }
-
-    // 대화 전환
     if (!StartDialogue(TargetDialogueID))
     {
         EndDialogue();
@@ -111,11 +120,70 @@ TArray<FString> UDialogueManagerComponent::GetCurrentChoices()
     return TArray<FString>();
 }
 
-FString UDialogueManagerComponent::FindDialogueForQuest(const FString& QuestState)
+bool UDialogueManagerComponent::CanProgressToDialogue(const FString& DialogueID)
+{
+    FDialogueData* DialogueData = GetDialogueData(DialogueID);
+    if (!DialogueData)
+    {
+        return false;
+    }
+
+    return ValidateSubStepRequirement(*DialogueData);
+}
+
+FString UDialogueManagerComponent::FindDialogueForCurrentLevel()
+{
+    FString CurrentLevel = GetCurrentLevelName();
+    if (CurrentLevel.IsEmpty())
+    {
+        return "";
+    }
+
+    TArray<FString> LevelDialogues = GetDialoguesForLevel(CurrentLevel, EDialogueCategory::MainStory);
+
+    for (const FString& DialogueID : LevelDialogues)
+    {
+        if (CanProgressToDialogue(DialogueID))
+        {
+            return DialogueID;
+        }
+    }
+
+    return "";
+}
+
+FString UDialogueManagerComponent::GetMacroDialogue(const FString& LevelName, int32 CurrentSubStep)
 {
     if (!DialogueDataTable)
     {
         return "";
+    }
+
+    FString MacroID = FString::Printf(TEXT("%s_Macro_Step%d"), *LevelName, CurrentSubStep);
+
+    FDialogueData* MacroData = GetDialogueData(MacroID);
+    if (MacroData)
+    {
+        return MacroID;
+    }
+
+    TArray<FString> MacroDialogues = GetDialoguesForLevel(LevelName, EDialogueCategory::Macro);
+    if (MacroDialogues.Num() > 0)
+    {
+        int32 Index = CurrentSubStep % MacroDialogues.Num();
+        return MacroDialogues[Index];
+    }
+
+    return "Unia_Random_001";
+}
+
+TArray<FString> UDialogueManagerComponent::GetDialoguesForLevel(const FString& LevelName, EDialogueCategory Category)
+{
+    TArray<FString> Result;
+
+    if (!DialogueDataTable)
+    {
+        return Result;
     }
 
     TArray<FDialogueData*> AllDialogues;
@@ -123,13 +191,80 @@ FString UDialogueManagerComponent::FindDialogueForQuest(const FString& QuestStat
 
     for (FDialogueData* DialogueData : AllDialogues)
     {
-        if (DialogueData && DialogueData->RequiredQuestState == QuestState)
+        if (DialogueData &&
+            DialogueData->LevelName == LevelName &&
+            DialogueData->Category == Category)
         {
-            return DialogueData->DialogueID;
+            Result.Add(DialogueData->DialogueID);
         }
     }
 
+    return Result;
+}
+
+bool UDialogueManagerComponent::IsSubStepCompleted(int32 SubStepIndex)
+{
+    if (!CachedQuestManager)
+    {
+        CachedQuestManager = FindLevelQuestManager();
+    }
+
+    if (CachedQuestManager)
+    {
+        return CachedQuestManager->IsSubStepCompleted(SubStepIndex);
+    }
+
+    return false;
+}
+
+int32 UDialogueManagerComponent::GetCurrentSubStep()
+{
+    if (!CachedQuestManager)
+    {
+        CachedQuestManager = FindLevelQuestManager();
+    }
+
+    if (CachedQuestManager)
+    {
+        for (int32 i = 0; i < CachedQuestManager->GetSubStepCount(); i++)
+        {
+            if (!CachedQuestManager->IsSubStepCompleted(i))
+            {
+                return i;
+            }
+        }
+        return FMath::Max(0, CachedQuestManager->GetSubStepCount() - 1);
+    }
+
+    return 0;
+}
+
+FString UDialogueManagerComponent::GetCurrentLevelName()
+{
+    if (!CachedQuestManager)
+    {
+        CachedQuestManager = FindLevelQuestManager();
+    }
+
+    if (CachedQuestManager)
+    {
+        return CachedQuestManager->GetCurrentLevelName();
+    }
+
+    UWorld* World = GetWorld();
+    if (World)
+    {
+        FString LevelName = World->GetMapName();
+        LevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+        return LevelName;
+    }
+
     return "";
+}
+
+FString UDialogueManagerComponent::FindDialogueForQuest(const FString& QuestState)
+{
+    return FindDialogueForCurrentLevel();
 }
 
 void UDialogueManagerComponent::PlayMonologue(const FString& MonologueID)
@@ -143,38 +278,15 @@ void UDialogueManagerComponent::PlayMonologue(const FString& MonologueID)
     ProcessDialogue(*MonologueData);
 }
 
-bool UDialogueManagerComponent::CheckQuestCondition(const FString& RequiredQuestState)
-{
-    if (RequiredQuestState.IsEmpty())
-    {
-        return true;
-    }
-
-    // TODO: 퀘스트 시스템과 연동
-    return true;
-}
-
-bool UDialogueManagerComponent::CheckItemCondition(const FString& RequiredItemID)
-{
-    if (RequiredItemID.IsEmpty())
-    {
-        return true;
-    }
-
-    // TODO: 인벤토리 시스템과 연동
-    return true;
-}
-
 bool UDialogueManagerComponent::CheckAllConditions(const FDialogueData& DialogueData)
 {
-    if (!CheckQuestCondition(DialogueData.RequiredQuestState))
+    if (!ValidateSubStepRequirement(DialogueData))
     {
         return false;
     }
 
-    if (DialogueData.bRequireItem && !CheckItemCondition(DialogueData.RequiredItemID))
+    for (const FString& Condition : DialogueData.CustomConditions)
     {
-        return false;
     }
 
     return true;
@@ -209,4 +321,36 @@ void UDialogueManagerComponent::ProcessDialogue(const FDialogueData& DialogueDat
         DialogueData.DialogueType,
         DialogueData.DisplayDuration
     );
+}
+
+ALevelQuestManager* UDialogueManagerComponent::FindLevelQuestManager()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return nullptr;
+    }
+
+    TArray<AActor*> QuestManagers;
+    UGameplayStatics::GetAllActorsOfClass(World, ALevelQuestManager::StaticClass(), QuestManagers);
+
+    if (QuestManagers.Num() > 0)
+    {
+        ALevelQuestManager* QuestMgr = Cast<ALevelQuestManager>(QuestManagers[0]);
+        return QuestMgr;
+    }
+
+    return nullptr;
+}
+
+bool UDialogueManagerComponent::ValidateSubStepRequirement(const FDialogueData& DialogueData)
+{
+    if (DialogueData.RequiredSubStep < 0)
+    {
+        return true;
+    }
+
+    bool bCompleted = IsSubStepCompleted(DialogueData.RequiredSubStep);
+
+    return bCompleted;
 }
