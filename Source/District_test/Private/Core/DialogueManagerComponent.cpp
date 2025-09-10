@@ -2,6 +2,7 @@
 #include "Core/LevelQuestManager.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Save_Instance/Hamoina_GameInstance.h" // 추가된 include
 
 UDialogueManagerComponent::UDialogueManagerComponent()
 {
@@ -59,6 +60,15 @@ void UDialogueManagerComponent::ProgressDialogue()
 {
     if (!bIsInDialogue)
     {
+        return;
+    }
+
+    // ChainBreak 체크 추가
+    if (CurrentDialogue.bChainBreak)
+    {
+        // 체인 끊김 - 현재 대화 ID 저장하고 종료
+        SaveLastDialogueID(CurrentDialogueID);
+        EndDialogue();
         return;
     }
 
@@ -353,4 +363,31 @@ bool UDialogueManagerComponent::ValidateSubStepRequirement(const FDialogueData& 
     bool bCompleted = IsSubStepCompleted(DialogueData.RequiredSubStep);
 
     return bCompleted;
+}
+
+// 추가된 함수들
+void UDialogueManagerComponent::SaveLastDialogueID(const FString& DialogueID)
+{
+    // GameInstance를 통해 세이브 데이터에 저장
+    if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance()))
+    {
+        if (UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData())
+        {
+            SaveData->SetPendingTriggerDialogue(DialogueID);
+            UE_LOG(LogTemp, Warning, TEXT("Saved Last Dialogue ID: %s"), *DialogueID);
+        }
+    }
+}
+
+FString UDialogueManagerComponent::GetLastDialogueID()
+{
+    // GameInstance에서 로드
+    if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance()))
+    {
+        if (UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData())
+        {
+            return SaveData->GetPendingTriggerDialogue();
+        }
+    }
+    return "";
 }

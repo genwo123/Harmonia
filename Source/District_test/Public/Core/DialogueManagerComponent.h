@@ -78,7 +78,7 @@ struct FDialogueData : public FTableRowBase
     float DisplayDuration = 0.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control")
-    bool bAutoProgress = false;
+    bool bChainBreak = false;  // 추가된 필드
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Condition")
     TArray<FString> CustomConditions;
@@ -97,7 +97,7 @@ struct FDialogueData : public FTableRowBase
         bBlockOnIncomplete = false;
         DisplayDuration = 0.0f;
         bHasChoices = false;
-        bAutoProgress = false;
+        bChainBreak = false;  // 추가된 초기화
         CustomConditions = {};
     }
 };
@@ -180,6 +180,13 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     bool CheckAllConditions(const FDialogueData& DialogueData);
+
+    // 추가된 함수들
+    UFUNCTION(BlueprintCallable, Category = "Dialogue Save")
+    void SaveLastDialogueID(const FString& DialogueID);
+
+    UFUNCTION(BlueprintCallable, Category = "Dialogue Save")
+    FString GetLastDialogueID();
 
 protected:
     FDialogueData* GetDialogueData(const FString& DialogueID);

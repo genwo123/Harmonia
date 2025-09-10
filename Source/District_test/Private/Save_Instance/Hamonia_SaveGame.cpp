@@ -423,3 +423,12 @@ FString UHamonia_SaveGame::GetPendingTriggerDialogue() const
 {
     return ProgressData.PendingTriggerDialogue;
 }
+void UHamonia_SaveGame::SetCurrentDialogueID(const FString& DialogueID)
+{
+    UniaData.CurrentDialogueID = DialogueID;
+}
+
+FString UHamonia_SaveGame::GetCurrentDialogueID() const
+{
+    return UniaData.CurrentDialogueID;
+}

@@ -12,31 +12,6 @@ class UDialogueManagerComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUniaDialogueActivated, FString, DialogueID, UDataTable*, DataTable);
 
-USTRUCT(BlueprintType)
-struct FUniaQuestMacro
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
-	FString QuestID;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
-	FString ProgressDialogueID;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
-	FString CompletionDialogueID;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
-	TArray<FString> ProgressDialoguesByStep;
-
-	FUniaQuestMacro()
-	{
-		QuestID = TEXT("");
-		ProgressDialogueID = TEXT("");
-		CompletionDialogueID = TEXT("");
-	}
-};
-
 UCLASS()
 class DISTRICT_TEST_API AUnia : public ACharacter, public IInteractableInterface
 {
@@ -87,26 +62,16 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC Settings")
 	float LookAtSpeed = 2.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
-	UDataTable* MainStoryDialogueTable;
+	// MainStoryDialogueTable 제거됨
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
 	UDataTable* UniaRandomDialogueTable;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
-	FString DialogueSceneID = TEXT("Unia_Default_001");
+	FString DialogueSceneID = TEXT("Level_Main_0_001");  // 메인 스토리용
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story Progress")
-	FString RequiredQuestID;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Story Progress")
-	FString CurrentStoryDialogueID;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
-	TArray<FUniaQuestMacro> QuestMacroList;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Macro")
-	TArray<FString> CompletedMacroDialogues;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
+	FString UniaRandomDialogueID = TEXT("Unia_Random_001");  // 랜덤/매크로용
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Following")
 	bool bCanFollow = true;
@@ -155,23 +120,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Look At")
 	void LookAtPlayer();
 
-	UFUNCTION(BlueprintCallable, Category = "Story Progress")
-	void UpdateStoryProgress(const FString& NewStoryDialogueID);
-
 	UFUNCTION(BlueprintPure, Category = "Dialogue State")
 	bool IsInDialogue() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Dialogue State")
 	void SetDialogueState(bool bInDialogue);
-
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Quest")
-	bool IsQuestActive(const FString& QuestID);
-
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Quest")
-	bool IsQuestCompleted(const FString& QuestID);
-
-	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Quest")
-	bool CheckQuestRequirement(const FString& QuestID);
 
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	void HandlePlayerInteraction();
@@ -180,10 +133,6 @@ public:
 	bool IsPlayerInRange() const { return bPlayerInRange; }
 
 protected:
-	bool ShouldShowMainStoryDialogue();
-	FString GetCurrentStoryDialogueID();
-	FString GetRandomDialogueID();
-	FString GetQuestMacroDialogue();
 	void UpdateLookAtPlayer(float DeltaTime);
 	void FindPlayerPawn();
 };

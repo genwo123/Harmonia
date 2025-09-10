@@ -118,6 +118,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Progress")
     void SetLevelProgress(const FString& LevelName, float Progress);
 
+    UFUNCTION(BlueprintCallable, Category = "Unia Dialogue")
+    void SetCurrentDialogueID(const FString& DialogueID);
+
+    UFUNCTION(BlueprintPure, Category = "Unia Dialogue")
+    FString GetCurrentDialogueID() const;
+
     UFUNCTION(BlueprintCallable, Category = "Progress")
     void CompleteLevel(const FString& LevelName);
 
