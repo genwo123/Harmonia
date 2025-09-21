@@ -171,6 +171,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Note System")
     TArray<bool> UnlockedNotePages;
 
+
 protected:
     void InitializeNewSaveData();
     void CollectCurrentGameState();

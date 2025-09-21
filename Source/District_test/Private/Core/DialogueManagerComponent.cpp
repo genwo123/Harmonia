@@ -2,7 +2,7 @@
 #include "Core/LevelQuestManager.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
-#include "Save_Instance/Hamoina_GameInstance.h" // 추가된 include
+#include "Save_Instance/Hamoina_GameInstance.h"
 
 UDialogueManagerComponent::UDialogueManagerComponent()
 {
@@ -150,11 +150,19 @@ FString UDialogueManagerComponent::FindDialogueForCurrentLevel()
     }
 
     TArray<FString> LevelDialogues = GetDialoguesForLevel(CurrentLevel, EDialogueCategory::MainStory);
-
     for (const FString& DialogueID : LevelDialogues)
     {
         if (CanProgressToDialogue(DialogueID))
         {
+            // Lock 체크
+            if (FDialogueData* DialogueData = GetDialogueData(DialogueID))
+            {
+                if (DialogueData->bIsLocked)
+                {
+                    // 락 걸림 → 랜덤 힌트 반환
+                    return GetRandomFromFallbackTable(DialogueData->FallbackTableName);
+                }
+            }
             return DialogueID;
         }
     }
@@ -390,4 +398,40 @@ FString UDialogueManagerComponent::GetLastDialogueID()
         }
     }
     return "";
+}
+
+
+FString UDialogueManagerComponent::GetRandomFromFallbackTable(const FString& TableName)
+{
+    TArray<FString> HintDialogues = {
+        TEXT("Hint_Puzzle_001"),
+        TEXT("Hint_Puzzle_002"),
+        TEXT("Hint_Puzzle_003"),
+        TEXT("Hint_Puzzle_004"),
+        TEXT("Hint_Puzzle_005")
+    };
+
+    int32 RandomIndex = FMath::RandRange(0, HintDialogues.Num() - 1);
+    return HintDialogues[RandomIndex];
+}
+
+bool UDialogueManagerComponent::IsDialogueLocked(const FString& DialogueID)
+{
+    if (FDialogueData* DialogueData = GetDialogueData(DialogueID))
+    {
+        return DialogueData->bIsLocked;
+    }
+    return false;
+}
+
+FString UDialogueManagerComponent::GetLockedDialogueReplacement(const FString& DialogueID)
+{
+    if (FDialogueData* DialogueData = GetDialogueData(DialogueID))
+    {
+        if (DialogueData->bIsLocked)
+        {
+            return GetRandomFromFallbackTable(DialogueData->FallbackTableName);
+        }
+    }
+    return DialogueID; // 락이 없으면 원본 반환
 }

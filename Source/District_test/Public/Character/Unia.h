@@ -6,6 +6,7 @@
 #include "Interaction/InteractableInterface.h"
 #include "Interaction/InteractionEnums.h"
 #include "Engine/DataTable.h"
+#include "AI/UniaAIController.h"
 #include "Unia.generated.h"
 
 class UDialogueManagerComponent;
@@ -24,6 +25,21 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
+
+	UFUNCTION(BlueprintCallable, Category = "Story Control")
+	void EnableFollowing();
+
+	UFUNCTION(BlueprintCallable, Category = "AI Control")
+	class AUniaAIController* GetUniaAIController() const;
+
+	UFUNCTION(BlueprintCallable, Category = "AI Control")
+	void SetAIFollowing(bool bShouldFollow);
+
+	UFUNCTION(BlueprintCallable, Category = "AI Control")
+	void MoveAIToLocation(const FVector& Location);
+
+
+
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 

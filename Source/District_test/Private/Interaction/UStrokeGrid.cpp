@@ -13,8 +13,9 @@ UStrokeGrid::UStrokeGrid(const FObjectInitializer& ObjectInitializer)
     GameState = EStrokeGameState::Ready;
     bEditMode = false;
     CurrentTeleportID = 1;
+    CurrentStageNumber = 1;
+    CurrentStageRowName = TEXT("Stage_01");
 
-    // 에디터 기본값
     EditorGridSize = FIntPoint(5, 5);
     EditorStartPosition = FIntPoint(2, 4);
     EditorGoalPosition = FIntPoint(2, 0);
@@ -42,7 +43,14 @@ void UStrokeGrid::NativeConstruct()
         ResetButton->OnClicked.AddDynamic(this, &UStrokeGrid::OnResetClicked);
     }
 
-    ApplyEditorSettings();
+    if (StageDataTable && CurrentStageNumber > 0)
+    {
+        LoadStageFromDataTable(CurrentStageNumber);
+    }
+    else
+    {
+        ApplyEditorSettings();
+    }
 }
 
 FReply UStrokeGrid::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
@@ -56,22 +64,22 @@ FReply UStrokeGrid::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent
 
     if (PressedKey == EKeys::W || PressedKey == EKeys::Up)
     {
-        MovePlayer(FIntPoint(-1, 0)); // 위로 = X 감소
+        MovePlayer(FIntPoint(-1, 0));
         return FReply::Handled();
     }
     else if (PressedKey == EKeys::S || PressedKey == EKeys::Down)
     {
-        MovePlayer(FIntPoint(1, 0));  // 아래로 = X 증가
+        MovePlayer(FIntPoint(1, 0));
         return FReply::Handled();
     }
     else if (PressedKey == EKeys::A || PressedKey == EKeys::Left)
     {
-        MovePlayer(FIntPoint(0, -1)); // 왼쪽 = Y 감소
+        MovePlayer(FIntPoint(0, -1));
         return FReply::Handled();
     }
     else if (PressedKey == EKeys::D || PressedKey == EKeys::Right)
     {
-        MovePlayer(FIntPoint(0, 1));  // 오른쪽 = Y 증가
+        MovePlayer(FIntPoint(0, 1));
         return FReply::Handled();
     }
     else if (PressedKey == EKeys::R)
@@ -82,6 +90,99 @@ FReply UStrokeGrid::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent
 
     return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
+
+
+void UStrokeGrid::LoadStageFromDataTable(int32 StageNumber)
+{
+    if (!StageDataTable)
+    {
+        return;
+    }
+
+    FString RowName = GenerateRowNameFromStage(StageNumber);
+    LoadStageFromRowName(*RowName);
+}
+
+void UStrokeGrid::LoadStageFromRowName(FName RowName)
+{
+    if (!StageDataTable)
+    {
+        return;
+    }
+
+    FStrokeStageData* StageData = StageDataTable->FindRow<FStrokeStageData>(RowName, TEXT(""));
+
+    if (StageData)
+    {
+        CurrentStageRowName = RowName;
+
+        FString RowString = RowName.ToString();
+        if (RowString.StartsWith(TEXT("Stage_")))
+        {
+            FString NumberPart = RowString.RightChop(6);
+            CurrentStageNumber = FCString::Atoi(*NumberPart);
+        }
+
+        LoadStageDataFromTable(*StageData);
+    }
+}
+
+void UStrokeGrid::LoadStageDataFromTable(const FStrokeStageData& StageData)
+{
+    EditorGridSize = FIntPoint(StageData.GridWidth, StageData.GridHeight);
+    EditorStartPosition = StageData.StartPosition;
+    EditorGoalPosition = StageData.GoalPosition;
+    EditorRequiredPoints = StageData.RequiredPoints;
+    EditorWallPositions = StageData.WallPositions;
+    EditorTeleportPortals = StageData.TeleportPortals;
+
+    CurrentPuzzle.PuzzleName = StageData.StageName;
+    CurrentPuzzle.GridSize = FIntPoint(StageData.GridWidth, StageData.GridHeight);
+    CurrentPuzzle.StartPosition = StageData.StartPosition;
+    CurrentPuzzle.GoalPosition = StageData.GoalPosition;
+    CurrentPuzzle.RequiredPoints = StageData.RequiredPoints;
+    CurrentPuzzle.WallPositions = StageData.WallPositions;
+    CurrentPuzzle.TeleportPortals = StageData.TeleportPortals;
+
+    ApplyEditorSettings();
+
+    if (!bEditMode)
+    {
+        ResetGame();
+    }
+}
+
+void UStrokeGrid::PreviewStageInEditor()
+{
+    if (StageDataTable)
+    {
+        LoadStageFromDataTable(CurrentStageNumber);
+    }
+}
+
+void UStrokeGrid::SaveCurrentToDataTable()
+{
+    if (!StageDataTable)
+    {
+        return;
+    }
+
+    FStrokeStageData NewStageData;
+    NewStageData.StageName = FString::Printf(TEXT("Stage %d"), CurrentStageNumber);
+    NewStageData.GridWidth = EditorGridSize.X;
+    NewStageData.GridHeight = EditorGridSize.Y;
+    NewStageData.StartPosition = EditorStartPosition;
+    NewStageData.GoalPosition = EditorGoalPosition;
+    NewStageData.RequiredPoints = EditorRequiredPoints;
+    NewStageData.WallPositions = EditorWallPositions;
+    NewStageData.TeleportPortals = EditorTeleportPortals;
+}
+
+FString UStrokeGrid::GenerateRowNameFromStage(int32 StageNumber) const
+{
+    return FString::Printf(TEXT("Stage_%02d"), StageNumber);
+}
+
 
 void UStrokeGrid::ApplyEditorSettings()
 {
@@ -95,10 +196,8 @@ void UStrokeGrid::ApplyEditorSettings()
     CurrentPuzzle.TeleportPortals = EditorTeleportPortals;
 
     InitializeGrid(CurrentPuzzle);
-
-    UE_LOG(LogTemp, Log, TEXT("Applied editor settings - Grid: %dx%d"),
-        EditorGridSize.X, EditorGridSize.Y);
 }
+
 void UStrokeGrid::ResizeGrid()
 {
     ClampPositionsToGrid();
@@ -109,18 +208,14 @@ void UStrokeGrid::ResizeGrid()
     }
 
     ApplyEditorSettings();
-
-    UE_LOG(LogTemp, Log, TEXT("Grid resized to: %dx%d"), EditorGridSize.X, EditorGridSize.Y);
 }
 
 void UStrokeGrid::ValidatePositions()
 {
     TSet<FIntPoint> UsedPositions;
 
-    // 시작점 추가
     UsedPositions.Add(EditorStartPosition);
 
-    // 골 지점이 시작점과 같으면 조정
     if (EditorGoalPosition == EditorStartPosition)
     {
         if (EditorGoalPosition.Y > 0)
@@ -130,7 +225,6 @@ void UStrokeGrid::ValidatePositions()
     }
     UsedPositions.Add(EditorGoalPosition);
 
-    // RGB 포인트 중복 제거
     for (int32 i = EditorRequiredPoints.Num() - 1; i >= 0; i--)
     {
         if (UsedPositions.Contains(EditorRequiredPoints[i]))
@@ -143,7 +237,6 @@ void UStrokeGrid::ValidatePositions()
         }
     }
 
-    // 벽 중복 제거 (시작점, 골, RGB와 겹치는 것만)
     for (int32 i = EditorWallPositions.Num() - 1; i >= 0; i--)
     {
         if (UsedPositions.Contains(EditorWallPositions[i]))
@@ -152,7 +245,6 @@ void UStrokeGrid::ValidatePositions()
         }
     }
 
-    // 텔레포트 포털 중복 제거
     for (int32 i = EditorTeleportPortals.Num() - 1; i >= 0; i--)
     {
         if (UsedPositions.Contains(EditorTeleportPortals[i].PortalA))
@@ -164,7 +256,6 @@ void UStrokeGrid::ValidatePositions()
             EditorTeleportPortals[i].PortalB = FIntPoint(-1, -1);
         }
 
-        // 빈 포털 제거
         if (EditorTeleportPortals[i].PortalA.X == -1 && EditorTeleportPortals[i].PortalB.X == -1)
         {
             EditorTeleportPortals.RemoveAt(i);
@@ -177,8 +268,6 @@ void UStrokeGrid::TestPuzzle()
     bEditMode = false;
     ApplyEditorSettings();
     ResetGame();
-
-    UE_LOG(LogTemp, Log, TEXT("Testing puzzle..."));
 }
 
 void UStrokeGrid::AutoPlaceRGBPoints()
@@ -195,14 +284,12 @@ void UStrokeGrid::AutoPlaceRGBPoints()
     }
 
     ApplyEditorSettings();
-    UE_LOG(LogTemp, Log, TEXT("Auto-placed RGB points"));
 }
 
 void UStrokeGrid::ClearAllTeleportPortals()
 {
     EditorTeleportPortals.Empty();
     ApplyEditorSettings();
-    UE_LOG(LogTemp, Log, TEXT("Cleared all teleport portals"));
 }
 
 void UStrokeGrid::AutoCompleteTeleportPairs()
@@ -211,10 +298,8 @@ void UStrokeGrid::AutoCompleteTeleportPairs()
     {
         FTeleportPortal& Portal = EditorTeleportPortals[i];
 
-        // 미완성 포털 쌍 찾기
         if (Portal.PortalA.X == -1 || Portal.PortalB.X == -1)
         {
-            // 빈 공간에 자동 배치
             for (int32 Y = 0; Y < EditorGridSize.Y; Y++)
             {
                 for (int32 X = 0; X < EditorGridSize.X; X++)
@@ -237,7 +322,6 @@ void UStrokeGrid::AutoCompleteTeleportPairs()
                 if (Portal.PortalA.X != -1 && Portal.PortalB.X != -1) break;
             }
 
-            // 여전히 미완성이면 제거
             if (Portal.PortalA.X == -1 || Portal.PortalB.X == -1)
             {
                 EditorTeleportPortals.RemoveAt(i);
@@ -246,7 +330,6 @@ void UStrokeGrid::AutoCompleteTeleportPairs()
     }
 
     ApplyEditorSettings();
-    UE_LOG(LogTemp, Log, TEXT("Auto-completed teleport pairs"));
 }
 
 void UStrokeGrid::OnCellEditClicked(FIntPoint Position)
@@ -294,7 +377,6 @@ void UStrokeGrid::OnCellEditClicked(FIntPoint Position)
         break;
 
     default:
-        // 텔레포트 포털 처리 (기타 타입들)
         ToggleTeleportPortal(Position, CurrentTeleportID);
         break;
     }
@@ -302,7 +384,6 @@ void UStrokeGrid::OnCellEditClicked(FIntPoint Position)
     ApplyEditorSettings();
 }
 
-// ========== 게임 함수들 ==========
 
 void UStrokeGrid::InitializeGrid(const FStrokePuzzleData& PuzzleData)
 {
@@ -320,14 +401,12 @@ void UStrokeGrid::CreateCells()
 {
     if (!GridPanel)
     {
-        UE_LOG(LogTemp, Error, TEXT("GridPanel is NULL! Cannot create cells."));
         return;
     }
 
     UClass* ClassToUse = StrokeCellWidgetClass ? StrokeCellWidgetClass.Get() : UStrokeCell::StaticClass();
     CellWidgets.Empty();
 
-    // X와 Y 루프 순서 바꾸기 - X가 먼저 (열 우선)
     for (int32 X = 0; X < CurrentPuzzle.GridSize.X; X++)
     {
         for (int32 Y = 0; Y < CurrentPuzzle.GridSize.Y; Y++)
@@ -346,13 +425,197 @@ void UStrokeGrid::CreateCells()
             NewCell->SetCellData(CellData);
             NewCell->ParentGrid = this;
 
-            // GridPanel 배치도 Row=X, Column=Y로 변경
             GridPanel->AddChildToUniformGrid(NewCell, X, Y);
             CellWidgets.Add(NewCell);
         }
     }
 
     UpdateEditorVisuals();
+}
+
+void UStrokeGrid::ClearGrid()
+{
+    if (GridPanel)
+    {
+        GridPanel->ClearChildren();
+    }
+
+    CellWidgets.Empty();
+    VisitedPositions.Empty();
+    VisitedRequiredPoints.Empty();
+}
+
+bool UStrokeGrid::MovePlayer(FIntPoint Direction)
+{
+    FIntPoint NewPosition = CurrentPlayerPosition + Direction;
+
+    if (!IsValidMove(NewPosition))
+    {
+        return false;
+    }
+
+    UStrokeCell* OldCell = GetCellAtPosition(CurrentPlayerPosition);
+    if (OldCell)
+    {
+        OldCell->SetPlayerPresence(false);
+        OldCell->SetVisited(true);
+    }
+
+    VisitedPositions.Add(CurrentPlayerPosition);
+
+    EStrokeCellType OldCellType = GetCellTypeAtPosition(CurrentPlayerPosition);
+    if (OldCellType == EStrokeCellType::RedPoint ||
+        OldCellType == EStrokeCellType::GreenPoint ||
+        OldCellType == EStrokeCellType::BluePoint)
+    {
+        if (!VisitedRequiredPoints.Contains(CurrentPlayerPosition))
+        {
+            VisitedRequiredPoints.Add(CurrentPlayerPosition);
+        }
+    }
+
+    CurrentPlayerPosition = NewPosition;
+
+    FIntPoint FinalPosition = CheckTeleport(CurrentPlayerPosition);
+    if (FinalPosition != CurrentPlayerPosition)
+    {
+        CurrentPlayerPosition = FinalPosition;
+    }
+
+    UStrokeCell* NewCell = GetCellAtPosition(CurrentPlayerPosition);
+    if (NewCell)
+    {
+        NewCell->SetPlayerPresence(true);
+    }
+
+    UpdatePathDisplay();
+    CheckWinCondition();
+    UpdateStatusText();
+
+    return true;
+}
+
+bool UStrokeGrid::IsValidMove(FIntPoint NewPosition) const
+{
+    if (NewPosition.X < 0 || NewPosition.X >= CurrentPuzzle.GridSize.X ||
+        NewPosition.Y < 0 || NewPosition.Y >= CurrentPuzzle.GridSize.Y)
+    {
+        return false;
+    }
+
+    if (CurrentPuzzle.WallPositions.Contains(NewPosition))
+    {
+        return false;
+    }
+
+    if (VisitedPositions.Contains(NewPosition))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+void UStrokeGrid::CheckWinCondition()
+{
+    if (CurrentPlayerPosition != CurrentPuzzle.GoalPosition)
+    {
+        return;
+    }
+
+    if (!AreAllRequiredPointsVisited())
+    {
+        return;
+    }
+
+    GameState = EStrokeGameState::Won;
+    OnGameWon();
+}
+
+void UStrokeGrid::OnGameWon()
+{
+    for (UStrokeCell* Cell : CellWidgets)
+    {
+        if (Cell && Cell->CellButton)
+        {
+            Cell->CellButton->SetIsEnabled(false);
+        }
+    }
+
+    FTimerHandle TimerHandle;
+    GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
+        {
+            OnPuzzleCompleted();
+        }, 1.0f, false);
+}
+
+void UStrokeGrid::ResetGame()
+{
+    GameState = EStrokeGameState::Playing;
+    CurrentPlayerPosition = CurrentPuzzle.StartPosition;
+    VisitedPositions.Empty();
+    VisitedRequiredPoints.Empty();
+
+    for (UStrokeCell* Cell : CellWidgets)
+    {
+        if (Cell)
+        {
+            Cell->SetVisited(false);
+            Cell->SetPlayerPresence(false);
+
+            if (Cell->CellButton)
+            {
+                Cell->CellButton->SetIsEnabled(true);
+            }
+        }
+    }
+
+    UStrokeCell* StartCell = GetCellAtPosition(CurrentPlayerPosition);
+    if (StartCell)
+    {
+        StartCell->SetPlayerPresence(true);
+    }
+
+    UpdatePathDisplay();
+    UpdateStatusText();
+    SetKeyboardFocus();
+}
+
+FIntPoint UStrokeGrid::CheckTeleport(FIntPoint Position)
+{
+    for (const FTeleportPortal& Portal : CurrentPuzzle.TeleportPortals)
+    {
+        if (Portal.PortalA == Position && Portal.PortalB.X != -1)
+        {
+            return Portal.PortalB;
+        }
+        else if (Portal.PortalB == Position && Portal.PortalA.X != -1)
+        {
+            return Portal.PortalA;
+        }
+    }
+    return Position;
+}
+
+UStrokeCell* UStrokeGrid::GetCellAtPosition(FIntPoint Position) const
+{
+    int32 Index = GetCellIndex(Position);
+    if (Index >= 0 && Index < CellWidgets.Num())
+    {
+        return CellWidgets[Index];
+    }
+    return nullptr;
+}
+
+int32 UStrokeGrid::GetCellIndex(FIntPoint Position) const
+{
+    if (Position.X < 0 || Position.X >= CurrentPuzzle.GridSize.X ||
+        Position.Y < 0 || Position.Y >= CurrentPuzzle.GridSize.Y)
+    {
+        return -1;
+    }
+
+    return Position.X * CurrentPuzzle.GridSize.Y + Position.Y;
 }
 
 EStrokeCellType UStrokeGrid::GetCellTypeAtPosition(FIntPoint Position) const
@@ -383,7 +646,6 @@ EStrokeCellType UStrokeGrid::GetCellTypeAtPosition(FIntPoint Position) const
         return EStrokeCellType::Wall;
     }
 
-    // 텔레포트 포털인 경우 Empty로 처리 (색상은 별도 처리)
     for (const FTeleportPortal& Portal : CurrentPuzzle.TeleportPortals)
     {
         if (Portal.PortalA == Position || Portal.PortalB == Position)
@@ -393,158 +655,6 @@ EStrokeCellType UStrokeGrid::GetCellTypeAtPosition(FIntPoint Position) const
     }
 
     return EStrokeCellType::Empty;
-}
-
-void UStrokeGrid::ClearGrid()
-{
-    if (GridPanel)
-    {
-        GridPanel->ClearChildren();
-    }
-
-    CellWidgets.Empty();
-    VisitedPositions.Empty();
-    VisitedRequiredPoints.Empty();
-}
-
-bool UStrokeGrid::MovePlayer(FIntPoint Direction)
-{
-    
-
-    FIntPoint NewPosition = CurrentPlayerPosition + Direction;
-
-
-
-    if (!IsValidMove(NewPosition))
-    {
-        return false;
-    }
-
-    // 이전 위치 처리
-    UStrokeCell* OldCell = GetCellAtPosition(CurrentPlayerPosition);
-    if (OldCell)
-    {
-        OldCell->SetPlayerPresence(false);
-        OldCell->SetVisited(true);
-    }
-
-    VisitedPositions.Add(CurrentPlayerPosition);
-
-    // RGB 포인트 방문 체크
-    EStrokeCellType OldCellType = GetCellTypeAtPosition(CurrentPlayerPosition);
-    if (OldCellType == EStrokeCellType::RedPoint ||
-        OldCellType == EStrokeCellType::GreenPoint ||
-        OldCellType == EStrokeCellType::BluePoint)
-    {
-        if (!VisitedRequiredPoints.Contains(CurrentPlayerPosition))
-        {
-            VisitedRequiredPoints.Add(CurrentPlayerPosition);
-        }
-    }
-
-    // 새 위치로 이동
-    CurrentPlayerPosition = NewPosition;
-
-    // 텔레포트 체크
-    FIntPoint FinalPosition = CheckTeleport(CurrentPlayerPosition);
-    if (FinalPosition != CurrentPlayerPosition)
-    {
-        CurrentPlayerPosition = FinalPosition;
-        UE_LOG(LogTemp, Log, TEXT("Teleported from (%d,%d) to (%d,%d)"),
-            NewPosition.X, NewPosition.Y, FinalPosition.X, FinalPosition.Y);
-    }
-
-    UStrokeCell* NewCell = GetCellAtPosition(CurrentPlayerPosition);
-    if (NewCell)
-    {
-        NewCell->SetPlayerPresence(true);
-    }
-
-    // 경로 표시 업데이트 추가
-    UpdatePathDisplay();
-
-    CheckWinCondition();
-    UpdateStatusText();
-
-    return true;
-}
-
-bool UStrokeGrid::IsValidMove(FIntPoint NewPosition) const
-{
-    if (NewPosition.X < 0 || NewPosition.X >= CurrentPuzzle.GridSize.X ||
-        NewPosition.Y < 0 || NewPosition.Y >= CurrentPuzzle.GridSize.Y)
-    {
-        return false;
-    }
-
-    if (CurrentPuzzle.WallPositions.Contains(NewPosition))
-    {
-        return false;
-    }
-
-    if (VisitedPositions.Contains(NewPosition))
-    {
-        return false;
-    }
-
-    return true;
-}
-
-UStrokeCell* UStrokeGrid::GetCellAtPosition(FIntPoint Position) const
-{
-    int32 Index = GetCellIndex(Position);
-    if (Index >= 0 && Index < CellWidgets.Num())
-    {
-        return CellWidgets[Index];
-    }
-    return nullptr;
-}
-
-int32 UStrokeGrid::GetCellIndex(FIntPoint Position) const
-{
-    if (Position.X < 0 || Position.X >= CurrentPuzzle.GridSize.X ||
-        Position.Y < 0 || Position.Y >= CurrentPuzzle.GridSize.Y)
-    {
-        return -1;
-    }
-
-    return Position.X * CurrentPuzzle.GridSize.Y + Position.Y;
-}
-
-FIntPoint UStrokeGrid::CheckTeleport(FIntPoint Position)
-{
-    for (const FTeleportPortal& Portal : CurrentPuzzle.TeleportPortals)
-    {
-        if (Portal.PortalA == Position && Portal.PortalB.X != -1)
-        {
-            return Portal.PortalB;
-        }
-        else if (Portal.PortalB == Position && Portal.PortalA.X != -1)
-        {
-            return Portal.PortalA;
-        }
-    }
-    return Position;
-}
-
-void UStrokeGrid::CheckWinCondition()
-{
-    if (CurrentPlayerPosition != CurrentPuzzle.GoalPosition)
-    {
-        return;
-    }
-
-    if (!AreAllRequiredPointsVisited())
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Reached goal but missing required points!"));
-        return;
-    }
-
-    GameState = EStrokeGameState::Won;
-    UpdateStatusText();
-    OnGameWon();
-
-    UE_LOG(LogTemp, Log, TEXT("GAME WON! All required points visited and reached goal!"));
 }
 
 bool UStrokeGrid::AreAllRequiredPointsVisited() const
@@ -560,72 +670,10 @@ bool UStrokeGrid::AreAllRequiredPointsVisited() const
     return true;
 }
 
-void UStrokeGrid::OnGameWon()
-{
-    // 클리어 메시지 표시
-    if (StatusText)
-    {
-        StatusText->SetText(FText::FromString(TEXT("Clear!")));
-    }
-
-    // 입력 비활성화
-    for (UStrokeCell* Cell : CellWidgets)
-    {
-        if (Cell && Cell->CellButton)
-        {
-            Cell->CellButton->SetIsEnabled(false);
-        }
-    }
-
-    // 3초 후 Blueprint 이벤트 호출
-    FTimerHandle TimerHandle;
-    GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
-        {
-            OnPuzzleCompleted(); // Blueprint에서 구현할 이벤트
-        }, 3.0f, false);
-}
-
-void UStrokeGrid::ResetGame()
-{
-    GameState = EStrokeGameState::Playing;
-    CurrentPlayerPosition = CurrentPuzzle.StartPosition;
-    VisitedPositions.Empty();
-    VisitedRequiredPoints.Empty();
-
-    for (UStrokeCell* Cell : CellWidgets)
-    {
-        if (Cell)
-        {
-            Cell->SetVisited(false);
-            Cell->SetPlayerPresence(false);
-
-            if (Cell->CellButton)
-            {
-                Cell->CellButton->SetIsEnabled(true);
-            }
-        }
-    }
-
-    UStrokeCell* StartCell = GetCellAtPosition(CurrentPlayerPosition);
-    if (StartCell)
-    {
-        StartCell->SetPlayerPresence(true);
-    }
-
-    // 경로 표시 초기화
-    UpdatePathDisplay();
-
-    UpdateStatusText();
-    SetKeyboardFocus();
-
-}
-
-
 void UStrokeGrid::UpdatePathDisplay()
 {
     if (!bShowPath) return;
 
-    // 현재 플레이어 위치가 아닌 셀들만 업데이트
     for (UStrokeCell* Cell : CellWidgets)
     {
         if (Cell && Cell->CellData.GridPosition != CurrentPlayerPosition)
@@ -634,14 +682,11 @@ void UStrokeGrid::UpdatePathDisplay()
         }
         else if (Cell)
         {
-            // 현재 플레이어 위치는 라인 없음
             Cell->ConnectedDirections.Empty();
             Cell->DrawPathLines();
         }
     }
 }
-
-
 
 void UStrokeGrid::UpdateStatusText()
 {
@@ -654,28 +699,26 @@ void UStrokeGrid::UpdateStatusText()
     case EStrokeGameState::Ready:
         if (bEditMode)
         {
-            StatusString = TEXT("EDIT MODE - Click cells to modify, Test Puzzle to play");
+            StatusString = TEXT("EDIT MODE");
         }
         else
         {
-            StatusString = TEXT("Press any key to start");
+            StatusString = TEXT("Ready");
         }
         break;
 
     case EStrokeGameState::Playing:
-        StatusString = FString::Printf(TEXT("Points: %d/%d | Position: (%d, %d) | WASD to move | R to reset"),
+        StatusString = FString::Printf(TEXT("Points: %d/%d"),
             VisitedRequiredPoints.Num(),
-            CurrentPuzzle.RequiredPoints.Num(),
-            CurrentPlayerPosition.X,
-            CurrentPlayerPosition.Y);
+            CurrentPuzzle.RequiredPoints.Num());
         break;
 
     case EStrokeGameState::Won:
-        StatusString = TEXT("CONGRATULATIONS! Press R to play again");
+        StatusString = TEXT("Clear!");
         break;
 
     case EStrokeGameState::Lost:
-        StatusString = TEXT("Game Over! Press R to try again");
+        StatusString = TEXT("Failed");
         break;
     }
 
@@ -694,8 +737,6 @@ void UStrokeGrid::UpdatePlayerVisual()
     }
 }
 
-// ========== 에디터 내부 함수들 ==========
-
 void UStrokeGrid::UpdateEditorVisuals()
 {
     for (UStrokeCell* Cell : CellWidgets)
@@ -706,6 +747,7 @@ void UStrokeGrid::UpdateEditorVisuals()
         }
     }
 }
+
 
 bool UStrokeGrid::IsPositionValid(FIntPoint Position) const
 {
@@ -768,10 +810,6 @@ void UStrokeGrid::AutoPlaceStartGoal()
 {
     EditorStartPosition = FIntPoint(EditorGridSize.X / 2, EditorGridSize.Y - 1);
     EditorGoalPosition = FIntPoint(EditorGridSize.X / 2, 0);
-
-    UE_LOG(LogTemp, Log, TEXT("Auto-placed Start: (%d,%d), Goal: (%d,%d)"),
-        EditorStartPosition.X, EditorStartPosition.Y,
-        EditorGoalPosition.X, EditorGoalPosition.Y);
 }
 
 void UStrokeGrid::SetupDefaultPuzzle()
@@ -880,4 +918,3 @@ void UStrokeGrid::OnResetClicked()
         ResetGame();
     }
 }
-

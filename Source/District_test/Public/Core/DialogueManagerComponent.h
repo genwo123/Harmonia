@@ -83,6 +83,15 @@ struct FDialogueData : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Condition")
     TArray<FString> CustomConditions;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lock System")
+    bool bIsLocked = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lock System")
+    FString UnlockCondition = "";
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lock System")
+    FString FallbackTableName = "DT_Unia_Random";
+
     FDialogueData()
     {
         DialogueID = "";
@@ -99,6 +108,9 @@ struct FDialogueData : public FTableRowBase
         bHasChoices = false;
         bChainBreak = false;  // 추가된 초기화
         CustomConditions = {};
+        bIsLocked = false;
+        UnlockCondition = "";
+        FallbackTableName = "DT_Unia_Random";
     }
 };
 
@@ -188,9 +200,17 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Dialogue Save")
     FString GetLastDialogueID();
 
+    UFUNCTION(BlueprintCallable, Category = "Dialogue Lock")
+    bool IsDialogueLocked(const FString& DialogueID);
+
+    UFUNCTION(BlueprintCallable, Category = "Dialogue Lock")
+    FString GetLockedDialogueReplacement(const FString& DialogueID);
+
 protected:
     FDialogueData* GetDialogueData(const FString& DialogueID);
     void ProcessDialogue(const FDialogueData& DialogueData);
+
+    FString GetRandomFromFallbackTable(const FString& TableName);
 
     class ALevelQuestManager* FindLevelQuestManager();
     bool ValidateSubStepRequirement(const FDialogueData& DialogueData);

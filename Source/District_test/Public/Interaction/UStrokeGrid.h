@@ -7,6 +7,7 @@
 #include "Components/Button.h"
 #include "Core/StrokeGameTypes.h"
 #include "Interaction/UStrokeCell.h"
+#include "Engine/DataTable.h"
 #include "UStrokeGrid.generated.h"
 
 UCLASS()
@@ -60,6 +61,17 @@ public:
 
     UPROPERTY(meta = (BindWidget), BlueprintReadWrite, Category = "Widgets")
     class UButton* ResetButton;
+
+    // ========== DataTable 관련 추가 ==========
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Config")
+    UDataTable* StageDataTable;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Config",
+        meta = (ClampMin = "1", ClampMax = "20"))
+    int32 CurrentStageNumber = 1;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Config")
+    FName CurrentStageRowName = TEXT("Stage_01");
 
     // 에디터 모드 관련
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Editor Mode")
@@ -115,9 +127,21 @@ public:
     EStrokeGameState GameState = EStrokeGameState::Ready;
 
 public:
-
     UFUNCTION(BlueprintCallable, Category = "Path Display")
     void UpdatePathDisplay();
+
+    // ========== DataTable 관련 함수들 추가 ==========
+    UFUNCTION(BlueprintCallable, Category = "Stage")
+    void LoadStageFromDataTable(int32 StageNumber);
+
+    UFUNCTION(BlueprintCallable, Category = "Stage")
+    void LoadStageFromRowName(FName RowName);
+
+    UFUNCTION(BlueprintCallable, CallInEditor, Category = "Stage Editor")
+    void PreviewStageInEditor();
+
+    UFUNCTION(BlueprintCallable, CallInEditor, Category = "Stage Editor")
+    void SaveCurrentToDataTable();
 
     // 에디터 함수들 - Blueprint에서도 호출 가능하게 수정
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "Editor")
@@ -192,6 +216,9 @@ protected:
     FTeleportPortal* FindTeleportPortal(int32 PortalID);
     void ToggleTeleportPortal(FIntPoint Position, int32 PortalID);
     void RemoveFromAllTeleportPortals(FIntPoint Position);
+
+    void LoadStageDataFromTable(const FStrokeStageData& StageData);
+    FString GenerateRowNameFromStage(int32 StageNumber) const;
 
     // 버튼 이벤트
     UFUNCTION()

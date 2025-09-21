@@ -28,6 +28,9 @@ AUnia::AUnia()
     GetCharacterMovement()->JumpZVelocity = 0.0f;
     GetCharacterMovement()->AirControl = 0.0f;
 
+    AIControllerClass = AUniaAIController::StaticClass();
+
+
     bIsFollowingPlayer = false;
     bPlayerInRange = false;
 }
@@ -255,4 +258,40 @@ void AUnia::LookAtPlayer()
     DirectionToPlayer.Normalize();
     FRotator TargetRotation = DirectionToPlayer.Rotation();
     SetActorRotation(TargetRotation);
+}
+
+AUniaAIController* AUnia::GetUniaAIController() const
+{
+    return Cast<AUniaAIController>(GetController());
+}
+
+void AUnia::SetAIFollowing(bool bShouldFollow)
+{
+    if (AUniaAIController* AIController = GetUniaAIController())
+    {
+        if (bShouldFollow)
+        {
+            AIController->StartFollowingPlayer();
+        }
+        else
+        {
+            AIController->StopFollowing();
+        }
+    }
+
+    SetFollowPlayer(bShouldFollow);
+}
+
+void AUnia::MoveAIToLocation(const FVector& Location)
+{
+    if (AUniaAIController* AIController = GetUniaAIController())
+    {
+        AIController->MoveToTargetLocation(Location);
+    }
+}
+
+void AUnia::EnableFollowing()
+{
+    bCanFollow = true;
+    SetAIFollowing(true);
 }

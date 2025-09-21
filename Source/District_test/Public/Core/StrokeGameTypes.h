@@ -449,3 +449,42 @@ struct DISTRICT_TEST_API FStrokeGameSettings
         MovementSpeed = 1.0f;
     }
 };
+
+USTRUCT(BlueprintType)
+struct DISTRICT_TEST_API FStrokeStageData : public FTableRowBase
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic Info")
+    FString StageName = TEXT("Default Stage");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    int32 GridWidth = 7;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    int32 GridHeight = 7;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Points")
+    FIntPoint StartPosition = FIntPoint(0, 6);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Points")
+    FIntPoint GoalPosition = FIntPoint(6, 0);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Required Points")
+    TArray<FIntPoint> RequiredPoints;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Walls")
+    TArray<FIntPoint> WallPositions;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Teleport")
+    TArray<FTeleportPortal> TeleportPortals;
+
+    FStrokeStageData()
+    {
+        StageName = TEXT("Default Stage");
+        GridWidth = 7;
+        GridHeight = 7;
+        StartPosition = FIntPoint(0, 6);
+        GoalPosition = FIntPoint(6, 0);
+    }
+};
