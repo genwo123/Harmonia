@@ -10,6 +10,8 @@
 #include "Unia.generated.h"
 
 class UDialogueManagerComponent;
+class AUniaWaitSpot;
+class UHamoina_GameInstance;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUniaDialogueActivated, FString, DialogueID, UDataTable*, DataTable);
 
@@ -25,7 +27,6 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-
 	UFUNCTION(BlueprintCallable, Category = "Story Control")
 	void EnableFollowing();
 
@@ -38,7 +39,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI Control")
 	void MoveAIToLocation(const FVector& Location);
 
+	UFUNCTION(BlueprintCallable, Category = "AI Control")
+	bool MoveToWaitSpot(const FString& SpotID);
 
+	UFUNCTION(BlueprintCallable, Category = "AI Control")
+	void SetDialogueSpotMapping(const FString& DialogueID, const FString& SpotID);
+
+	UFUNCTION(BlueprintCallable, Category = "AI Control")
+	void CheckDialogueForAIAction(const FString& DialogueID);
+
+	UFUNCTION(BlueprintCallable, Category = "Game Instance")
+	void SaveStateToGameInstance();
+
+	UFUNCTION(BlueprintCallable, Category = "Game Instance")
+	void LoadStateFromGameInstance();
 
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -78,22 +92,26 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC Settings")
 	float LookAtSpeed = 2.0f;
 
-	// MainStoryDialogueTable 제거됨
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
 	UDataTable* UniaRandomDialogueTable;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
-	FString DialogueSceneID = TEXT("Level_Main_0_001");  // 메인 스토리용
+	FString DialogueSceneID = TEXT("Level_Main_0_001");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
-	FString UniaRandomDialogueID = TEXT("Unia_Random_001");  // 랜덤/매크로용
+	FString UniaRandomDialogueID = TEXT("Unia_Random_001");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Following")
 	bool bCanFollow = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Following")
 	bool bIsFollowingPlayer;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Events")
+	TArray<FString> FollowActivationDialogues;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Events")
+	TMap<FString, FString> DialogueToSpotMap;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
 	bool bPlayerInRange = false;
@@ -114,6 +132,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	void StartDialogue(AActor* Interactor);
+
+	UFUNCTION(BlueprintCallable, Category = "Dialogue")
+	void EndDialogue();
 
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Dialogue")
 	void OnDialogueStarted();
@@ -151,4 +172,7 @@ public:
 protected:
 	void UpdateLookAtPlayer(float DeltaTime);
 	void FindPlayerPawn();
+
+private:
+	AUniaWaitSpot* FindWaitSpot(const FString& SpotID);
 };

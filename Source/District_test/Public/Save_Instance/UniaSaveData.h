@@ -96,7 +96,9 @@ struct DISTRICT_TEST_API FUniaSaveData
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relationship")
     TMap<FString, int32> InteractionHistory; // 상호작용 이력
 
-    // 생성자
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unia State")
+    bool bCanFollow = false;
+
     FUniaSaveData()
     {
         UniaLocation = FVector::ZeroVector;
@@ -104,6 +106,7 @@ struct DISTRICT_TEST_API FUniaSaveData
         CurrentLevel = TEXT("Level_Main_1");
         CurrentState = EUniaSaveState::Idle;
         bIsFollowingPlayer = false;
+        bCanFollow = false;  // 이 줄 추가
         bCanInteract = true;
         FollowDistance = 200.0f;
         CurrentQuestPhase = TEXT("Prologue");

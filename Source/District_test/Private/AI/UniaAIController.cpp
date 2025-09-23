@@ -14,7 +14,6 @@ AUniaAIController::AUniaAIController()
 void AUniaAIController::BeginPlay()
 {
     Super::BeginPlay();
-
     if (BehaviorTreeAsset)
     {
         RunBehaviorTree(BehaviorTreeAsset);
@@ -24,7 +23,6 @@ void AUniaAIController::BeginPlay()
 void AUniaAIController::OnPossess(APawn* InPawn)
 {
     Super::OnPossess(InPawn);
-
     if (InPawn)
     {
         if (ACharacter* UniaCharacter = Cast<ACharacter>(InPawn))
@@ -61,6 +59,7 @@ void AUniaAIController::MoveToTargetLocation(const FVector& TargetLocation)
     UBlackboardComponent* BBComp = GetBlackboardComponent();
     if (BBComp)
     {
+        BBComp->SetValueAsBool(TEXT("bCanFollow"), false);
         BBComp->SetValueAsVector(TEXT("TargetLocation"), TargetLocation);
     }
 }
@@ -99,8 +98,8 @@ void AUniaAIController::SetBlackboardValues()
     UBlackboardComponent* BBComp = GetBlackboardComponent();
     if (BBComp)
     {
-        BBComp->SetValueAsFloat(TEXT("FollowDistance"), 200.0f);
-        BBComp->SetValueAsFloat(TEXT("StopDistance"), 100.0f);
+        BBComp->SetValueAsFloat(TEXT("FollowDistance"), 400.0f);
+        BBComp->SetValueAsFloat(TEXT("StopDistance"), 200.0f);
         BBComp->SetValueAsFloat(TEXT("TeleportDistance"), 1000.0f);
         BBComp->SetValueAsBool(TEXT("bCanFollow"), false);
         BBComp->SetValueAsBool(TEXT("bIsInDialogue"), false);

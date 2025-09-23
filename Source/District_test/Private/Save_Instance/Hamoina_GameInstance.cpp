@@ -352,6 +352,23 @@ void UHamoina_GameInstance::OnDialogueCompleted(const FString& DialogueID, bool 
     }
 }
 
+void UHamoina_GameInstance::SaveUniaAIState(bool bCanFollow)
+{
+    if (CurrentSaveData)
+    {
+        CurrentSaveData->UniaData.bCanFollow = bCanFollow;
+    }
+}
+
+bool UHamoina_GameInstance::GetUniaAIState() const
+{
+    if (CurrentSaveData)
+    {
+        return CurrentSaveData->UniaData.bCanFollow;
+    }
+    return false;
+}
+
 void UHamoina_GameInstance::DevSaveToStage(int32 StageNumber)
 {
     SaveToStageSlot(StageNumber);

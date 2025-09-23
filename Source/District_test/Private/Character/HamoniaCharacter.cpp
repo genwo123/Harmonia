@@ -648,8 +648,7 @@ void AHamoniaCharacter::OnDialogueStarted(ESpeakerType Speaker, FText DialogueTe
 
 void AHamoniaCharacter::OnDialogueEnded()
 {
-	// 대화 종료 시 처리 (입력 모드 복원 등)
-	UE_LOG(LogTemp, Log, TEXT("Dialogue Ended"));
+
 }
 
 UDialogueManagerComponent* AHamoniaCharacter::GetDialogueManager()

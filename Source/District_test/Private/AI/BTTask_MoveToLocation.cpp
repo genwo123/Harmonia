@@ -15,14 +15,12 @@ EBTNodeResult::Type UBTTask_MoveToLocation::ExecuteTask(UBehaviorTreeComponent& 
 {
     AAIController* AIController = OwnerComp.GetAIOwner();
     UBlackboardComponent* BlackboardComp = OwnerComp.GetBlackboardComponent();
-
     if (!AIController || !BlackboardComp)
     {
         return EBTNodeResult::Failed;
     }
 
     FVector TargetLocation = BlackboardComp->GetValueAsVector(TargetLocationKey.SelectedKeyName);
-
     if (TargetLocation.IsZero())
     {
         return EBTNodeResult::Failed;
@@ -37,6 +35,7 @@ EBTNodeResult::Type UBTTask_MoveToLocation::ExecuteTask(UBehaviorTreeComponent& 
     float CurrentDistance = FVector::Dist(OwnPawn->GetActorLocation(), TargetLocation);
     if (CurrentDistance <= AcceptanceRadius)
     {
+        BlackboardComp->ClearValue(TargetLocationKey.SelectedKeyName);
         return EBTNodeResult::Succeeded;
     }
 
@@ -45,7 +44,6 @@ EBTNodeResult::Type UBTTask_MoveToLocation::ExecuteTask(UBehaviorTreeComponent& 
     MoveRequest.SetAcceptanceRadius(AcceptanceRadius);
 
     FPathFollowingRequestResult RequestResult = AIController->MoveTo(MoveRequest);
-
     if (RequestResult.Code == EPathFollowingRequestResult::RequestSuccessful)
     {
         MoveRequestID = RequestResult.MoveId;
@@ -63,12 +61,17 @@ EBTNodeResult::Type UBTTask_MoveToLocation::AbortTask(UBehaviorTreeComponent& Ow
         AIController->StopMovement();
         MoveRequestID = FAIRequestID::InvalidRequest;
     }
-
     return EBTNodeResult::Aborted;
 }
 
 void UBTTask_MoveToLocation::OnTaskFinished(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, EBTNodeResult::Type TaskResult)
 {
+    UBlackboardComponent* BlackboardComp = OwnerComp.GetBlackboardComponent();
+    if (TaskResult == EBTNodeResult::Succeeded && BlackboardComp)
+    {
+        BlackboardComp->ClearValue(TargetLocationKey.SelectedKeyName);
+    }
+
     MoveRequestID = FAIRequestID::InvalidRequest;
     Super::OnTaskFinished(OwnerComp, NodeMemory, TaskResult);
 }

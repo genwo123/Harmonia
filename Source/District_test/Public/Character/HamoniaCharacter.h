@@ -185,24 +185,23 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     void CheckForInteractables();
 
-    // 회전 및 밀기 함수 - C++에서 기본 구현 + BP에서 확장
+
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     void RotateObject();
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Interaction")
-    void OnRotateObject(); // 블루프린트에서 구현 가능
+    void OnRotateObject();
 
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     void PushObject();
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Interaction")
-    void OnPushObject(); // 블루프린트에서 구현 가능
+    void OnPushObject();
 
-    // 디버그용 시각적 표시
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void DrawDebugInteractionLine();
 
-    // 상호작용 정보 획득 함수들
+
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     EInteractionType GetCurrentInteractionType() const;
 
@@ -212,7 +211,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     FString GetCurrentInteractionText() const;
 
-    // 들고 있는 오브젝트 찾기 함수
+
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     AActor* GetHeldObject();
 

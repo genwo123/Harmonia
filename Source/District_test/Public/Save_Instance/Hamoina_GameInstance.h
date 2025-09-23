@@ -132,6 +132,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     void OnDialogueCompleted(const FString& DialogueID, bool bIsStoryDialogue = false);
 
+    UFUNCTION(BlueprintCallable, Category = "Unia AI")
+    void SaveUniaAIState(bool bCanFollow);
+
+    UFUNCTION(BlueprintPure, Category = "Unia AI")
+    bool GetUniaAIState() const;
+
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void DevSaveToStage(int32 StageNumber);
 
@@ -170,7 +176,6 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Note System")
     TArray<bool> UnlockedNotePages;
-
 
 protected:
     void InitializeNewSaveData();

@@ -6,6 +6,9 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Core/DialogueManagerComponent.h"
 #include "Character/HamoniaCharacter.h"
+#include "Character/UniaWaitSpot.h"
+#include "Save_Instance/Hamoina_GameInstance.h"
+#include "BehaviorTree/BlackboardComponent.h"
 
 AUnia::AUnia()
 {
@@ -30,7 +33,6 @@ AUnia::AUnia()
 
     AIControllerClass = AUniaAIController::StaticClass();
 
-
     bIsFollowingPlayer = false;
     bPlayerInRange = false;
 }
@@ -45,6 +47,17 @@ void AUnia::BeginPlay()
         InteractionSphere->SetSphereRadius(InteractionRange);
         InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &AUnia::OnInteractionSphereBeginOverlap);
         InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &AUnia::OnInteractionSphereEndOverlap);
+    }
+
+    bCanFollow = false;
+
+    if (AUniaAIController* AIController = GetUniaAIController())
+    {
+        AIController->StopFollowing();
+        if (AIController->GetBlackboardComponent())
+        {
+            AIController->GetBlackboardComponent()->ClearValue(TEXT("TargetLocation"));
+        }
     }
 }
 
@@ -142,6 +155,12 @@ void AUnia::StartDialogue(AActor* Interactor)
         StopFollowingPlayer();
     }
 
+    if (AUniaAIController* AIController = GetUniaAIController())
+    {
+        AIController->SetDialogueMode(true);
+        AIController->StopFollowing();
+    }
+
     if (PlayerPawn)
     {
         FVector DirectionToPlayer = PlayerPawn->GetActorLocation() - GetActorLocation();
@@ -185,7 +204,6 @@ void AUnia::StartDialogue(AActor* Interactor)
         DialogueIDToUse = UniaRandomDialogueID;
     }
 
-    // 핵심: DialogueManager로 대화 시작하고 UI 연결은 Blueprint에서 처리
     OnUniaDialogueActivated.Broadcast(DialogueIDToUse, TableToUse);
     OnDialogueStarted();
 }
@@ -294,4 +312,103 @@ void AUnia::EnableFollowing()
 {
     bCanFollow = true;
     SetAIFollowing(true);
+}
+
+void AUnia::EndDialogue()
+{
+    if (AUniaAIController* AIController = GetUniaAIController())
+    {
+        AIController->SetDialogueMode(false);
+
+        if (bCanFollow)
+        {
+            AIController->StartFollowingPlayer();
+        }
+    }
+
+    if (DialogueManager)
+    {
+        DialogueManager->bIsInDialogue = false;
+    }
+}
+
+bool AUnia::MoveToWaitSpot(const FString& SpotID)
+{
+    AUniaWaitSpot* TargetSpot = FindWaitSpot(SpotID);
+    if (!TargetSpot)
+    {
+        return false;
+    }
+
+    if (AUniaAIController* AIController = GetUniaAIController())
+    {
+        AIController->MoveToTargetLocation(TargetSpot->GetWaitLocation());
+        return true;
+    }
+
+    return false;
+}
+
+void AUnia::SetDialogueSpotMapping(const FString& DialogueID, const FString& SpotID)
+{
+    DialogueToSpotMap.Add(DialogueID, SpotID);
+}
+
+void AUnia::CheckDialogueForAIAction(const FString& DialogueID)
+{
+    // 디버깅용 로그 추가
+    UE_LOG(LogTemp, Warning, TEXT("CheckDialogueForAIAction called with: %s"), *DialogueID);
+
+    if (FollowActivationDialogues.Contains(DialogueID))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Enabling following for dialogue: %s"), *DialogueID);
+        EnableFollowing();
+        return;
+    }
+
+    if (FString* SpotID = DialogueToSpotMap.Find(DialogueID))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Moving to spot for dialogue: %s"), *DialogueID);
+        MoveToWaitSpot(*SpotID);
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("No action found for dialogue: %s"), *DialogueID);
+}
+
+AUniaWaitSpot* AUnia::FindWaitSpot(const FString& SpotID)
+{
+    TArray<AActor*> FoundActors;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUniaWaitSpot::StaticClass(), FoundActors);
+
+    FString CurrentLevel = UGameplayStatics::GetCurrentLevelName(GetWorld());
+
+    for (AActor* Actor : FoundActors)
+    {
+        if (AUniaWaitSpot* Spot = Cast<AUniaWaitSpot>(Actor))
+        {
+            if (Spot->SpotID.Equals(SpotID) && Spot->IsValidForLevel(CurrentLevel))
+            {
+                return Spot;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+void AUnia::SaveStateToGameInstance()
+{
+    if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance()))
+    {
+
+    }
+}
+
+void AUnia::LoadStateFromGameInstance()
+{
+    if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance()))
+    {
+
+    }
 }

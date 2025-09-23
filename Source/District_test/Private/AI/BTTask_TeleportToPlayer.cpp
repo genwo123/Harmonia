@@ -28,9 +28,16 @@ EBTNodeResult::Type UBTTask_TeleportToPlayer::ExecuteTask(UBehaviorTreeComponent
         return EBTNodeResult::Failed;
     }
 
+    float Distance = FVector::Dist(OwnPawn->GetActorLocation(), PlayerPawn->GetActorLocation());
+
+    if (Distance <= TeleportThreshold)
+    {
+        return EBTNodeResult::Failed;
+    }
+
     FVector PlayerLocation = PlayerPawn->GetActorLocation();
     FVector PlayerForward = PlayerPawn->GetActorForwardVector();
-    FVector TeleportLocation = PlayerLocation - (PlayerForward * TeleportDistance);
+    FVector TeleportLocation = PlayerLocation - (PlayerForward * TeleportBehindDistance);
 
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(AIController->GetWorld());
     if (NavSystem)
@@ -50,5 +57,5 @@ EBTNodeResult::Type UBTTask_TeleportToPlayer::ExecuteTask(UBehaviorTreeComponent
 
 FString UBTTask_TeleportToPlayer::GetStaticDescription() const
 {
-    return FString::Printf(TEXT("Teleport to %.0f units behind player"), TeleportDistance);
+    return FString::Printf(TEXT("Teleport when >%.0fcm, spawn %.0fcm behind player"), TeleportThreshold, TeleportBehindDistance);
 }

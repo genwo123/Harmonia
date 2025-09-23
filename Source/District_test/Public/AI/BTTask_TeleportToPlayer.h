@@ -19,5 +19,8 @@ protected:
     FBlackboardKeySelector PlayerPawnKey;
 
     UPROPERTY(EditAnywhere, Category = "AI")
-    float TeleportDistance = 200.0f;
+    float TeleportThreshold = 1500.0f;
+
+    UPROPERTY(EditAnywhere, Category = "AI")
+    float TeleportBehindDistance = 300.0f;
 };

@@ -69,8 +69,8 @@ void UBTTask_FollowPlayer::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* No
     float FollowDistance = BlackboardComp->GetValueAsFloat(FollowDistanceKey.SelectedKeyName);
     float StopDistance = BlackboardComp->GetValueAsFloat(StopDistanceKey.SelectedKeyName);
 
-    if (FollowDistance <= 0) FollowDistance = 200.0f;
-    if (StopDistance <= 0) StopDistance = 100.0f;
+    if (FollowDistance <= 0) FollowDistance = 400.0f;
+    if (StopDistance <= 0) StopDistance = 200.0f;
 
     float PlayerMoveDist = FVector::Dist(LastPlayerLocation, CurrentPlayerLocation);
     if (PlayerMoveDist > 50.0f)
@@ -102,14 +102,15 @@ void UBTTask_FollowPlayer::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* No
 
                 AIController->MoveTo(MoveRequest);
             }
-            else if (CurrentDistance <= StopDistance)
+            else if (CurrentDistance <= StopDistance + 50.0f)
             {
                 AIController->StopMovement();
+                bPlayerMoved = false;
+                DelayTimer = 0.0f;
             }
         }
     }
 }
-
 FString UBTTask_FollowPlayer::GetStaticDescription() const
 {
     return FString::Printf(TEXT("Follow player with %.1fs delay"), FollowDelay);
