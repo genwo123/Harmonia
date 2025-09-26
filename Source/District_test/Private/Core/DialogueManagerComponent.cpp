@@ -63,11 +63,20 @@ void UDialogueManagerComponent::ProgressDialogue()
         return;
     }
 
-    // ChainBreak 체크 추가
+    // ChainBreak 체크 수정
     if (CurrentDialogue.bChainBreak)
     {
-        // 체인 끊김 - 현재 대화 ID 저장하고 종료
-        SaveLastDialogueID(CurrentDialogueID);
+        // 다음 대화 ID가 있으면 그것을 저장, 없으면 빈 문자열 저장
+        if (!CurrentDialogue.NextDialogueID.IsEmpty())
+        {
+            SaveLastDialogueID(CurrentDialogue.NextDialogueID);
+            UE_LOG(LogTemp, Warning, TEXT("ChainBreak: Saved Next Dialogue ID: %s"), *CurrentDialogue.NextDialogueID);
+        }
+        else
+        {
+            SaveLastDialogueID("");
+            UE_LOG(LogTemp, Warning, TEXT("ChainBreak: No Next Dialogue, clearing save"));
+        }
         EndDialogue();
         return;
     }

@@ -59,6 +59,61 @@ void AUnia::BeginPlay()
             AIController->GetBlackboardComponent()->ClearValue(TEXT("TargetLocation"));
         }
     }
+    InitializeLevelSettings();
+}
+
+void AUnia::CheckSpotArrival()
+{
+    if (CurrentTargetSpotID.IsEmpty())
+    {
+        GetWorld()->GetTimerManager().ClearTimer(SpotCheckTimer);
+        return;
+    }
+
+    AUniaWaitSpot* TargetSpot = FindWaitSpot(CurrentTargetSpotID);
+    if (TargetSpot)
+    {
+        float Distance = FVector::Dist(GetActorLocation(), TargetSpot->GetWaitLocation());
+        if (Distance <= SpotArrivalThreshold)
+        {
+            GetWorld()->GetTimerManager().ClearTimer(SpotCheckTimer);
+            CurrentTargetSpotID = TEXT("");
+
+            if (AUniaAIController* AIController = GetUniaAIController())
+            {
+                if (UBlackboardComponent* BBComp = AIController->GetBlackboardComponent())
+                {
+                    BBComp->ClearValue(TEXT("TargetLocation"));
+                }
+            }
+        }
+    }
+}
+
+void AUnia::InitializeLevelSettings()
+{
+    if (AUniaAIController* AIController = GetUniaAIController())
+    {
+        if (bStartWithFollowing)
+        {
+            bCanFollow = true;
+            AIController->StartFollowingPlayer();
+        }
+        else if (!DefaultWaitSpotID.IsEmpty())
+        {
+            MoveToWaitSpot(DefaultWaitSpotID);
+        }
+        else
+        {
+            bCanFollow = false;
+            AIController->StopFollowing();
+        }
+
+        if (UBlackboardComponent* BBComp = AIController->GetBlackboardComponent())
+        {
+            BBComp->SetValueAsFloat(TEXT("TeleportDistance"), TeleportDistance);
+        }
+    }
 }
 
 void AUnia::Tick(float DeltaTime)
@@ -244,7 +299,7 @@ void AUnia::UpdateLookAtPlayer(float DeltaTime)
     }
 
     float Distance = FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation());
-    if (Distance > InteractionRange * 1.5f)
+    if (Distance <= LookAtRange)
     {
         return;
     }
@@ -343,6 +398,9 @@ bool AUnia::MoveToWaitSpot(const FString& SpotID)
     if (AUniaAIController* AIController = GetUniaAIController())
     {
         AIController->MoveToTargetLocation(TargetSpot->GetWaitLocation());
+
+        GetWorld()->GetTimerManager().SetTimer(SpotCheckTimer, this, &AUnia::CheckSpotArrival, 0.5f, true);
+
         return true;
     }
 
@@ -410,5 +468,25 @@ void AUnia::LoadStateFromGameInstance()
     if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance()))
     {
 
+    }
+}
+
+void AUnia::OnDialogueWidgetClosed()
+{
+    if (AUniaAIController* AIController = GetUniaAIController())
+    {
+        // 대화 상태 해제
+        AIController->SetDialogueMode(false);
+
+        // 팔로잉 다시 시작 (bCanFollow가 true인 경우)
+        if (bCanFollow)
+        {
+            AIController->StartFollowingPlayer();
+        }
+    }
+
+    if (DialogueManager)
+    {
+        DialogueManager->bIsInDialogue = false;
     }
 }

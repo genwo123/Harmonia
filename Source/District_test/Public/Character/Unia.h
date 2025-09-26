@@ -48,6 +48,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI Control")
 	void CheckDialogueForAIAction(const FString& DialogueID);
 
+	UFUNCTION(BlueprintCallable, Category = "Level Setup")
+	void InitializeLevelSettings();
+
 	UFUNCTION(BlueprintCallable, Category = "Game Instance")
 	void SaveStateToGameInstance();
 
@@ -92,6 +95,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC Settings")
 	float LookAtSpeed = 2.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC Settings")
+	float LookAtRange = 600.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
 	UDataTable* UniaRandomDialogueTable;
 
@@ -101,8 +107,23 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
 	FString UniaRandomDialogueID = TEXT("Unia_Random_001");
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Settings")
+	bool bStartWithFollowing = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level Settings")
+	FString DefaultWaitSpotID = TEXT("");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Teleport Settings")
+	float TeleportDistance = 1500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Teleport Settings")
+	float TeleportCooldown = 3.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Teleport Settings")
+	bool bEnableTeleport = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Following")
-	bool bCanFollow = true;
+	bool bCanFollow = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Following")
 	bool bIsFollowingPlayer;
@@ -115,6 +136,9 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
 	bool bPlayerInRange = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Spot Movement")
+	FString CurrentTargetSpotID = TEXT("");
 
 	APawn* PlayerPawn;
 
@@ -151,6 +175,10 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Following")
 	void StartFollowingPlayer();
 
+	UFUNCTION(BlueprintCallable, Category = "Dialogue")
+	void OnDialogueWidgetClosed();
+
+
 	UFUNCTION(BlueprintImplementableEvent, BlueprintCallable, Category = "Following")
 	void StopFollowingPlayer();
 
@@ -172,7 +200,15 @@ public:
 protected:
 	void UpdateLookAtPlayer(float DeltaTime);
 	void FindPlayerPawn();
+	void CheckSpotArrival();
 
 private:
 	AUniaWaitSpot* FindWaitSpot(const FString& SpotID);
+
+	FTimerHandle DelayedActionTimer;
+	FTimerHandle SpotCheckTimer;
+	FTimerHandle TeleportCooldownTimer;
+
+	float SpotArrivalThreshold = 100.0f;
+	bool bCanTeleport = true;
 };

@@ -111,6 +111,7 @@ void UBTTask_FollowPlayer::TickTask(UBehaviorTreeComponent& OwnerComp, uint8* No
         }
     }
 }
+
 FString UBTTask_FollowPlayer::GetStaticDescription() const
 {
     return FString::Printf(TEXT("Follow player with %.1fs delay"), FollowDelay);

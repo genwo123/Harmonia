@@ -32,11 +32,23 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Unia AI")
     void SetDialogueMode(bool bInDialogue);
 
+    UFUNCTION(BlueprintCallable, Category = "Unia AI")
+    bool CheckTeleportDistance();
+
+    UFUNCTION(BlueprintCallable, Category = "Unia AI")
+    void TeleportToPlayer();
+
+    UFUNCTION(BlueprintCallable, Category = "Unia AI")
+    void SetTeleportCooldown(float CooldownTime);
+
     UFUNCTION(BlueprintPure, Category = "Unia AI")
     bool IsFollowingPlayer() const;
 
     UFUNCTION(BlueprintPure, Category = "Unia AI")
     float GetDistanceToPlayer() const;
+
+    UFUNCTION(BlueprintPure, Category = "Unia AI")
+    bool CanTeleport() const;
 
 protected:
     UPROPERTY(EditAnywhere, Category = "AI")
@@ -47,4 +59,9 @@ protected:
 
 private:
     void SetBlackboardValues();
+
+    bool bCanTeleportNow = true;
+    FTimerHandle TeleportCooldownTimer;
+
+    void OnTeleportCooldownComplete();
 };
