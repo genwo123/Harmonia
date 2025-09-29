@@ -1,10 +1,10 @@
 #include "Core/TutorialTrigger.h"
+#include "Core/TutorialWidget.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
-#include "Blueprint/UserWidget.h"
 
 ATutorialTrigger::ATutorialTrigger()
 {
@@ -30,7 +30,7 @@ ATutorialTrigger::ATutorialTrigger()
     TutorialWidget = nullptr;
 
     FTutorialMessage DefaultMessage;
-    DefaultMessage.MessageText = FText::FromString(TEXT("Basic Totorial Message"));
+    DefaultMessage.MessageText = FText::FromString(TEXT("Test Trigger message"));
     DefaultMessage.DisplayDuration = 3.0f;
     TutorialMessages.Add(DefaultMessage);
 }
@@ -45,6 +45,8 @@ void ATutorialTrigger::BeginPlay()
     {
         VisualMesh->SetVisibility(bShowDebugMesh);
     }
+
+    GetOrCreateTutorialWidget();
 }
 
 void ATutorialTrigger::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
@@ -84,7 +86,11 @@ void ATutorialTrigger::ShowCurrentMessage()
 
     const FTutorialMessage& CurrentMessage = TutorialMessages[CurrentMessageIndex];
 
-    OnShowMessage(CurrentMessage.MessageText, CurrentMessage.DisplayDuration);
+    UTutorialWidget* Widget = Cast<UTutorialWidget>(GetOrCreateTutorialWidget());
+    if (Widget)
+    {
+        Widget->ShowMessage(CurrentMessage.MessageText, CurrentMessage.DisplayDuration);
+    }
 
     if (CurrentMessage.DisplayDuration > 0.0f)
     {
@@ -109,13 +115,20 @@ void ATutorialTrigger::ShowNextMessage()
 void ATutorialTrigger::HideCurrentMessage()
 {
     GetWorld()->GetTimerManager().ClearTimer(MessageTimerHandle);
+
+    if (TutorialWidget)
+    {
+        UTutorialWidget* Widget = Cast<UTutorialWidget>(TutorialWidget);
+        if (Widget)
+        {
+            Widget->HideMessage();
+        }
+    }
 }
 
 void ATutorialTrigger::EndTutorial()
 {
     HideCurrentMessage();
-
-    OnTutorialCompleted();
 
     if (!bIsOneTimeUse)
     {
@@ -138,7 +151,8 @@ UUserWidget* ATutorialTrigger::GetOrCreateTutorialWidget()
         TutorialWidget = CreateWidget<UUserWidget>(GetWorld(), TutorialWidgetClass);
         if (TutorialWidget)
         {
-            TutorialWidget->AddToViewport();
+            TutorialWidget->AddToViewport(100);
+            TutorialWidget->SetVisibility(ESlateVisibility::Hidden);
         }
     }
     return TutorialWidget;
