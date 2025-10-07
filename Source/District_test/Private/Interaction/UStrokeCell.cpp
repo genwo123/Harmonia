@@ -21,8 +21,10 @@ void UStrokeCell::NativeConstruct()
     if (CellButton)
     {
         CellButton->OnClicked.AddDynamic(this, &UStrokeCell::OnCellClicked);
+        CellButton->SetIsEnabled(false);
     }
 
+    SetVisibility(ESlateVisibility::SelfHitTestInvisible);
     UpdateVisuals();
 }
 
@@ -37,7 +39,22 @@ void UStrokeCell::UpdateVisuals()
     if (!CellBorder) return;
 
     FLinearColor CellColor = GetCellColor();
-    CellBorder->SetBrushColor(CellColor);
+    UTexture2D* CellTexture = GetCustomCellImage();
+
+    if (CellTexture && CellImage)
+    {
+        CellBorder->SetBrushColor(FLinearColor::White);
+        CellImage->SetBrushFromTexture(CellTexture);
+        CellImage->SetVisibility(ESlateVisibility::Visible);
+    }
+    else
+    {
+        CellBorder->SetBrushColor(CellColor);
+        if (CellImage)
+        {
+            CellImage->SetVisibility(ESlateVisibility::Hidden);
+        }
+    }
 
     if (PlayerIcon)
     {
@@ -49,28 +66,111 @@ void UStrokeCell::UpdateVisuals()
 
 FLinearColor UStrokeCell::GetCellColor() const
 {
-    // 방문한 셀이면 회색 (시작점 제외)
     if (CellData.bIsVisited && CellData.CellType != EStrokeCellType::Start)
     {
+        if (ParentGrid)
+        {
+            return ParentGrid->CurrentPathLineColor;
+        }
         return FLinearColor(0.5f, 0.5f, 0.5f, 1.0f);
     }
 
-    // 텔레포트 포털 색상
     if (IsTeleportPortal())
     {
         int32 PortalID = GetTeleportPortalID();
         switch (PortalID)
         {
-        case 1: return FLinearColor(0.0f, 0.5f, 1.0f, 1.0f);  // 파란색 포털
-        case 2: return FLinearColor(1.0f, 1.0f, 0.0f, 1.0f);  // 노란색 포털
-        case 3: return FLinearColor(1.0f, 0.0f, 1.0f, 1.0f);  // 보라색 포털
-        case 4: return FLinearColor(0.0f, 1.0f, 1.0f, 1.0f);  // 청록색 포털
-        default: return FLinearColor(0.8f, 0.8f, 0.8f, 1.0f); // 기본 포털
+        case 1: return FLinearColor(0.0f, 0.5f, 1.0f, 1.0f);
+        case 2: return FLinearColor(1.0f, 1.0f, 0.0f, 1.0f);
+        case 3: return FLinearColor(1.0f, 0.0f, 1.0f, 1.0f);
+        case 4: return FLinearColor(0.0f, 1.0f, 1.0f, 1.0f);
+        default: return FLinearColor(0.8f, 0.8f, 0.8f, 1.0f);
         }
     }
 
-    // 부모 그리드에서 커스텀 색상 가져오기
     return GetCustomCellColor();
+}
+
+UTexture2D* UStrokeCell::GetCustomCellImage() const
+{
+    if (!ParentGrid)
+    {
+        return nullptr;
+    }
+
+    if (IsTeleportPortal())
+    {
+        int32 PortalID = GetTeleportPortalID();
+        switch (PortalID)
+        {
+        case 1: return ParentGrid->TeleportPortal1Image;
+        case 2: return ParentGrid->TeleportPortal2Image;
+        case 3: return ParentGrid->TeleportPortal3Image;
+        case 4: return ParentGrid->TeleportPortal4Image;
+        default: return nullptr;
+        }
+    }
+
+    if (CellData.CellType == EStrokeCellType::Start)
+    {
+        return ParentGrid->StartPointImage;
+    }
+
+    if (CellData.CellType == EStrokeCellType::Goal)
+    {
+        return ParentGrid->GoalPointImage;
+    }
+
+    if (CellData.CellType == EStrokeCellType::Wall)
+    {
+        return ParentGrid->WallImage;
+    }
+
+    if (CellData.CellType == EStrokeCellType::RedPoint)
+    {
+        return CellData.bIsVisited ? ParentGrid->RedPointVisitedImage : ParentGrid->RedPointImage;
+    }
+
+    if (CellData.CellType == EStrokeCellType::GreenPoint)
+    {
+        return CellData.bIsVisited ? ParentGrid->GreenPointVisitedImage : ParentGrid->GreenPointImage;
+    }
+
+    if (CellData.CellType == EStrokeCellType::BluePoint)
+    {
+        return CellData.bIsVisited ? ParentGrid->BluePointVisitedImage : ParentGrid->BluePointImage;
+    }
+
+    if (CellData.CellType == EStrokeCellType::Empty)
+    {
+        if (CellData.bIsVisited)
+        {
+            FLinearColor PathColor = ParentGrid->CurrentPathLineColor;
+
+            if (PathColor == ParentGrid->RedPointColor)
+            {
+                return ParentGrid->VisitedGroundRedImage;
+            }
+            else if (PathColor == ParentGrid->GreenPointColor)
+            {
+                return ParentGrid->VisitedGroundGreenImage;
+            }
+            else if (PathColor == ParentGrid->BluePointColor)
+            {
+                return ParentGrid->VisitedGroundBlueImage;
+            }
+            else
+            {
+                return ParentGrid->VisitedGroundImage;
+            }
+        }
+        else
+        {
+            return ParentGrid->GroundImage;
+        }
+    }
+
+    return nullptr;
 }
 
 void UStrokeCell::SetPlayerPresence(bool bPresent)
@@ -94,7 +194,6 @@ void UStrokeCell::UpdateDebugDisplay(bool bShowDebug)
         FString DebugString = FString::Printf(TEXT("%d,%d"),
             CellData.GridPosition.X, CellData.GridPosition.Y);
 
-        // 텔레포트 포털이면 ID도 표시
         if (IsTeleportPortal())
         {
             int32 PortalID = GetTeleportPortalID();
@@ -138,21 +237,30 @@ int32 UStrokeCell::GetTeleportPortalID() const
     return -1;
 }
 
+void UStrokeCell::UpdateInteractionState(bool bIsEditMode)
+{
+    if (CellButton)
+    {
+        CellButton->SetIsEnabled(bIsEditMode);
+    }
+
+    if (bIsEditMode)
+    {
+        SetVisibility(ESlateVisibility::Visible);
+    }
+    else
+    {
+        SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+    }
+}
+
 void UStrokeCell::OnCellClicked()
 {
     if (ParentGrid && ParentGrid->bEditMode)
     {
-        // 에디터 모드에서는 편집
         ParentGrid->OnCellEditClicked(CellData.GridPosition);
     }
-    else
-    {
-        // 게임 모드에서는 디버그 정보 출력
-        UE_LOG(LogTemp, Log, TEXT("Cell clicked: (%d, %d) - Type: %d"),
-            CellData.GridPosition.X, CellData.GridPosition.Y, (int32)CellData.CellType);
-    }
 }
-
 
 void UStrokeCell::UpdatePathConnections(const TArray<FIntPoint>& VisitedPath, FIntPoint CurrentPos)
 {
@@ -163,15 +271,13 @@ void UStrokeCell::UpdatePathConnections(const TArray<FIntPoint>& VisitedPath, FI
 
     if (MyIndex != INDEX_NONE)
     {
-        // 들어온 방향 (라인이 표시될 방향)
         if (MyIndex > 0)
         {
             FIntPoint PrevPos = VisitedPath[MyIndex - 1];
-            FIntPoint IncomingLineDirection = PrevPos - MyPos;  // 방향 뒤집기!
+            FIntPoint IncomingLineDirection = PrevPos - MyPos;
             ConnectedDirections.Add(IncomingLineDirection);
         }
 
-        // 나가는 방향 (이건 맞다고 하셨으니 그대로)
         if (MyIndex < VisitedPath.Num() - 1)
         {
             FIntPoint NextPos = VisitedPath[MyIndex + 1];
@@ -187,11 +293,11 @@ void UStrokeCell::UpdatePathConnections(const TArray<FIntPoint>& VisitedPath, FI
 
     DrawPathLines();
 }
+
 FLinearColor UStrokeCell::GetCustomCellColor() const
 {
     if (!ParentGrid)
     {
-        // ParentGrid가 없으면 기본 색상 사용
         switch (CellData.CellType)
         {
         case EStrokeCellType::Empty:
@@ -213,7 +319,6 @@ FLinearColor UStrokeCell::GetCustomCellColor() const
         }
     }
 
-    // ParentGrid의 커스텀 색상 사용
     switch (CellData.CellType)
     {
     case EStrokeCellType::Start:

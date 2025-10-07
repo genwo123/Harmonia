@@ -5,6 +5,7 @@
 #include "Components/UniformGridPanel.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
+#include "Components/Image.h"
 #include "Core/StrokeGameTypes.h"
 #include "Interaction/UStrokeCell.h"
 #include "Engine/DataTable.h"
@@ -26,9 +27,23 @@ public:
     UPROPERTY(meta = (BindWidget), BlueprintReadWrite, Category = "Widgets")
     class UUniformGridPanel* GridPanel;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Widget Classes",
-        meta = (DisplayName = "Stroke Cell Widget Class"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Widget Classes")
     TSubclassOf<UStrokeCell> StrokeCellWidgetClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Layout")
+    float MaxGridWidth = 800.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Layout")
+    float MaxGridHeight = 600.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Layout")
+    float MinCellSize = 40.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Layout")
+    float CellPadding = 2.0f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Grid Layout")
+    float CurrentCellSize;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
     FLinearColor StartPointColor = FLinearColor(0.2f, 0.8f, 0.2f, 1.0f);
@@ -45,35 +60,120 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
     FLinearColor BluePointColor = FLinearColor(0.0f, 0.0f, 1.0f, 1.0f);
 
-    // 경로 표시 관련
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images")
+    UTexture2D* StartPointImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images")
+    UTexture2D* GoalPointImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images")
+    UTexture2D* WallImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images")
+    UTexture2D* TeleportPortal1Image;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images")
+    UTexture2D* TeleportPortal2Image;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images")
+    UTexture2D* TeleportPortal3Image;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images")
+    UTexture2D* TeleportPortal4Image;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Ground")
+    UTexture2D* GroundImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Ground")
+    UTexture2D* VisitedGroundImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Points")
+    UTexture2D* RedPointImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Points")
+    UTexture2D* GreenPointImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Points")
+    UTexture2D* BluePointImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Points|Visited")
+    UTexture2D* RedPointVisitedImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Points|Visited")
+    UTexture2D* GreenPointVisitedImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Points|Visited")
+    UTexture2D* BluePointVisitedImage;
+
+    UPROPERTY(meta = (BindWidget), BlueprintReadWrite, Category = "Widgets|Progress")
+    class UImage* ProgressBar;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Progress")
+    UTexture2D* ProgressStartImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Progress")
+    UTexture2D* ProgressRedImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Progress")
+    UTexture2D* ProgressGreenImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Progress")
+    UTexture2D* ProgressBlueImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Progress")
+    UTexture2D* ProgressGoalImage;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Path Display")
     bool bShowPath = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Path Display")
-    FLinearColor PathLineColor = FLinearColor(1.0f, 1.0f, 0.0f, 0.8f);
+    FLinearColor DefaultPathLineColor = FLinearColor(0.5f, 0.5f, 0.5f, 0.8f);
 
-    // 클리어 이벤트 (Blueprint에서 구현)
+    UPROPERTY(BlueprintReadOnly, Category = "Path Display")
+    FLinearColor CurrentPathLineColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clear Message")
+    FString ClearMessage = TEXT("Clear!");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clear Message")
+    float ClearMessageDisplayTime = 2.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Game Rules")
+    bool bEnforceRGBOrder = false;
+
     UFUNCTION(BlueprintImplementableEvent, Category = "Game Events")
     void OnPuzzleCompleted();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Game Events")
+    void OnRedPointCollected();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Game Events")
+    void OnGreenPointCollected();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Game Events")
+    void OnBluePointCollected();
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "Game Events")
+    void OnProgressReset();
 
     UPROPERTY(meta = (BindWidget), BlueprintReadWrite, Category = "Widgets")
     class UTextBlock* StatusText;
 
     UPROPERTY(meta = (BindWidget), BlueprintReadWrite, Category = "Widgets")
+    class UTextBlock* StageNameText;
+
+    UPROPERTY(meta = (BindWidget), BlueprintReadWrite, Category = "Widgets")
     class UButton* ResetButton;
 
-    // ========== DataTable 관련 추가 ==========
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Config")
     UDataTable* StageDataTable;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Config",
-        meta = (ClampMin = "1", ClampMax = "20"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Config")
     int32 CurrentStageNumber = 1;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Config")
     FName CurrentStageRowName = TEXT("Stage_01");
 
-    // 에디터 모드 관련
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Editor Mode")
     bool bEditMode = false;
 
@@ -86,12 +186,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Editor Mode", meta = (EditCondition = "bEditMode"))
     int32 CurrentTeleportID = 1;
 
-    // 실시간 그리드 크기 조절
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings",
-        meta = (ClampMin = "3", ClampMax = "20"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings")
     FIntPoint EditorGridSize = FIntPoint(5, 5);
 
-    // 에디터에서 바로 조절 가능한 포인트들
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings")
     FIntPoint EditorStartPosition = FIntPoint(2, 4);
 
@@ -107,7 +204,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings")
     TArray<FTeleportPortal> EditorTeleportPortals;
 
-    // 게임 데이터
     UPROPERTY(BlueprintReadWrite, Category = "Stroke Game")
     FStrokePuzzleData CurrentPuzzle;
 
@@ -130,7 +226,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Path Display")
     void UpdatePathDisplay();
 
-    // ========== DataTable 관련 함수들 추가 ==========
+    UFUNCTION(BlueprintCallable, Category = "Progress")
+    void UpdateProgressBar();
+
     UFUNCTION(BlueprintCallable, Category = "Stage")
     void LoadStageFromDataTable(int32 StageNumber);
 
@@ -143,7 +241,6 @@ public:
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "Stage Editor")
     void SaveCurrentToDataTable();
 
-    // 에디터 함수들 - Blueprint에서도 호출 가능하게 수정
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "Editor")
     void ApplyEditorSettings();
 
@@ -168,12 +265,17 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Editor")
     void OnCellEditClicked(FIntPoint Position);
 
-    // 주요 게임 함수들
     UFUNCTION(BlueprintCallable, Category = "Stroke Game")
     void InitializeGrid(const FStrokePuzzleData& PuzzleData);
 
     UFUNCTION(BlueprintCallable, Category = "Stroke Game")
     void CreateCells();
+
+    UFUNCTION(BlueprintCallable, Category = "Grid Layout")
+    void CalculateCellSize();
+
+    UFUNCTION(BlueprintCallable, Category = "Grid Layout")
+    void ApplyGridLayout();
 
     UFUNCTION(BlueprintCallable, Category = "Stroke Game")
     void ClearGrid();
@@ -196,23 +298,33 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Stroke Game")
     FIntPoint CheckTeleport(FIntPoint Position);
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Ground|Visited")
+    UTexture2D* VisitedGroundRedImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Ground|Visited")
+    UTexture2D* VisitedGroundGreenImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Ground|Visited")
+    UTexture2D* VisitedGroundBlueImage;
+
 protected:
-    // 내부 함수들
     EStrokeCellType GetCellTypeAtPosition(FIntPoint Position) const;
     int32 GetCellIndex(FIntPoint Position) const;
     void UpdateStatusText();
     void UpdatePlayerVisual();
+    void UpdatePathColor();
     bool AreAllRequiredPointsVisited() const;
+    bool IsRGBOrderCorrect() const;
     void OnGameWon();
+    void ShowClearMessage();
+    void HideClearMessage();
 
-    // 에디터 내부 함수들
     void UpdateEditorVisuals();
     bool IsPositionValid(FIntPoint Position) const;
     void ClampPositionsToGrid();
     void AutoPlaceStartGoal();
     void SetupDefaultPuzzle();
 
-    // 텔레포트 관련 함수들
     FTeleportPortal* FindTeleportPortal(int32 PortalID);
     void ToggleTeleportPortal(FIntPoint Position, int32 PortalID);
     void RemoveFromAllTeleportPortals(FIntPoint Position);
@@ -220,7 +332,8 @@ protected:
     void LoadStageDataFromTable(const FStrokeStageData& StageData);
     FString GenerateRowNameFromStage(int32 StageNumber) const;
 
-    // 버튼 이벤트
     UFUNCTION()
     void OnResetClicked();
+
+    FTimerHandle ClearMessageTimerHandle;
 };

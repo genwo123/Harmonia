@@ -34,7 +34,6 @@ public:
     virtual void Tick(float DeltaTime) override;
     virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-    // Components
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UCameraComponent* CameraComponent;
 
@@ -52,7 +51,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     UDialogueManagerComponent* GetDialogueManager();
 
-    // 대화 이벤트 핸들러 (현재 구현 안 됨)
     UFUNCTION()
     void OnDialogueStarted(ESpeakerType Speaker, FText DialogueText, EDialogueType Type, float Duration);
 
@@ -66,7 +64,6 @@ public:
     void OnDialogueEndedBP();
 
 
-    // Enhanced Input System 
     
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;
@@ -89,14 +86,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* CrouchAction;
 
-    // 추가된 입력 액션 - 블루프린트에서 구현
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* RotateAction;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* PushAction;
 
-    // Character movement properties (BP editable)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
     float WalkSpeed = 400.0f;
 
@@ -115,7 +110,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
     float InteractionDistance = 400.0f;
 
-    // Inventory Input
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
     UInputAction* InventoryToggleAction;
 
@@ -127,10 +122,10 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
     UInputAction* InventoryUseAction;
-    // E키 통합 처리 함수
+
     UFUNCTION(BlueprintCallable, Category = "Input")
     void OnEKeyPressed();
-    // 인벤토리 관련 함수들
+
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     void OnInventoryToggle();
 
@@ -144,8 +139,7 @@ public:
     void OnInventoryUse();
 
 
-    // 상호작용 UI 정보
-    // DialogueTrigger에서 사용할 Getter 함수들
+
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     class UDialogueManagerComponent* GetDialogueManagerComponent() const { return DialogueManager; }
 
@@ -168,11 +162,11 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     AActor* CurrentInteractableActor;
 
-    // 추가: 상호작용 타입
+
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     EInteractionType CurrentInteractionType;
 
-    // Input handlers
+
     void Move(const FInputActionValue& Value);
     void Look(const FInputActionValue& Value);
     void StartSprint(const FInputActionValue& Value);
@@ -228,14 +222,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
     float DelayBeforeDialogue = 0.0f;
 
-    //Inventory
+
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     UItem* GetCurrentHeldInventoryItem();
 
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor);
 
-    // EXPANDED: 손에 든 아이템 표시 시스템
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
     UStaticMeshComponent* HeldItemDisplay;
 
@@ -276,18 +270,18 @@ public:
 protected:
     virtual void BeginPlay() override;
 
-    // 컴포넌트 초기화 보장 함수 추가
+
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     void InitializeDialogueSystem();
 
-    // DataTable 설정 확인 함수 추가
+
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     bool IsDialogueSystemReady();
 
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     TArray<AUnia*> InteractableNPCs;
 
-    // 현재 가장 가까운 NPC
+
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     AUnia* CurrentInteractableNPC;
 
@@ -296,6 +290,6 @@ protected:
 private:
     bool bIsSprinting = false;
 
-    // 입력 시스템 설정을 위한 함수
+
     void SetupEnhancedInput();
 };

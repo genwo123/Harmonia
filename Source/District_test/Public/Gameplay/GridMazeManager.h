@@ -1,4 +1,3 @@
-// GridMazeManager.h - 모든 문제점 해결 완전판
 #pragma once
 
 #include "CoreMinimal.h"
@@ -10,7 +9,6 @@
 #include "Engine/TimerHandle.h"
 #include "GridMazeManager.generated.h"
 
-// Forward Declarations
 class AGridTile;
 class AMazeDisplay;
 
@@ -46,15 +44,20 @@ protected:
 #endif
 
 public:
-    // ====== Basic Settings ======
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings")
-    int32 GridSize = 4;
+    int32 GridRows = 4;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings")
+    int32 GridColumns = 4;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings")
     TSubclassOf<AGridTile> TileClass;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings")
     float TileSize = 300.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings")
+    float TileThickness = 20.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings")
     float TileSpacing = 50.0f;
@@ -66,66 +69,56 @@ public:
     bool bAutoResetOnFail = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timer Settings")
-    float FailResetDelay = 3.0f;  // 실패 후 리스폰 시간 조절 가능
+    float FailResetDelay = 3.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Timer Settings")
-    bool bContinueTimeOnFail = true;  // 실패해도 시간 계속 흐르게
+    bool bContinueTimeOnFail = true;
 
-    // ====== Starting Floor Settings ======
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Starting Floor")
     bool bUseStartingFloor = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Starting Floor",
-        meta = (EditCondition = "bUseStartingFloor"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Starting Floor", meta = (EditCondition = "bUseStartingFloor"))
     FVector StartingFloorPosition = FVector(-400, 0, 0);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Starting Floor",
-        meta = (EditCondition = "bUseStartingFloor"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Starting Floor", meta = (EditCondition = "bUseStartingFloor"))
     FVector StartingFloorSize = FVector(200.0f, 200.0f, 20.0f);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Starting Floor",
-        meta = (EditCondition = "bUseStartingFloor"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Starting Floor", meta = (EditCondition = "bUseStartingFloor"))
     FLinearColor StartingFloorColor = FLinearColor(0.1f, 0.8f, 0.1f, 1.0f);
 
-    // Starting Floor Component
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Starting Floor")
     UStaticMeshComponent* StartingFloorMesh;
 
-    // ====== Manual Path Setting (FIntPoint로 변경!) ======
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Manual Path",
-        meta = (TitleProperty = "ToString"))
-    TArray<FIntPoint> CorrectPath;  // FVector2D에서 FIntPoint로 변경!
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Manual Path", meta = (TitleProperty = "ToString"))
+    TArray<FIntPoint> CorrectPath;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Manual Path")
-    FIntPoint StartPosition = FIntPoint(0, 0);  // FVector2D에서 FIntPoint로 변경!
+    FIntPoint StartPosition = FIntPoint(0, 0);
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Manual Path")
-    FIntPoint GoalPosition = FIntPoint(3, 3);   // FVector2D에서 FIntPoint로 변경!
-
-    // ====== Progress Tracking (색상 유지 시스템) ======
-    UPROPERTY(BlueprintReadOnly, Category = "Progress Tracking")
-    TArray<FIntPoint> CompletedSteps;  // 성공한 스텝들 기록
+    FIntPoint GoalPosition = FIntPoint(3, 3);
 
     UPROPERTY(BlueprintReadOnly, Category = "Progress Tracking")
-    TArray<FIntPoint> FailedSteps;     // 실패한 스텝들 기록
+    TArray<FIntPoint> CompletedSteps;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Progress Tracking")
+    TArray<FIntPoint> FailedSteps;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Progress Tracking")
-    bool bKeepProgressOnFail = true;   // 실패해도 진행 기록 유지
-
-    // ====== Color Settings ======
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Color Settings")
-    FLinearColor WaitingColor = FLinearColor(0.3f, 0.3f, 0.3f, 1.0f); // Gray
+    bool bKeepProgressOnFail = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Color Settings")
-    FLinearColor ReadyColor = FLinearColor(0.2f, 1.0f, 0.2f, 1.0f); // Green
+    FLinearColor WaitingColor = FLinearColor(0.3f, 0.3f, 0.3f, 1.0f);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Color Settings")
-    FLinearColor CorrectColor = FLinearColor(0.2f, 0.2f, 1.0f, 1.0f); // Blue
+    FLinearColor ReadyColor = FLinearColor(0.2f, 1.0f, 0.2f, 1.0f);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Color Settings")
-    FLinearColor WrongColor = FLinearColor(1.0f, 0.2f, 0.2f, 1.0f); // Red
+    FLinearColor CorrectColor = FLinearColor(0.2f, 0.2f, 1.0f, 1.0f);
 
-    // ====== Sound Settings ======
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Color Settings")
+    FLinearColor WrongColor = FLinearColor(1.0f, 0.2f, 0.2f, 1.0f);
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound Settings")
     USoundBase* CorrectStepSound;
 
@@ -138,21 +131,18 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound Settings")
     USoundBase* FailSound;
 
-    // ====== Display Connection ======
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display Connection")
     AMazeDisplay* ConnectedDisplay;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display Connection")
     bool bAutoFindDisplay = true;
 
-    // ====== Editor Preview ======
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Editor Preview")
     bool bShowPreviewInEditor = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Editor Preview")
     bool bShowPathInPreview = true;
 
-    // ====== Current State ======
     UPROPERTY(BlueprintReadOnly, Category = "Current State")
     EPuzzleState CurrentState = EPuzzleState::Ready;
 
@@ -166,23 +156,20 @@ public:
     TArray<AGridTile*> GridTiles;
 
 public:
-
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void CompleteReset();
 
-    // ====== Blueprint Events ======
     UPROPERTY(BlueprintAssignable, Category = "Events")
     FOnPuzzleStateChanged OnPuzzleStateChanged;
 
     UPROPERTY(BlueprintAssignable, Category = "Events")
     FOnTimerUpdate OnTimerUpdate;
 
-    // ====== Puzzle Control ======
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void StartPuzzle();
 
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
-    void StartPuzzleWithCountdown();  // 카운트다운과 함께 시작
+    void StartPuzzleWithCountdown();
 
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void ResetPuzzle();
@@ -199,7 +186,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void ResumePuzzle();
 
-    // ====== Tile Management ======
     UFUNCTION(BlueprintCallable, Category = "Tile Management")
     void OnTileStep(AGridTile* SteppedTile, AActor* Player);
 
@@ -212,14 +198,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Tile Management")
     void ClearGrid();
 
-    // ====== Editor Tools ======
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "Editor Tools")
     void EditorCreateGrid();
 
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "Editor Tools")
     void EditorClearGrid();
 
-    // ====== Starting Floor Functions ======
     UFUNCTION(BlueprintCallable, Category = "Starting Floor")
     void CreateStartingFloor();
 
@@ -232,7 +216,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Starting Floor")
     void RespawnPlayerToStart(AActor* Player);
 
-    // ====== Progress Tracking Functions ======
     UFUNCTION(BlueprintCallable, Category = "Progress Tracking")
     void MarkStepAsCompleted(const FIntPoint& Position);
 
@@ -249,9 +232,8 @@ public:
     void ClearProgressHistory();
 
     UFUNCTION(BlueprintCallable, Category = "Progress Tracking")
-    void RestoreProgressColors();  // 저장된 색상 복원
+    void RestoreProgressColors();
 
-    // ====== Path Validation ======
     UFUNCTION(BlueprintCallable, Category = "Path Validation")
     bool ValidateCorrectPath();
 
@@ -259,22 +241,23 @@ public:
     int32 GetPathLength() const { return CorrectPath.Num(); }
 
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Path Information")
-    FIntPoint GetPathStepAt(int32 Index) const;  // FVector2D에서 FIntPoint로 변경!
+    FIntPoint GetPathStepAt(int32 Index) const;
 
-    // ====== Settings Functions ======
     UFUNCTION(BlueprintCallable, Category = "Settings")
-    void SetGridSize(int32 NewSize);
+    void SetGridSize(int32 NewRows, int32 NewColumns);
 
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetTimeLimit(float NewTimeLimit);
 
     UFUNCTION(BlueprintCallable, Category = "Settings")
-    void SetCorrectPath(const TArray<FIntPoint>& NewPath);  // FVector2D에서 FIntPoint로 변경!
+    void SetCorrectPath(const TArray<FIntPoint>& NewPath);
 
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetFailResetDelay(float NewDelay);
 
-    // ====== Information Query ======
+    UFUNCTION(BlueprintCallable, Category = "Settings")
+    void SetTileThickness(float NewThickness);
+
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     EPuzzleState GetCurrentState() const { return CurrentState; }
 
@@ -291,9 +274,8 @@ public:
     float GetProgress() const;
 
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
-    FString GetProgressText() const;  // 진행도 텍스트 반환
+    FString GetProgressText() const;
 
-    // ====== Blueprint Events (Implementable in BP) ======
     UFUNCTION(BlueprintImplementableEvent, Category = "Blueprint Events")
     void OnPuzzleStarted();
 
@@ -312,7 +294,6 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "Blueprint Events")
     void OnTimeWarning(float TimeLeft);
 
-    // ====== Blueprint Overrideable Functions ======
     UFUNCTION(BlueprintNativeEvent, Category = "Custom Logic")
     bool ShouldStartPuzzle(AGridTile* FirstTile);
     virtual bool ShouldStartPuzzle_Implementation(AGridTile* FirstTile) { return true; }
@@ -325,10 +306,7 @@ public:
     void CustomResetLogic();
     virtual void CustomResetLogic_Implementation() {}
 
-
-
 private:
-    // Internal functions
     void UpdateTimer(float DeltaTime);
     void SetPuzzleState(EPuzzleState NewState);
     void ConnectToDisplay();
@@ -342,13 +320,11 @@ private:
     void PlaySound(USoundBase* Sound);
     void ApplyTileColors();
     void DestroyAllTiles();
-
-    // Pathfinding specific
     void SetAllTilesWaiting();
     void SetAllTilesReady();
     void ResetToStartPosition();
+    void UpdateTileThickness();
 
-    // Timer related
     bool bGamePaused = false;
     FTimerHandle ResetTimer;
 };

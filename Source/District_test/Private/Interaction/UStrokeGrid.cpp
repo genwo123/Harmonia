@@ -3,6 +3,7 @@
 #include "Components/UniformGridPanel.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
+#include "Components/Image.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Engine/Engine.h"
 
@@ -15,6 +16,15 @@ UStrokeGrid::UStrokeGrid(const FObjectInitializer& ObjectInitializer)
     CurrentTeleportID = 1;
     CurrentStageNumber = 1;
     CurrentStageRowName = TEXT("Stage_01");
+    bEnforceRGBOrder = false;
+    ClearMessage = TEXT("Clear!");
+    ClearMessageDisplayTime = 2.0f;
+
+    MaxGridWidth = 800.0f;
+    MaxGridHeight = 600.0f;
+    MinCellSize = 40.0f;
+    CellPadding = 2.0f;
+    CurrentCellSize = 80.0f;
 
     EditorGridSize = FIntPoint(5, 5);
     EditorStartPosition = FIntPoint(2, 4);
@@ -29,6 +39,7 @@ UStrokeGrid::UStrokeGrid(const FObjectInitializer& ObjectInitializer)
         FIntPoint(4, 1)
     };
 
+    CurrentPathLineColor = DefaultPathLineColor;
     SetupDefaultPuzzle();
 }
 
@@ -41,6 +52,11 @@ void UStrokeGrid::NativeConstruct()
     if (ResetButton)
     {
         ResetButton->OnClicked.AddDynamic(this, &UStrokeGrid::OnResetClicked);
+    }
+
+    if (StatusText)
+    {
+        StatusText->SetVisibility(ESlateVisibility::Hidden);
     }
 
     if (StageDataTable && CurrentStageNumber > 0)
@@ -90,7 +106,6 @@ FReply UStrokeGrid::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent
 
     return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
 }
-
 
 void UStrokeGrid::LoadStageFromDataTable(int32 StageNumber)
 {
@@ -144,6 +159,11 @@ void UStrokeGrid::LoadStageDataFromTable(const FStrokeStageData& StageData)
     CurrentPuzzle.WallPositions = StageData.WallPositions;
     CurrentPuzzle.TeleportPortals = StageData.TeleportPortals;
 
+    if (StageNameText)
+    {
+        StageNameText->SetText(FText::FromString(StageData.StageName));
+    }
+
     ApplyEditorSettings();
 
     if (!bEditMode)
@@ -182,7 +202,6 @@ FString UStrokeGrid::GenerateRowNameFromStage(int32 StageNumber) const
 {
     return FString::Printf(TEXT("Stage_%02d"), StageNumber);
 }
-
 
 void UStrokeGrid::ApplyEditorSettings()
 {
@@ -384,7 +403,6 @@ void UStrokeGrid::OnCellEditClicked(FIntPoint Position)
     ApplyEditorSettings();
 }
 
-
 void UStrokeGrid::InitializeGrid(const FStrokePuzzleData& PuzzleData)
 {
     CurrentPuzzle = PuzzleData;
@@ -424,6 +442,7 @@ void UStrokeGrid::CreateCells()
 
             NewCell->SetCellData(CellData);
             NewCell->ParentGrid = this;
+            NewCell->UpdateInteractionState(bEditMode);
 
             GridPanel->AddChildToUniformGrid(NewCell, X, Y);
             CellWidgets.Add(NewCell);
@@ -445,55 +464,7 @@ void UStrokeGrid::ClearGrid()
     VisitedRequiredPoints.Empty();
 }
 
-bool UStrokeGrid::MovePlayer(FIntPoint Direction)
-{
-    FIntPoint NewPosition = CurrentPlayerPosition + Direction;
 
-    if (!IsValidMove(NewPosition))
-    {
-        return false;
-    }
-
-    UStrokeCell* OldCell = GetCellAtPosition(CurrentPlayerPosition);
-    if (OldCell)
-    {
-        OldCell->SetPlayerPresence(false);
-        OldCell->SetVisited(true);
-    }
-
-    VisitedPositions.Add(CurrentPlayerPosition);
-
-    EStrokeCellType OldCellType = GetCellTypeAtPosition(CurrentPlayerPosition);
-    if (OldCellType == EStrokeCellType::RedPoint ||
-        OldCellType == EStrokeCellType::GreenPoint ||
-        OldCellType == EStrokeCellType::BluePoint)
-    {
-        if (!VisitedRequiredPoints.Contains(CurrentPlayerPosition))
-        {
-            VisitedRequiredPoints.Add(CurrentPlayerPosition);
-        }
-    }
-
-    CurrentPlayerPosition = NewPosition;
-
-    FIntPoint FinalPosition = CheckTeleport(CurrentPlayerPosition);
-    if (FinalPosition != CurrentPlayerPosition)
-    {
-        CurrentPlayerPosition = FinalPosition;
-    }
-
-    UStrokeCell* NewCell = GetCellAtPosition(CurrentPlayerPosition);
-    if (NewCell)
-    {
-        NewCell->SetPlayerPresence(true);
-    }
-
-    UpdatePathDisplay();
-    CheckWinCondition();
-    UpdateStatusText();
-
-    return true;
-}
 
 bool UStrokeGrid::IsValidMove(FIntPoint NewPosition) const
 {
@@ -528,6 +499,11 @@ void UStrokeGrid::CheckWinCondition()
         return;
     }
 
+    if (bEnforceRGBOrder && !IsRGBOrderCorrect())
+    {
+        return;
+    }
+
     GameState = EStrokeGameState::Won;
     OnGameWon();
 }
@@ -536,11 +512,13 @@ void UStrokeGrid::OnGameWon()
 {
     for (UStrokeCell* Cell : CellWidgets)
     {
-        if (Cell && Cell->CellButton)
+        if (Cell)
         {
-            Cell->CellButton->SetIsEnabled(false);
+            Cell->UpdateInteractionState(false);
         }
     }
+
+    ShowClearMessage();
 
     FTimerHandle TimerHandle;
     GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
@@ -549,37 +527,35 @@ void UStrokeGrid::OnGameWon()
         }, 1.0f, false);
 }
 
-void UStrokeGrid::ResetGame()
+void UStrokeGrid::ShowClearMessage()
 {
-    GameState = EStrokeGameState::Playing;
-    CurrentPlayerPosition = CurrentPuzzle.StartPosition;
-    VisitedPositions.Empty();
-    VisitedRequiredPoints.Empty();
-
-    for (UStrokeCell* Cell : CellWidgets)
+    if (StatusText)
     {
-        if (Cell)
-        {
-            Cell->SetVisited(false);
-            Cell->SetPlayerPresence(false);
+        StatusText->SetText(FText::FromString(ClearMessage));
+        StatusText->SetVisibility(ESlateVisibility::Visible);
 
-            if (Cell->CellButton)
-            {
-                Cell->CellButton->SetIsEnabled(true);
-            }
+        if (ClearMessageDisplayTime > 0.0f)
+        {
+            GetWorld()->GetTimerManager().SetTimer(
+                ClearMessageTimerHandle,
+                this,
+                &UStrokeGrid::HideClearMessage,
+                ClearMessageDisplayTime,
+                false
+            );
         }
     }
-
-    UStrokeCell* StartCell = GetCellAtPosition(CurrentPlayerPosition);
-    if (StartCell)
-    {
-        StartCell->SetPlayerPresence(true);
-    }
-
-    UpdatePathDisplay();
-    UpdateStatusText();
-    SetKeyboardFocus();
 }
+
+void UStrokeGrid::HideClearMessage()
+{
+    if (StatusText)
+    {
+        StatusText->SetVisibility(ESlateVisibility::Hidden);
+    }
+}
+
+
 
 FIntPoint UStrokeGrid::CheckTeleport(FIntPoint Position)
 {
@@ -670,6 +646,31 @@ bool UStrokeGrid::AreAllRequiredPointsVisited() const
     return true;
 }
 
+bool UStrokeGrid::IsRGBOrderCorrect() const
+{
+    if (VisitedRequiredPoints.Num() < 3)
+    {
+        return false;
+    }
+
+    if (GetCellTypeAtPosition(VisitedRequiredPoints[0]) != EStrokeCellType::RedPoint)
+    {
+        return false;
+    }
+
+    if (GetCellTypeAtPosition(VisitedRequiredPoints[1]) != EStrokeCellType::GreenPoint)
+    {
+        return false;
+    }
+
+    if (GetCellTypeAtPosition(VisitedRequiredPoints[2]) != EStrokeCellType::BluePoint)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 void UStrokeGrid::UpdatePathDisplay()
 {
     if (!bShowPath) return;
@@ -688,41 +689,36 @@ void UStrokeGrid::UpdatePathDisplay()
     }
 }
 
-void UStrokeGrid::UpdateStatusText()
+void UStrokeGrid::UpdatePathColor()
 {
-    if (!StatusText) return;
-
-    FString StatusString;
-
-    switch (GameState)
+    if (VisitedRequiredPoints.Num() == 0)
     {
-    case EStrokeGameState::Ready:
-        if (bEditMode)
-        {
-            StatusString = TEXT("EDIT MODE");
-        }
-        else
-        {
-            StatusString = TEXT("Ready");
-        }
-        break;
-
-    case EStrokeGameState::Playing:
-        StatusString = FString::Printf(TEXT("Points: %d/%d"),
-            VisitedRequiredPoints.Num(),
-            CurrentPuzzle.RequiredPoints.Num());
-        break;
-
-    case EStrokeGameState::Won:
-        StatusString = TEXT("Clear!");
-        break;
-
-    case EStrokeGameState::Lost:
-        StatusString = TEXT("Failed");
-        break;
+        CurrentPathLineColor = DefaultPathLineColor;
+        return;
     }
 
-    StatusText->SetText(FText::FromString(StatusString));
+    FIntPoint LastVisitedPoint = VisitedRequiredPoints.Last();
+    EStrokeCellType LastType = GetCellTypeAtPosition(LastVisitedPoint);
+
+    switch (LastType)
+    {
+    case EStrokeCellType::RedPoint:
+        CurrentPathLineColor = RedPointColor;
+        break;
+    case EStrokeCellType::GreenPoint:
+        CurrentPathLineColor = GreenPointColor;
+        break;
+    case EStrokeCellType::BluePoint:
+        CurrentPathLineColor = BluePointColor;
+        break;
+    default:
+        CurrentPathLineColor = DefaultPathLineColor;
+        break;
+    }
+}
+
+void UStrokeGrid::UpdateStatusText()
+{
 }
 
 void UStrokeGrid::UpdatePlayerVisual()
@@ -747,7 +743,6 @@ void UStrokeGrid::UpdateEditorVisuals()
         }
     }
 }
-
 
 bool UStrokeGrid::IsPositionValid(FIntPoint Position) const
 {
@@ -822,8 +817,6 @@ void UStrokeGrid::SetupDefaultPuzzle()
     CurrentPuzzle.WallPositions = EditorWallPositions;
     CurrentPuzzle.TeleportPortals = EditorTeleportPortals;
 }
-
-// ========== 텔레포트 관련 함수들 ==========
 
 FTeleportPortal* UStrokeGrid::FindTeleportPortal(int32 PortalID)
 {
@@ -916,5 +909,189 @@ void UStrokeGrid::OnResetClicked()
     else
     {
         ResetGame();
+    }
+}
+
+void UStrokeGrid::CalculateCellSize()
+{
+    if (!GridPanel || CurrentPuzzle.GridSize.X <= 0 || CurrentPuzzle.GridSize.Y <= 0)
+    {
+        CurrentCellSize = MinCellSize;
+        return;
+    }
+
+    float AvailableWidth = MaxGridWidth / CurrentPuzzle.GridSize.X;
+    float AvailableHeight = MaxGridHeight / CurrentPuzzle.GridSize.Y;
+
+    CurrentCellSize = FMath::Max(FMath::Min(AvailableWidth, AvailableHeight) - CellPadding, MinCellSize);
+}
+
+void UStrokeGrid::ApplyGridLayout()
+{
+    if (!GridPanel)
+    {
+        return;
+    }
+
+    CalculateCellSize();
+
+    for (UStrokeCell* Cell : CellWidgets)
+    {
+        if (Cell)
+        {
+        
+        }
+    }
+}
+
+void UStrokeGrid::ResetGame()
+{
+    GameState = EStrokeGameState::Playing;
+    CurrentPlayerPosition = CurrentPuzzle.StartPosition;
+    VisitedPositions.Empty();
+    VisitedRequiredPoints.Empty();
+    CurrentPathLineColor = DefaultPathLineColor;
+
+    for (UStrokeCell* Cell : CellWidgets)
+    {
+        if (Cell)
+        {
+            Cell->SetVisited(false);
+            Cell->SetPlayerPresence(false);
+            Cell->UpdateInteractionState(bEditMode);
+        }
+    }
+
+    UStrokeCell* StartCell = GetCellAtPosition(CurrentPlayerPosition);
+    if (StartCell)
+    {
+        StartCell->SetPlayerPresence(true);
+    }
+
+    if (StatusText)
+    {
+        StatusText->SetVisibility(ESlateVisibility::Hidden);
+    }
+
+    OnProgressReset();
+    UpdatePathDisplay();
+    UpdateProgressBar();
+    SetKeyboardFocus();
+}
+
+bool UStrokeGrid::MovePlayer(FIntPoint Direction)
+{
+    FIntPoint NewPosition = CurrentPlayerPosition + Direction;
+
+    if (!IsValidMove(NewPosition))
+    {
+        return false;
+    }
+
+    UStrokeCell* OldCell = GetCellAtPosition(CurrentPlayerPosition);
+    if (OldCell)
+    {
+        OldCell->SetPlayerPresence(false);
+        OldCell->SetVisited(true);
+    }
+
+    VisitedPositions.Add(CurrentPlayerPosition);
+
+    EStrokeCellType OldCellType = GetCellTypeAtPosition(CurrentPlayerPosition);
+    if (OldCellType == EStrokeCellType::RedPoint ||
+        OldCellType == EStrokeCellType::GreenPoint ||
+        OldCellType == EStrokeCellType::BluePoint)
+    {
+        if (!VisitedRequiredPoints.Contains(CurrentPlayerPosition))
+        {
+            VisitedRequiredPoints.Add(CurrentPlayerPosition);
+            UpdatePathColor();
+
+            if (OldCellType == EStrokeCellType::RedPoint)
+            {
+                OnRedPointCollected();
+            }
+            else if (OldCellType == EStrokeCellType::GreenPoint)
+            {
+                OnGreenPointCollected();
+            }
+            else if (OldCellType == EStrokeCellType::BluePoint)
+            {
+                OnBluePointCollected();
+            }
+        }
+    }
+
+    CurrentPlayerPosition = NewPosition;
+
+    FIntPoint FinalPosition = CheckTeleport(CurrentPlayerPosition);
+    if (FinalPosition != CurrentPlayerPosition)
+    {
+        CurrentPlayerPosition = FinalPosition;
+    }
+
+    UStrokeCell* NewCell = GetCellAtPosition(CurrentPlayerPosition);
+    if (NewCell)
+    {
+        NewCell->SetPlayerPresence(true);
+    }
+
+    UpdatePathDisplay();
+    UpdateProgressBar();
+    CheckWinCondition();
+
+    return true;
+}
+
+void UStrokeGrid::UpdateProgressBar()
+{
+    if (!ProgressBar)
+    {
+        return;
+    }
+
+    bool bHasRed = false;
+    bool bHasGreen = false;
+    bool bHasBlue = false;
+
+    for (const FIntPoint& VisitedPoint : VisitedRequiredPoints)
+    {
+        EStrokeCellType CellType = GetCellTypeAtPosition(VisitedPoint);
+
+        if (CellType == EStrokeCellType::RedPoint)
+        {
+            bHasRed = true;
+        }
+        else if (CellType == EStrokeCellType::GreenPoint)
+        {
+            bHasGreen = true;
+        }
+        else if (CellType == EStrokeCellType::BluePoint)
+        {
+            bHasBlue = true;
+        }
+    }
+
+    bool bAtGoal = (CurrentPlayerPosition == CurrentPuzzle.GoalPosition);
+
+    if (bHasRed && bHasGreen && bHasBlue && bAtGoal && ProgressGoalImage)
+    {
+        ProgressBar->SetBrushFromTexture(ProgressGoalImage);
+    }
+    else if (bHasBlue && ProgressBlueImage)
+    {
+        ProgressBar->SetBrushFromTexture(ProgressBlueImage);
+    }
+    else if (bHasGreen && ProgressGreenImage)
+    {
+        ProgressBar->SetBrushFromTexture(ProgressGreenImage);
+    }
+    else if (bHasRed && ProgressRedImage)
+    {
+        ProgressBar->SetBrushFromTexture(ProgressRedImage);
+    }
+    else if (ProgressStartImage)
+    {
+        ProgressBar->SetBrushFromTexture(ProgressStartImage);
     }
 }

@@ -1,4 +1,3 @@
-// PuzzleArea.h - 깔끔하게 정리된 버전
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -10,17 +9,15 @@
 
 class APedestal;
 
-// 셀 상태 정의
 UENUM(BlueprintType)
 enum class ECellState : uint8
 {
-    Walkable,       // 초록색 - 이동 가능
-    Unwalkable,     // 빨간색 - 이동 불가능/벽
-    PedestalSlot,   // 노란색 - 받침대 배치 가능
-    Occupied        // 파란색 - 받침대가 설치됨
+    Walkable,
+    Unwalkable,
+    PedestalSlot,
+    Occupied
 };
 
-// 방향 정의
 UENUM(BlueprintType)
 enum class EGridDirection : uint8
 {
@@ -30,7 +27,6 @@ enum class EGridDirection : uint8
     West
 };
 
-// 그리드 좌표 구조체
 USTRUCT(BlueprintType)
 struct FGridCoordinate
 {
@@ -51,25 +47,20 @@ struct FGridCoordinate
     }
 };
 
-// 그리드 셀 구조체
 USTRUCT(BlueprintType)
 struct FGridCell
 {
     GENERATED_BODY()
 
-    // 셀 상태
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell")
     ECellState State = ECellState::Walkable;
 
-    // 월드 위치
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell")
     FVector WorldLocation = FVector::ZeroVector;
 
-    // 셀에 배치된 액터 (받침대)
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell")
     AActor* PlacedActor = nullptr;
 
-    // 바닥 타일 메시
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell")
     UStaticMeshComponent* TileMesh = nullptr;
 };
@@ -82,7 +73,21 @@ class DISTRICT_TEST_API APuzzleArea : public AActor
 public:
     APuzzleArea();
 
-    // ========== 기본 그리드 설정 ==========
+    // Components - AreaBox는 독립적으로 존재
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    USceneComponent* GridRoot;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UBoxComponent* AreaBox;
+
+    // Area Box Settings - 퍼즐 그리드와 완전히 독립적
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Area Box")
+    FVector AreaBoxExtent = FVector(750.0f, 750.0f, 200.0f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Area Box")
+    FVector AreaBoxOffset = FVector::ZeroVector;
+
+    // Grid Settings
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings")
     int32 GridRows = 5;
 
@@ -95,17 +100,15 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings")
     float GridHeight = 0.0f;
 
-    // ========== 디버그 표시 설정 ==========
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
-    bool bShowDebugGrid = true;
+    bool bShowDebugGrid = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bShowGridInGame = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
-    bool bForceDebugDisplay = true;
+    bool bShowGridLinesInEditor = false;
 
-    // ========== 셀 색상 설정 ==========
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell Colors")
     FLinearColor WalkableColor = FLinearColor::Green;
 
@@ -118,7 +121,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cell Colors")
     FLinearColor OccupiedColor = FLinearColor::Blue;
 
-    // ========== 바닥 타일 설정 ==========
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Floor Tiles")
     bool bShowTileMeshes = true;
 
@@ -140,46 +142,33 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Floor Tiles")
     UMaterialInterface* OccupiedMaterial;
 
-    // ========== 수동 벽 설정 ==========
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Manual Wall Setup",
-        meta = (TitleProperty = "Row,Column"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Manual Wall Setup", meta = (TitleProperty = "Row,Column"))
     TArray<FGridCoordinate> BlockedCells;
 
-    // ========== 받침대 설정 ==========BlockedCells
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal")
     TSubclassOf<AActor> PedestalClass;
 
-    // ========== 그리드 데이터 ==========
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid Data")
     TArray<FGridCell> Grid;
 
-
-    // 자동 차단 활성화 여부 (기본값: false)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wall Blocking")
     bool bEnableAutoBlocking = false;
 
-    // 자동 차단 함수 (현재는 빈 함수, 나중에 구현)
     UFUNCTION(BlueprintCallable, Category = "Wall Blocking")
     void ApplyAutoBlocking();
 
-    // 수동 차단 함수 (기존)
     UFUNCTION(BlueprintCallable, Category = "Wall Blocking")
     void ApplyManualBlocking();
 
-    // ========== 핵심 기능 함수들 ==========
-
-    // 그리드 초기화
     UFUNCTION(BlueprintCallable, Category = "Grid")
     void InitializeGrid();
 
-    // 셀 상태 설정/조회
     UFUNCTION(BlueprintCallable, Category = "Grid")
     void SetCellState(int32 Row, int32 Column, ECellState NewState);
 
     UFUNCTION(BlueprintCallable, Category = "Grid")
     ECellState GetCellState(int32 Row, int32 Column) const;
 
-    // 좌표 변환
     UFUNCTION(BlueprintCallable, Category = "Grid")
     FVector GetWorldLocationFromGridIndex(int32 Row, int32 Column) const;
 
@@ -189,26 +178,32 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid")
     bool IsValidIndex(int32 Row, int32 Column) const;
 
-    // 받침대 관리
     UFUNCTION(BlueprintCallable, Category = "Pedestal")
     bool RegisterPedestal(APedestal* Pedestal, int32 Row, int32 Column);
 
     UFUNCTION(BlueprintCallable, Category = "Pedestal")
     AActor* GetActorAtCell(int32 Row, int32 Column) const;
 
-    // 벽 설정 관리
     UFUNCTION(BlueprintCallable, Category = "Wall Setup")
     void ApplyBlockedCells();
 
     UFUNCTION(BlueprintCallable, Category = "Wall Setup")
     void ClearBlockedCells();
 
-    // 시각화 업데이트
     UFUNCTION(BlueprintCallable, Category = "Visual")
     void UpdateCellVisuals();
 
     UFUNCTION(BlueprintCallable, Category = "Visual")
     void DrawDebugGrid(float Duration = 0.0f);
+
+    UFUNCTION(BlueprintCallable, Category = "Area Box")
+    void SetBoxExtent(FVector NewExtent);
+
+    UFUNCTION(BlueprintPure, Category = "Area Box")
+    FVector GetBoxExtent() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Area Box")
+    void UpdateAreaBoxTransform();
 
     int32 GetIndexFrom2DCoord(int32 Row, int32 Column) const;
 
@@ -217,22 +212,19 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Tile System")
     void ClearTileMeshes();
- 
+
 protected:
     virtual void BeginPlay() override;
     virtual void OnConstruction(const FTransform& Transform) override;
 
-    // 루트 컴포넌트
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UBoxComponent* AreaBox;
+#if WITH_EDITOR
+    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 
-    
     void CreateTileAtCell(int32 Row, int32 Column);
     void UpdateTileMaterial(int32 Row, int32 Column);
     UMaterialInterface* GetMaterialForCellState(ECellState State);
 
 private:
-    // 내부 헬퍼 함수들
-    
     void DrawCellsInEditor();
 };
