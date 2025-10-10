@@ -32,13 +32,13 @@ AInteractableMechanism::AInteractableMechanism()
     MaxAttempts = 3;
     OpenAngle = 90.0f;
     OpenSpeed = 2.0f;
+    HintLevelNumber = 1;
 }
 
 void AInteractableMechanism::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Door/Shutter가 필요한 메커니즘들을 구독
     if (MechanismType == EMechanismType::Door && RequiredMechanisms.Num() > 0)
     {
         for (AInteractableMechanism* RequiredMech : RequiredMechanisms)
@@ -51,6 +51,7 @@ void AInteractableMechanism::BeginPlay()
         }
     }
 }
+
 void AInteractableMechanism::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
@@ -110,7 +111,6 @@ void AInteractableMechanism::OnWidgetInteractionSuccess()
 {
     bIsCompleted = true;
 
-    // 연결된 문/셔터들에게 직접 신호 전송
     for (AInteractableMechanism* Door : ConnectedDoors)
     {
         if (Door)
@@ -144,7 +144,6 @@ bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)
     {
     case EMechanismType::Door:
     {
-        // 필수 메커니즘 체크
         if (RequiredMechanisms.Num() > 0)
         {
             for (AInteractableMechanism* RequiredMech : RequiredMechanisms)
@@ -156,7 +155,6 @@ bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)
             }
         }
 
-        // 키 아이템 체크
         if (bRequiresKey)
         {
             UInventoryComponent* InventoryComponent = Interactor->FindComponentByClass<UInventoryComponent>();
@@ -187,6 +185,7 @@ bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)
 
     return true;
 }
+
 FString AInteractableMechanism::GetInteractionText_Implementation()
 {
     return InteractionText;
@@ -206,7 +205,7 @@ EInteractionType AInteractableMechanism::GetInteractionType_Implementation()
             return EInteractionType::Use;
         case EWidgetSubType::MiniGame:
             return EInteractionType::Activate;
-        case EWidgetSubType::Quiz:
+        case EWidgetSubType::Hint:
             return EInteractionType::Read;
         default:
             return EInteractionType::Default;
@@ -216,7 +215,6 @@ EInteractionType AInteractableMechanism::GetInteractionType_Implementation()
         return EInteractionType::Default;
     }
 }
-
 
 void AInteractableMechanism::HandleDoorInteraction(AActor* Interactor)
 {
@@ -245,7 +243,6 @@ void AInteractableMechanism::OnRequiredMechanismCompleted(FString CompletedMecha
         CompletedRequiredMechanisms.Add(CompletedMechanismID);
     }
 
-    // 모든 필수 메커니즘이 완료됐는지 확인
     bool bAllCompleted = true;
     for (AInteractableMechanism* RequiredMech : RequiredMechanisms)
     {

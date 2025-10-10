@@ -7,6 +7,7 @@
 class UButton;
 class UTextBlock;
 class UImage;
+class UDataTable;
 
 UCLASS(Abstract, Blueprintable)
 class DISTRICT_TEST_API UHintWidget : public UUserWidget
@@ -19,6 +20,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Hint")
     void ResetHintWidget();
+
+    UFUNCTION(BlueprintCallable, Category = "Hint")
+    void LoadHintImage(UDataTable* HintTable, int32 LevelNumber);
 
 protected:
     UPROPERTY(meta = (BindWidget), BlueprintReadWrite)
@@ -40,25 +44,7 @@ protected:
     UButton* Block5Button;
 
     UPROPERTY(meta = (BindWidget), BlueprintReadWrite)
-    UImage* Block0Image;
-
-    UPROPERTY(meta = (BindWidget), BlueprintReadWrite)
-    UImage* Block1Image;
-
-    UPROPERTY(meta = (BindWidget), BlueprintReadWrite)
-    UImage* Block2Image;
-
-    UPROPERTY(meta = (BindWidget), BlueprintReadWrite)
-    UImage* Block3Image;
-
-    UPROPERTY(meta = (BindWidget), BlueprintReadWrite)
-    UImage* Block4Image;
-
-    UPROPERTY(meta = (BindWidget), BlueprintReadWrite)
-    UImage* Block5Image;
-
-    UPROPERTY(meta = (BindWidget), BlueprintReadWrite)
-    UImage* HintBackgroundImage;
+    UImage* HintImage;
 
     UPROPERTY(meta = (BindWidget), BlueprintReadWrite)
     UTextBlock* CooldownText;
@@ -109,7 +95,4 @@ protected:
 
 private:
     TArray<UButton*> BlockButtons;
-    TArray<UImage*> BlockImages;
 };
-
-

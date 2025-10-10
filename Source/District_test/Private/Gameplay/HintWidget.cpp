@@ -1,10 +1,9 @@
-// ============================================
-// HintWidget.cpp
-// ============================================
 #include "Gameplay/HintWidget.h"
+#include "Interaction/InteractableMechanism.h"
 #include "Components/Button.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Engine/Texture2D.h"
 
 void UHintWidget::NativeConstruct()
 {
@@ -17,14 +16,6 @@ void UHintWidget::NativeConstruct()
     BlockButtons.Add(Block3Button);
     BlockButtons.Add(Block4Button);
     BlockButtons.Add(Block5Button);
-
-    BlockImages.Empty();
-    BlockImages.Add(Block0Image);
-    BlockImages.Add(Block1Image);
-    BlockImages.Add(Block2Image);
-    BlockImages.Add(Block3Image);
-    BlockImages.Add(Block4Image);
-    BlockImages.Add(Block5Image);
 
     InitializeBlocks();
     BindButtonEvents();
@@ -53,6 +44,22 @@ void UHintWidget::InitializeBlocks()
 
     bIsOnCooldown = false;
     CurrentCooldown = 0.0f;
+}
+
+void UHintWidget::LoadHintImage(UDataTable* HintTable, int32 LevelNumber)
+{
+    if (!HintTable || !HintImage)
+    {
+        return;
+    }
+
+    FString RowName = FString::FromInt(LevelNumber);
+    FHintImageData* RowData = HintTable->FindRow<FHintImageData>(*RowName, TEXT(""));
+
+    if (RowData && RowData->HintImage)
+    {
+        HintImage->SetBrushFromTexture(RowData->HintImage);
+    }
 }
 
 void UHintWidget::BindButtonEvents()
@@ -116,7 +123,9 @@ void UHintWidget::HandleBlockClick(int32 BlockIndex)
 
     if (bIsOnCooldown)
     {
-        FString Reason = FString::Printf(TEXT("Cooldown: %.0f seconds"), CurrentCooldown);
+        int32 Minutes = FMath::FloorToInt(CurrentCooldown / 60.0f);
+        int32 Seconds = FMath::FloorToInt(CurrentCooldown) % 60;
+        FString Reason = FString::Printf(TEXT("Cooldown: %02d:%02d"), Minutes, Seconds);
         OnRevealFailed(BlockIndex, Reason);
         return;
     }
@@ -146,12 +155,12 @@ void UHintWidget::UpdateCooldown(float DeltaTime)
 
 void UHintWidget::UpdateBlockVisibility()
 {
-    for (int32 i = 0; i < BlockImages.Num(); i++)
+    for (int32 i = 0; i < BlockButtons.Num(); i++)
     {
-        if (BlockImages[i])
+        if (BlockButtons[i])
         {
             bool bIsRevealed = RevealedBlocks[i];
-            BlockImages[i]->SetVisibility(bIsRevealed ? ESlateVisibility::Hidden : ESlateVisibility::Visible);
+            BlockButtons[i]->SetVisibility(bIsRevealed ? ESlateVisibility::Hidden : ESlateVisibility::Visible);
         }
     }
 }
@@ -161,17 +170,11 @@ void UHintWidget::UpdateCooldownDisplay()
     if (!CooldownText)
         return;
 
-    if (!bIsOnCooldown)
-    {
-        CooldownText->SetText(FText::FromString(TEXT("Ready")));
-        CooldownText->SetColorAndOpacity(FSlateColor(FLinearColor::Green));
-    }
-    else
-    {
-        FString CooldownString = FString::Printf(TEXT("Wait: %.0fs"), CurrentCooldown);
-        CooldownText->SetText(FText::FromString(CooldownString));
-        CooldownText->SetColorAndOpacity(FSlateColor(FLinearColor::Red));
-    }
+    int32 Minutes = FMath::FloorToInt(CurrentCooldown / 60.0f);
+    int32 Seconds = FMath::FloorToInt(CurrentCooldown) % 60;
+    FString CooldownString = FString::Printf(TEXT("%02d:%02d"), Minutes, Seconds);
+    CooldownText->SetText(FText::FromString(CooldownString));
+    CooldownText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 }
 
 void UHintWidget::ResetHintWidget()

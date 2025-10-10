@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Interaction/InteractableInterface.h"
+#include "Engine/DataTable.h"
 #include "InteractableMechanism.generated.h"
 
 UENUM(BlueprintType)
@@ -17,7 +18,25 @@ enum class EWidgetSubType : uint8
 {
     Keypad      UMETA(DisplayName = "Keypad Input"),
     MiniGame    UMETA(DisplayName = "Mini Game"),
-    Quiz        UMETA(DisplayName = "Quiz")
+    Hint        UMETA(DisplayName = "Hint Frame")
+};
+
+USTRUCT(BlueprintType)
+struct DISTRICT_TEST_API FHintImageData : public FTableRowBase
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hint")
+    int32 LevelNumber = 1;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hint")
+    UTexture2D* HintImage = nullptr;
+
+    FHintImageData()
+    {
+        LevelNumber = 1;
+        HintImage = nullptr;
+    }
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMechanismCompleted, FString, MechanismID);
@@ -120,6 +139,15 @@ public:
             ClampMin = "1", ClampMax = "100"))
     int32 MiniGameStageNumber = 1;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction|Widget|Hint",
+        meta = (EditCondition = "MechanismType == EMechanismType::Widget && WidgetSubType == EWidgetSubType::Hint"))
+    UDataTable* HintImagesTable;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction|Widget|Hint",
+        meta = (EditCondition = "MechanismType == EMechanismType::Widget && WidgetSubType == EWidgetSubType::Hint",
+            ClampMin = "1", ClampMax = "9"))
+    int32 HintLevelNumber = 1;
+
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
     void Interact(AActor* Interactor);
     virtual void Interact_Implementation(AActor* Interactor) override;
@@ -171,6 +199,12 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Interaction|Widget")
     int32 GetMiniGameStageNumber() const { return MiniGameStageNumber; }
+
+    UFUNCTION(BlueprintCallable, Category = "Interaction|Widget|Hint")
+    UDataTable* GetHintImagesTable() const { return HintImagesTable; }
+
+    UFUNCTION(BlueprintCallable, Category = "Interaction|Widget|Hint")
+    int32 GetHintLevelNumber() const { return HintLevelNumber; }
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Interaction")
     void OnInteractionSuccess(AActor* Interactor);
