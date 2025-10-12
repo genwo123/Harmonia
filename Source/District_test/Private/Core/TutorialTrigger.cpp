@@ -28,11 +28,7 @@ ATutorialTrigger::ATutorialTrigger()
     bHasTriggered = false;
     CurrentMessageIndex = 0;
     TutorialWidget = nullptr;
-
-    FTutorialMessage DefaultMessage;
-    DefaultMessage.MessageText = FText::FromString(TEXT("Test Trigger message"));
-    DefaultMessage.DisplayDuration = 3.0f;
-    TutorialMessages.Add(DefaultMessage);
+    MessageGroupIndex = 0;
 }
 
 void ATutorialTrigger::BeginPlay()
@@ -49,6 +45,42 @@ void ATutorialTrigger::BeginPlay()
     GetOrCreateTutorialWidget();
 }
 
+bool ATutorialTrigger::LoadMessageGroupFromDataTable()
+{
+    if (!TutorialMessageDataTable)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("TutorialMessageDataTable이 설정되지 않았습니다!"));
+        return false;
+    }
+
+    FString RowName = FString::Printf(TEXT("%d"), MessageGroupIndex);
+    FTutorialMessageData* MessageData = TutorialMessageDataTable->FindRow<FTutorialMessageData>(
+        FName(*RowName), TEXT("TutorialMessageGroup"));
+
+    if (MessageData)
+    {
+        CurrentMessageData = *MessageData;
+
+        if (CurrentMessageData.Messages.Num() == 0)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("메시지 그룹 %d에 메시지가 없습니다!"), MessageGroupIndex);
+            return false;
+        }
+
+        while (CurrentMessageData.DisplayDurations.Num() < CurrentMessageData.Messages.Num())
+        {
+            CurrentMessageData.DisplayDurations.Add(3.0f);
+        }
+
+        return true;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("메시지 그룹 인덱스 %d를 찾을 수 없습니다!"), MessageGroupIndex);
+        return false;
+    }
+}
+
 void ATutorialTrigger::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
     UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
@@ -59,15 +91,15 @@ void ATutorialTrigger::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComp
     if (!bIsActive || (bIsOneTimeUse && bHasTriggered))
         return;
 
-    if (TutorialMessages.Num() == 0)
-        return;
-
     StartTutorial();
 }
 
 void ATutorialTrigger::StartTutorial()
 {
     if (bHasTriggered && bIsOneTimeUse)
+        return;
+
+    if (!LoadMessageGroupFromDataTable())
         return;
 
     bHasTriggered = true;
@@ -78,21 +110,22 @@ void ATutorialTrigger::StartTutorial()
 
 void ATutorialTrigger::ShowCurrentMessage()
 {
-    if (CurrentMessageIndex >= TutorialMessages.Num())
+    if (CurrentMessageIndex >= CurrentMessageData.Messages.Num())
     {
         EndTutorial();
         return;
     }
 
-    const FTutorialMessage& CurrentMessage = TutorialMessages[CurrentMessageIndex];
+    FText MessageText = CurrentMessageData.Messages[CurrentMessageIndex];
+    float Duration = CurrentMessageData.DisplayDurations[CurrentMessageIndex];
 
     UTutorialWidget* Widget = Cast<UTutorialWidget>(GetOrCreateTutorialWidget());
     if (Widget)
     {
-        Widget->ShowMessage(CurrentMessage.MessageText, CurrentMessage.DisplayDuration);
+        Widget->ShowMessage(MessageText, Duration);
     }
 
-    if (CurrentMessage.DisplayDuration > 0.0f)
+    if (Duration > 0.0f)
     {
         GetWorld()->GetTimerManager().SetTimer(
             MessageTimerHandle,
@@ -101,7 +134,7 @@ void ATutorialTrigger::ShowCurrentMessage()
                 CurrentMessageIndex++;
                 ShowNextMessage();
             },
-            CurrentMessage.DisplayDuration,
+            Duration,
             false
         );
     }

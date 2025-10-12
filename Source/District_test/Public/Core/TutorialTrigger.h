@@ -1,29 +1,29 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Blueprint/UserWidget.h"
+#include "Engine/DataTable.h"
 #include "TutorialTrigger.generated.h"
 
 class UTutorialWidget;
 
 USTRUCT(BlueprintType)
-struct DISTRICT_TEST_API FTutorialMessage
+struct DISTRICT_TEST_API FTutorialMessageData : public FTableRowBase
 {
     GENERATED_BODY()
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
-    FText MessageText;
+    TArray<FText> Messages;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
-    float DisplayDuration;
+    TArray<float> DisplayDurations;
 
-    FTutorialMessage()
+    FTutorialMessageData()
     {
-        MessageText = FText::FromString(TEXT("튜토리얼 텍스트"));
-        DisplayDuration = 3.0f;
+        Messages.Add(FText::FromString(TEXT("튜토리얼 메시지 1")));
+        DisplayDurations.Add(3.0f);
     }
 };
 
@@ -46,7 +46,10 @@ public:
     UStaticMeshComponent* VisualMesh;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
-    TArray<FTutorialMessage> TutorialMessages;
+    UDataTable* TutorialMessageDataTable;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial", meta = (DisplayName = "메시지 그룹 인덱스"))
+    int32 MessageGroupIndex;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
     TSubclassOf<UUserWidget> TutorialWidgetClass;
@@ -69,6 +72,8 @@ protected:
 
     UPROPERTY(BlueprintReadOnly, Category = "Tutorial")
     UUserWidget* TutorialWidget;
+
+    FTutorialMessageData CurrentMessageData;
 
     FTimerHandle MessageTimerHandle;
 
@@ -93,6 +98,7 @@ public:
     UUserWidget* GetOrCreateTutorialWidget();
 
 private:
+    bool LoadMessageGroupFromDataTable();
     void ShowCurrentMessage();
     void HideCurrentMessage();
 };

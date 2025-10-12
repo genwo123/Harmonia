@@ -148,6 +148,9 @@ public:
             ClampMin = "1", ClampMax = "9"))
     int32 HintLevelNumber = 1;
 
+    UPROPERTY(BlueprintReadWrite, Category = "Interaction|Widget|Hint")
+    class UUserWidget* CurrentHintWidget;
+
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
     void Interact(AActor* Interactor);
     virtual void Interact_Implementation(AActor* Interactor) override;
