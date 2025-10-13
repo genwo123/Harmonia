@@ -1,4 +1,3 @@
-// PuzzleInteractionComponent.cpp
 #include "Gameplay/PuzzleInteractionComponent.h"
 #include "Gameplay/Pedestal.h"
 #include "GameFramework/Character.h"
@@ -119,13 +118,22 @@ void UPuzzleInteractionComponent::TickComponent(float DeltaTime, ELevelTick Tick
                 FRotator CameraRotation;
                 Character->GetActorEyesViewPoint(CameraLocation, CameraRotation);
 
-                // 오프셋 적용
                 FVector NewLocation = CameraLocation +
                     (CameraRotation.Vector() * HoldOffset.X) +
                     (FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Y) * HoldOffset.Y) +
                     (FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Z) * HoldOffset.Z);
 
                 Owner->SetActorLocation(NewLocation);
+
+                // 1초마다 한 번씩만 로그 (Tick은 너무 많이 찍혀서)
+                static float LogTimer = 0.0f;
+                LogTimer += DeltaTime;
+                if (LogTimer >= 1.0f)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[Holding] Object: %s | HoldOffset: %s | Current Pos: %s"),
+                        *Owner->GetName(), *HoldOffset.ToString(), *NewLocation.ToString());
+                    LogTimer = 0.0f;
+                }
 
                 if (bMatchCameraRotation)
                 {
@@ -138,64 +146,76 @@ void UPuzzleInteractionComponent::TickComponent(float DeltaTime, ELevelTick Tick
 
 bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
 {
-    if (!bCanBePickedUp || HoldingActor)
+    UE_LOG(LogTemp, Warning, TEXT("[PickUp] Attempting - bCanBePickedUp: %d, HoldingActor: %s"),
+        bCanBePickedUp, HoldingActor ? *HoldingActor->GetName() : TEXT("NULL"));
+
+    if (!bCanBePickedUp)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[PickUp] FAILED - Cannot be picked up"));
+        return false;
+    }
+
+    if (HoldingActor)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[PickUp] FAILED - Already being held by: %s"), *HoldingActor->GetName());
         return false;
     }
 
     AActor* Owner = GetOwner();
     if (!Owner)
     {
+        UE_LOG(LogTemp, Error, TEXT("[PickUp] FAILED - No Owner"));
         return false;
     }
 
-    // 만약 이 오브젝트가 받침대에 있다면 먼저 제거
     if (CurrentPedestal)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[PickUp] Removing from Pedestal"));
         RemoveFromPedestal();
     }
 
-    // 들어올릴 때 피직스 비활성화
     DisablePhysics();
 
-    // 들고 있는 액터 설정
     HoldingActor = Picker;
 
-    // 오브젝트가 독립적으로 위치할 수 있도록 분리
     Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
-
+    UE_LOG(LogTemp, Warning, TEXT("[PickUp] SUCCESS - Object: %s, Picker: %s, HoldingActor set to: %s"),
+        *Owner->GetName(), *Picker->GetName(), *HoldingActor->GetName());
 
     return true;
 }
 
 bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
 {
-    if (!HoldingActor)
-    {
-        return false;
-    }
-
     AActor* Owner = GetOwner();
     if (!Owner)
     {
+        UE_LOG(LogTemp, Error, TEXT("[PutDown] FAILED - No Owner"));
         return false;
     }
 
-    // 새 위치와 회전 설정
+    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Called - Object: %s, HoldingActor: %s"),
+        *Owner->GetName(), HoldingActor ? *HoldingActor->GetName() : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Requested Location: %s"), *Location.ToString());
+
+    // HoldingActor를 먼저 nullptr로 설정
+    HoldingActor = nullptr;
+
     Owner->SetActorLocation(Location);
     Owner->SetActorRotation(Rotation);
 
-    // 내려놓을 때 피직스 활성화 (자연스럽게 떨어지도록)
+    FVector ActualLocation = Owner->GetActorLocation();
+    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Actual Location: %s"), *ActualLocation.ToString());
+
     if (bEnablePhysicsWhenDropped)
     {
         EnablePhysics();
+        UE_LOG(LogTemp, Warning, TEXT("[PutDown] Physics Enabled"));
     }
 
-    // 들고 있는 액터 초기화
-    HoldingActor = nullptr;
-
-
+    UE_LOG(LogTemp, Warning, TEXT("[PutDown] SUCCESS - HoldingActor now: %s"),
+        HoldingActor ? TEXT("STILL SET!") : TEXT("NULL (correct)"));
 
     return true;
 }
@@ -204,37 +224,40 @@ bool UPuzzleInteractionComponent::PlaceOnPedestal(APedestal* Pedestal)
 {
     if (!Pedestal || !bCanBePlacedOnPedestal)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[PlaceOnPedestal] FAILED - Pedestal: %d, CanBePlaced: %d"),
+            Pedestal != nullptr, bCanBePlacedOnPedestal);
         return false;
     }
 
     AActor* Owner = GetOwner();
     if (!Owner)
     {
+        UE_LOG(LogTemp, Error, TEXT("[PlaceOnPedestal] FAILED - No Owner"));
         return false;
     }
 
-    // 현재 받침대가 있다면 제거
+    UE_LOG(LogTemp, Warning, TEXT("[PlaceOnPedestal] Attempting to place %s on %s"),
+        *Owner->GetName(), *Pedestal->GetName());
+
     if (CurrentPedestal)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[PlaceOnPedestal] Removing from current pedestal first"));
         RemoveFromPedestal();
     }
 
-    // 새 받침대에 배치
+    // HoldingActor를 먼저 nullptr로 설정
+    HoldingActor = nullptr;
+
     if (Pedestal->PlaceObject(Owner))
     {
         CurrentPedestal = Pedestal;
-
-        // 받침대에 놓을 때는 피직스 비활성화 (고정)
         DisablePhysics();
 
-        // 더 이상 들고 있지 않음
-        HoldingActor = nullptr;
-
-
-
+        UE_LOG(LogTemp, Warning, TEXT("[PlaceOnPedestal] SUCCESS - Object placed"));
         return true;
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("[PlaceOnPedestal] FAILED - Pedestal->PlaceObject returned false"));
     return false;
 }
 

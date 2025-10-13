@@ -307,6 +307,41 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Ground|Visited")
     UTexture2D* VisitedGroundBlueImage;
 
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Movement")
+    USoundBase* MoveSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Movement")
+    float MoveSoundVolume = 0.5f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Points")
+    USoundBase* RedPointSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Points")
+    USoundBase* GreenPointSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Points")
+    USoundBase* BluePointSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Points")
+    float PointSoundVolume = 0.7f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Success")
+    USoundBase* PuzzleCompleteSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Success")
+    float PuzzleCompleteSoundVolume = 1.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Reset")
+    USoundBase* ResetSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Reset")
+    float ResetSoundVolume = 0.5f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Settings")
+    bool bEnableSounds = true;
+
+
 protected:
     EStrokeCellType GetCellTypeAtPosition(FIntPoint Position) const;
     int32 GetCellIndex(FIntPoint Position) const;
@@ -324,6 +359,9 @@ protected:
     void ClampPositionsToGrid();
     void AutoPlaceStartGoal();
     void SetupDefaultPuzzle();
+
+    void PlaySound(USoundBase* Sound, float Volume = 1.0f);
+
 
     FTeleportPortal* FindTeleportPortal(int32 PortalID);
     void ToggleTeleportPortal(FIntPoint Position, int32 PortalID);

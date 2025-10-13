@@ -22,7 +22,7 @@ struct DISTRICT_TEST_API FTutorialMessageData : public FTableRowBase
 
     FTutorialMessageData()
     {
-        Messages.Add(FText::FromString(TEXT("튜토리얼 메시지 1")));
+        Messages.Add(FText::FromString(TEXT("Tutorial Message 1")));
         DisplayDurations.Add(3.0f);
     }
 };
@@ -48,7 +48,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
     UDataTable* TutorialMessageDataTable;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial", meta = (DisplayName = "메시지 그룹 인덱스"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial", meta = (DisplayName = "MessageGroup"))
     int32 MessageGroupIndex;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")

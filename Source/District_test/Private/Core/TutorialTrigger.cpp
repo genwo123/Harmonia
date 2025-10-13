@@ -49,7 +49,7 @@ bool ATutorialTrigger::LoadMessageGroupFromDataTable()
 {
     if (!TutorialMessageDataTable)
     {
-        UE_LOG(LogTemp, Warning, TEXT("TutorialMessageDataTable이 설정되지 않았습니다!"));
+        UE_LOG(LogTemp, Warning, TEXT("TutorialMessageDataTable NO"));
         return false;
     }
 
@@ -63,7 +63,7 @@ bool ATutorialTrigger::LoadMessageGroupFromDataTable()
 
         if (CurrentMessageData.Messages.Num() == 0)
         {
-            UE_LOG(LogTemp, Warning, TEXT("메시지 그룹 %d에 메시지가 없습니다!"), MessageGroupIndex);
+            UE_LOG(LogTemp, Warning, TEXT("NO Message"), MessageGroupIndex);
             return false;
         }
 
@@ -76,7 +76,7 @@ bool ATutorialTrigger::LoadMessageGroupFromDataTable()
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("메시지 그룹 인덱스 %d를 찾을 수 없습니다!"), MessageGroupIndex);
+        UE_LOG(LogTemp, Warning, TEXT("No MessageGroup"), MessageGroupIndex);
         return false;
     }
 }

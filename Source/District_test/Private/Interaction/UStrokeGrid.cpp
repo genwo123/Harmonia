@@ -3,6 +3,7 @@
 #include "Components/UniformGridPanel.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
+#include "Kismet/GameplayStatics.h"
 #include "Components/Image.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Engine/Engine.h"
@@ -508,24 +509,6 @@ void UStrokeGrid::CheckWinCondition()
     OnGameWon();
 }
 
-void UStrokeGrid::OnGameWon()
-{
-    for (UStrokeCell* Cell : CellWidgets)
-    {
-        if (Cell)
-        {
-            Cell->UpdateInteractionState(false);
-        }
-    }
-
-    ShowClearMessage();
-
-    FTimerHandle TimerHandle;
-    GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
-        {
-            OnPuzzleCompleted();
-        }, 1.0f, false);
-}
 
 void UStrokeGrid::ShowClearMessage()
 {
@@ -979,6 +962,14 @@ void UStrokeGrid::ResetGame()
     SetKeyboardFocus();
 }
 
+void UStrokeGrid::PlaySound(USoundBase* Sound, float Volume)
+{
+    if (bEnableSounds && Sound && GetWorld())
+    {
+        UGameplayStatics::PlaySound2D(GetWorld(), Sound, Volume);
+    }
+}
+
 bool UStrokeGrid::MovePlayer(FIntPoint Direction)
 {
     FIntPoint NewPosition = CurrentPlayerPosition + Direction;
@@ -987,6 +978,9 @@ bool UStrokeGrid::MovePlayer(FIntPoint Direction)
     {
         return false;
     }
+
+
+    PlaySound(MoveSound, MoveSoundVolume);
 
     UStrokeCell* OldCell = GetCellAtPosition(CurrentPlayerPosition);
     if (OldCell)
@@ -1007,16 +1001,20 @@ bool UStrokeGrid::MovePlayer(FIntPoint Direction)
             VisitedRequiredPoints.Add(CurrentPlayerPosition);
             UpdatePathColor();
 
+
             if (OldCellType == EStrokeCellType::RedPoint)
             {
+                PlaySound(RedPointSound, PointSoundVolume);
                 OnRedPointCollected();
             }
             else if (OldCellType == EStrokeCellType::GreenPoint)
             {
+                PlaySound(GreenPointSound, PointSoundVolume);
                 OnGreenPointCollected();
             }
             else if (OldCellType == EStrokeCellType::BluePoint)
             {
+                PlaySound(BluePointSound, PointSoundVolume);
                 OnBluePointCollected();
             }
         }
@@ -1042,6 +1040,30 @@ bool UStrokeGrid::MovePlayer(FIntPoint Direction)
 
     return true;
 }
+
+
+void UStrokeGrid::OnGameWon()
+{
+
+    PlaySound(PuzzleCompleteSound, PuzzleCompleteSoundVolume);
+
+    for (UStrokeCell* Cell : CellWidgets)
+    {
+        if (Cell)
+        {
+            Cell->UpdateInteractionState(false);
+        }
+    }
+
+    ShowClearMessage();
+
+    FTimerHandle TimerHandle;
+    GetWorld()->GetTimerManager().SetTimer(TimerHandle, [this]()
+        {
+            OnPuzzleCompleted();
+        }, 1.0f, false);
+}
+
 
 void UStrokeGrid::UpdateProgressBar()
 {

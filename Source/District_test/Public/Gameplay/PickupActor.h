@@ -67,6 +67,7 @@ public:
     USceneComponent* SceneComponent;
 
 
+
     // 메시 회전 설정
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ExposeOnSpawn = true))
     FRotator MeshRotation = FRotator::ZeroRotator;

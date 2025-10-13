@@ -75,13 +75,11 @@ void APedestal::BeginPlay()
                 {
                     Pickup->MeshComponent->SetVisibility(true);
                     Pickup->MeshComponent->SetHiddenInGame(false);
-                    // 콜리전 유지 (레이저 반사용)
                     Pickup->MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
                     Pickup->MeshComponent->SetSimulatePhysics(false);
                 }
                 if (Pickup->InteractionSphere)
                 {
-                    // 상호작용 가능하도록 콜리전 켜기
                     Pickup->InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
                     Pickup->InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
                 }
@@ -89,16 +87,22 @@ void APedestal::BeginPlay()
         }
     }
 
-    if (TargetPuzzleArea)
+    // 그리드 시스템 사용하는 경우만
+    if (bUseGridSystem)
     {
-        OwnerPuzzleArea = TargetPuzzleArea;
-        MoveToGridPosition(TargetGridRow, TargetGridColumn);
-    }
-    else
-    {
-        FindOwnerPuzzleArea();
+        if (TargetPuzzleArea)
+        {
+            OwnerPuzzleArea = TargetPuzzleArea;
+            MoveToGridPosition(TargetGridRow, TargetGridColumn);
+        }
+        else
+        {
+            FindOwnerPuzzleArea();
+        }
     }
 }
+
+
 
 void APedestal::OnConstruction(const FTransform& Transform)
 {
@@ -109,7 +113,7 @@ void APedestal::OnConstruction(const FTransform& Transform)
         UpdateAttachedActor();
     }
 
-    if (!bAutoSnapToGrid)
+    if (!bAutoSnapToGrid || !bUseGridSystem)
         return;
 
     if (TargetPuzzleArea)
@@ -123,8 +127,12 @@ void APedestal::OnConstruction(const FTransform& Transform)
     }
 }
 
+
 bool APedestal::MoveToGridPosition(int32 NewRow, int32 NewColumn)
 {
+    if (!bUseGridSystem)
+        return false;
+
     if (!OwnerPuzzleArea)
     {
         return false;
@@ -269,6 +277,10 @@ void APedestal::Interact_Implementation(AActor* Interactor)
 
 bool APedestal::Push(FVector Direction)
 {
+    if (!bUseGridSystem)
+        return false;
+
+
     Direction = -Direction;
     FVector AdjustedDirection(-Direction.Y, -Direction.X, Direction.Z);
     Direction = AdjustedDirection;
@@ -340,6 +352,9 @@ bool APedestal::Push(FVector Direction)
 
 void APedestal::SnapToGridCenter()
 {
+    if (!bUseGridSystem)
+        return;
+
     if (!OwnerPuzzleArea)
     {
         FindOwnerPuzzleArea();
@@ -365,15 +380,28 @@ void APedestal::SnapToGridCenter()
 
 void APedestal::Rotate(float Degrees)
 {
+    if (!bCanRotate)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Rotate] Cannot rotate - bCanRotate is false"));
+        return;
+    }
+
+    FRotator OldRotation = GetActorRotation();
     FRotator NewRotation = GetActorRotation();
     NewRotation.Yaw += Degrees;
     SetActorRotation(NewRotation);
 
+    UE_LOG(LogTemp, Warning, TEXT("[Rotate] Input Degrees: %.2f | Old Yaw: %.2f -> New Yaw: %.2f"),
+        Degrees, OldRotation.Yaw, NewRotation.Yaw);
+
     if (PlacedObject && bObjectFollowsRotation)
     {
         PlacedObject->SetActorRotation(NewRotation);
+        UE_LOG(LogTemp, Warning, TEXT("[Rotate] PlacedObject also rotated"));
     }
 }
+
+
 
 bool APedestal::PlaceObject(AActor* Object)
 {

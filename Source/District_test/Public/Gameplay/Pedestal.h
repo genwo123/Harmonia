@@ -63,8 +63,15 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Pedestal")
     bool Push(FVector Direction);
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal")
+    bool bCanRotate = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    bool bUseGridSystem = true;
+
     UFUNCTION(BlueprintCallable, Category = "Attachment")
     void RotateAttachment(float Degrees);
+
 
     UFUNCTION(BlueprintPure, Category = "Attachment")
     float GetAttachmentRotation() const;
@@ -92,6 +99,7 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Pedestal")
     void SnapToGridCenter();
+
 
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Interaction")
     USphereComponent* InteractionSphere;

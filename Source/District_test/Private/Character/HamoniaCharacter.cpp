@@ -40,6 +40,7 @@ AHamoniaCharacter::AHamoniaCharacter()
 	HeldItemDisplay->SetRelativeLocation(FVector(50.0f, 20.0f, -10.0f));
 	HeldItemDisplay->SetVisibility(false);
 
+	
 	CurrentDisplayedItem = nullptr;
 
 	DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
@@ -156,80 +157,9 @@ void AHamoniaCharacter::Tick(float DeltaTime)
 
 	CheckForInteractables();
 
-	if (!bIsLookingAtInteractable)
-	{
-		for (TActorIterator<APickupActor> It(GetWorld()); It; ++It)
-		{
-			APickupActor* PickupActor = *It;
-			if (IsValid(PickupActor))
-			{
-				float Distance = FVector::Distance(GetActorLocation(), PickupActor->GetActorLocation());
-				if (Distance < 400.0f)
-				{
-					bIsLookingAtInteractable = true;
-					CurrentInteractableActor = PickupActor;
-					CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(PickupActor);
-					break;
-				}
-			}
-		}
-
-		if (!bIsLookingAtInteractable)
-		{
-			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
-			{
-				AActor* Actor = *It;
-				if (IsValid(Actor) &&
-					Actor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()) &&
-					(Actor->GetName().Contains("Reflect") || Actor->GetName().Contains("Mirror")))
-				{
-					float Distance = FVector::Distance(GetActorLocation(), Actor->GetActorLocation());
-					if (Distance < 400.0f)
-					{
-						bIsLookingAtInteractable = true;
-						CurrentInteractableActor = Actor;
-						CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(Actor);
-						break;
-					}
-				}
-			}
-		}
-	}
-
 	if (bShowDebugLines)
 	{
 		DrawDebugInteractionLine();
-	}
-
-	APlayerController* PC = Cast<APlayerController>(GetController());
-	if (PC)
-	{
-		if (PC->WasInputKeyJustPressed(EKeys::R))
-		{
-			if (bIsLookingAtInteractable && CurrentInteractableActor)
-			{
-				APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
-				if (Pedestal)
-				{
-					Pedestal->Rotate();
-				}
-			}
-		}
-
-		if (PC->WasInputKeyJustPressed(EKeys::E))
-		{
-			if (bIsLookingAtInteractable && CurrentInteractableActor)
-			{
-				APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
-				if (Pedestal)
-				{
-					FVector Direction = Pedestal->GetActorLocation() - GetActorLocation();
-					Direction.Z = 0;
-					Direction.Normalize();
-					Pedestal->Push(Direction);
-				}
-			}
-		}
 	}
 }
 
@@ -399,78 +329,99 @@ void AHamoniaCharacter::Interact()
 		return;
 	}
 
-	if (bIsLookingAtInteractable && CurrentInteractableActor)
-	{
-		AActor* HeldObject = GetHeldObject();
+	AActor* HeldObject = GetHeldObject();
 
-		if (HeldObject)
+	if (HeldObject)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Interact] Currently holding: %s"), *HeldObject->GetName());
+		UE_LOG(LogTemp, Warning, TEXT("[Interact] bIsLookingAtInteractable: %d"), bIsLookingAtInteractable);
+
+		if (CurrentInteractableActor)
 		{
-			UPuzzleInteractionComponent* HeldItemComp =
-				HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
-			if (HeldItemComp)
+			UE_LOG(LogTemp, Warning, TEXT("[Interact] CurrentInteractableActor: %s"), *CurrentInteractableActor->GetName());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Interact] CurrentInteractableActor is NULL"));
+		}
+
+		UPuzzleInteractionComponent* HeldItemComp =
+			HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
+
+		if (HeldItemComp)
+		{
+			if (bIsLookingAtInteractable && CurrentInteractableActor)
 			{
 				APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
 				if (Pedestal)
 				{
+					UE_LOG(LogTemp, Warning, TEXT("[Interact] Placing on Pedestal"));
 					HeldItemComp->PlaceOnPedestal(Pedestal);
+					if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+					{
+						IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+					}
+					return;
 				}
 				else
 				{
-					FVector DropLocation = GetActorLocation() + (GetActorForwardVector() * 100.0f);
-					HeldItemComp->PutDown(DropLocation, GetActorRotation());
+					UE_LOG(LogTemp, Warning, TEXT("[Interact] Not a Pedestal - Type: %s"),
+						*CurrentInteractableActor->GetClass()->GetName());
 				}
-				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-				{
-					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-				}
-				return;
 			}
+
+			UE_LOG(LogTemp, Warning, TEXT("[Interact] Dropping object"));
+			FVector DropLocation = GetActorLocation() + (GetActorForwardVector() * 150.0f);
+			DropLocation.Z = GetActorLocation().Z;
+			HeldItemComp->PutDown(DropLocation, GetActorRotation());
+			return;
 		}
-		else
+	}
+
+	if (bIsLookingAtInteractable && CurrentInteractableActor)
+	{
+		UItem* HeldInventoryItem = GetCurrentHeldInventoryItem();
+		if (HeldInventoryItem && HandleInventoryItemInteraction(HeldInventoryItem, CurrentInteractableActor))
 		{
-			UItem* HeldInventoryItem = GetCurrentHeldInventoryItem();
-			if (HeldInventoryItem && HandleInventoryItemInteraction(HeldInventoryItem, CurrentInteractableActor))
-			{
-				return;
-			}
+			return;
+		}
 
-			APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
-			if (Pedestal)
+		APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
+		if (Pedestal)
+		{
+			AActor* ObjectOnPedestal = Pedestal->GetPlacedObject();
+			if (ObjectOnPedestal)
 			{
-				AActor* ObjectOnPedestal = Pedestal->GetPlacedObject();
-				if (ObjectOnPedestal)
+				UPuzzleInteractionComponent* InteractionComp =
+					ObjectOnPedestal->FindComponentByClass<UPuzzleInteractionComponent>();
+				if (InteractionComp)
 				{
-					UPuzzleInteractionComponent* InteractionComp =
-						ObjectOnPedestal->FindComponentByClass<UPuzzleInteractionComponent>();
-					if (InteractionComp)
+					InteractionComp->PickUp(this);
+					if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 					{
-						InteractionComp->PickUp(this);
-						if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-						{
-							IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-						}
-						return;
+						IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
 					}
+					return;
 				}
-				IInteractableInterface::Execute_Interact(Pedestal, this);
-				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-				{
-					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-				}
-				return;
 			}
-
-			UPuzzleInteractionComponent* InteractionComp =
-				CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
-			if (InteractionComp && InteractionComp->bCanBePickedUp)
+			IInteractableInterface::Execute_Interact(Pedestal, this);
+			if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 			{
-				InteractionComp->PickUp(this);
-				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-				{
-					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-				}
-				return;
+				IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
 			}
+			return;
+		}
+
+		UPuzzleInteractionComponent* InteractionComp =
+			CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
+		if (InteractionComp && InteractionComp->bCanBePickedUp)
+		{
+			InteractionComp->PickUp(this);
+			if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+			{
+				IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+			}
+			return;
 		}
 
 		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
@@ -480,6 +431,7 @@ void AHamoniaCharacter::Interact()
 		}
 	}
 }
+
 
 AActor* AHamoniaCharacter::GetHeldObject()
 {
@@ -508,8 +460,14 @@ void AHamoniaCharacter::CheckForInteractables()
 	FHitResult HitResult;
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this);
-	QueryParams.bTraceComplex = false;
-	QueryParams.bReturnPhysicalMaterial = false;
+
+	// 들고 있는 오브젝트 무시
+	AActor* HeldObject = GetHeldObject();
+	if (HeldObject)
+	{
+		QueryParams.AddIgnoredActor(HeldObject);
+		UE_LOG(LogTemp, Warning, TEXT("[CheckInteractables] Ignoring held object: %s"), *HeldObject->GetName());
+	}
 
 	ECollisionChannel TraceChannel = ECC_Visibility;
 
@@ -534,6 +492,9 @@ void AHamoniaCharacter::CheckForInteractables()
 				CurrentInteractableActor = HitActor;
 				CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(HitActor);
 				CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(HitActor);
+
+				UE_LOG(LogTemp, Warning, TEXT("[CheckInteractables] Found: %s (Type: %s)"),
+					*HitActor->GetName(), *HitActor->GetClass()->GetName());
 			}
 		}
 	}
@@ -638,7 +599,7 @@ void AHamoniaCharacter::OnEKeyPressed()
 	}
 	else
 	{
-		RotateObject();
+		PushObject();
 	}
 }
 
