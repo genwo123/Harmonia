@@ -382,25 +382,34 @@ void APedestal::Rotate(float Degrees)
 {
     if (!bCanRotate)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[Rotate] Cannot rotate - bCanRotate is false"));
         return;
     }
 
-    FRotator OldRotation = GetActorRotation();
     FRotator NewRotation = GetActorRotation();
-    NewRotation.Yaw += Degrees;
+    NewRotation.Yaw += 45.0f;
     SetActorRotation(NewRotation);
-
-    UE_LOG(LogTemp, Warning, TEXT("[Rotate] Input Degrees: %.2f | Old Yaw: %.2f -> New Yaw: %.2f"),
-        Degrees, OldRotation.Yaw, NewRotation.Yaw);
 
     if (PlacedObject && bObjectFollowsRotation)
     {
         PlacedObject->SetActorRotation(NewRotation);
-        UE_LOG(LogTemp, Warning, TEXT("[Rotate] PlacedObject also rotated"));
     }
 }
 
+AActor* APedestal::GetAttachedChildActor() const
+{
+    return AttachedActorComponent ? AttachedActorComponent->GetChildActor() : nullptr;
+}
+
+UActorComponent* APedestal::GetAttachedActorComponent(TSubclassOf<UActorComponent> ComponentClass)
+{
+    AActor* ChildActor = GetAttachedChildActor();
+    if (!ChildActor || !ComponentClass)
+    {
+        return nullptr;
+    }
+
+    return ChildActor->GetComponentByClass(ComponentClass);
+}
 
 
 bool APedestal::PlaceObject(AActor* Object)

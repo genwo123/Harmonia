@@ -28,8 +28,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attachment | Editor Setup")
     TSubclassOf<APickupActor> PreAttachedActorClass;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Attachment | Editor Setup")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attached Actor")
     UChildActorComponent* AttachedActorComponent;
+
+    UFUNCTION(BlueprintCallable, Category = "Attached Actor")
+    AActor* GetAttachedChildActor() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Attached Actor")
+    UActorComponent* GetAttachedActorComponent(TSubclassOf<UActorComponent> ComponentClass);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attachment | Editor Setup",
         meta = (EditCondition = "PreAttachedActorClass != nullptr", EditConditionHides))

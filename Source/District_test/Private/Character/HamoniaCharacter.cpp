@@ -461,28 +461,35 @@ void AHamoniaCharacter::CheckForInteractables()
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this);
 
-	// 들고 있는 오브젝트 무시
 	AActor* HeldObject = GetHeldObject();
 	if (HeldObject)
 	{
 		QueryParams.AddIgnoredActor(HeldObject);
-		UE_LOG(LogTemp, Warning, TEXT("[CheckInteractables] Ignoring held object: %s"), *HeldObject->GetName());
 	}
-
-	ECollisionChannel TraceChannel = ECC_Visibility;
 
 	bIsLookingAtInteractable = false;
 	CurrentInteractableActor = nullptr;
 	CurrentInteractionText.Empty();
 	CurrentInteractionType = EInteractionType::Default;
 
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, TraceChannel, QueryParams);
+	TArray<FHitResult> HitResults;
+	GetWorld()->LineTraceMultiByChannel(HitResults, Start, End, ECC_Visibility, QueryParams);
+
+	UE_LOG(LogTemp, Warning, TEXT("[Check] Total Hits: %d"), HitResults.Num());
+
+	for (const FHitResult& Hit : HitResults)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Check] Hit: %s"), *Hit.GetActor()->GetName());
+	}
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Visibility, QueryParams);
 
 	if (bHit)
 	{
 		AActor* HitActor = HitResult.GetActor();
+		UE_LOG(LogTemp, Warning, TEXT("[Check] Final Hit: %s"), *HitActor->GetName());
 
-		if (HitActor && HitActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+		if (HitActor && HitActor != HeldObject && HitActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 		{
 			bool bCanInteractResult = IInteractableInterface::Execute_CanInteract(HitActor, this);
 
@@ -492,9 +499,6 @@ void AHamoniaCharacter::CheckForInteractables()
 				CurrentInteractableActor = HitActor;
 				CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(HitActor);
 				CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(HitActor);
-
-				UE_LOG(LogTemp, Warning, TEXT("[CheckInteractables] Found: %s (Type: %s)"),
-					*HitActor->GetName(), *HitActor->GetClass()->GetName());
 			}
 		}
 	}

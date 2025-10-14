@@ -197,26 +197,19 @@ bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
 
     UE_LOG(LogTemp, Warning, TEXT("[PutDown] Called - Object: %s, HoldingActor: %s"),
         *Owner->GetName(), HoldingActor ? *HoldingActor->GetName() : TEXT("NULL"));
-    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Requested Location: %s"), *Location.ToString());
-
-    // HoldingActor를 먼저 nullptr로 설정
-    HoldingActor = nullptr;
 
     Owner->SetActorLocation(Location);
     Owner->SetActorRotation(Rotation);
 
-    FVector ActualLocation = Owner->GetActorLocation();
-    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Actual Location: %s"), *ActualLocation.ToString());
-
     if (bEnablePhysicsWhenDropped)
     {
         EnablePhysics();
-        UE_LOG(LogTemp, Warning, TEXT("[PutDown] Physics Enabled"));
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("[PutDown] SUCCESS - HoldingActor now: %s"),
-        HoldingActor ? TEXT("STILL SET!") : TEXT("NULL (correct)"));
+    // 마지막에 HoldingActor 초기화
+    HoldingActor = nullptr;
 
+    UE_LOG(LogTemp, Warning, TEXT("[PutDown] SUCCESS"));
     return true;
 }
 
@@ -245,13 +238,13 @@ bool UPuzzleInteractionComponent::PlaceOnPedestal(APedestal* Pedestal)
         RemoveFromPedestal();
     }
 
-    // HoldingActor를 먼저 nullptr로 설정
-    HoldingActor = nullptr;
-
     if (Pedestal->PlaceObject(Owner))
     {
         CurrentPedestal = Pedestal;
         DisablePhysics();
+
+        // 성공 후에만 HoldingActor를 nullptr로
+        HoldingActor = nullptr;
 
         UE_LOG(LogTemp, Warning, TEXT("[PlaceOnPedestal] SUCCESS - Object placed"));
         return true;

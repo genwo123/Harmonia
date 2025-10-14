@@ -1,67 +1,57 @@
 #include "Gameplay/PickupActor.h"
 #include "Gameplay/InventoryComponent.h"
+#include "Gameplay/PuzzleInteractionComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "DrawDebugHelpers.h"
 
 APickupActor::APickupActor()
 {
     PrimaryActorTick.bCanEverTick = true;
 
-    // Scene Component를 루트로 생성
     SceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("SceneComponent"));
     RootComponent = SceneComponent;
 
-    // 메시 컴포넌트를 자식으로 생성
     MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
     MeshComponent->SetupAttachment(RootComponent);
-
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-    MeshComponent->SetCollisionProfileName(TEXT("BlockAll"));
-
-    // 물리 설정
+    MeshComponent->SetCollisionObjectType(ECC_WorldDynamic);
+    MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
+    MeshComponent->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
     MeshComponent->SetSimulatePhysics(false);
-    MeshComponent->SetEnableGravity(false);
-    MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-    MeshComponent->SetCollisionProfileName(TEXT("OverlapOnlyPawn"));
     MeshComponent->SetMobility(EComponentMobility::Movable);
 
-    // 상호작용 영역
     InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
     InteractionSphere->SetupAttachment(RootComponent);
+    InteractionSphere->SetSphereRadius(150.0f);
+    InteractionSphere->SetCollisionProfileName(TEXT("OverlapOnlyPawn"));
 
-    // 기본값
     bDrawDebug = true;
     MeshRotation = FRotator::ZeroRotator;
-}
-
-void APickupActor::ApplyMeshRotation()
-{
-    if (MeshComponent)
-    {
-        // MeshComponent만 회전
-        MeshComponent->SetRelativeRotation(MeshRotation);
-    }
 }
 
 void APickupActor::BeginPlay()
 {
     Super::BeginPlay();
 
-    if (!ItemClass)
+    if (MeshComponent)
     {
-        UE_LOG(LogTemp, Warning, TEXT("PickupActor %s has no ItemClass set!"), *GetName());
+        MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+        MeshComponent->SetCollisionObjectType(ECC_WorldDynamic);
+        MeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+        MeshComponent->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
     }
 
-    // 강제 회전 적용
     ApplyMeshRotation();
-
-    UE_LOG(LogTemp, Warning, TEXT("PickupActor BeginPlay - Mesh Rotation Applied: %s"),
-        *MeshComponent->GetRelativeRotation().ToString());
 }
 
-
+void APickupActor::ApplyMeshRotation()
+{
+    if (MeshComponent)
+    {
+        MeshComponent->SetRelativeRotation(MeshRotation);
+    }
+}
 
 void APickupActor::SetMeshYawRotation(float Yaw)
 {
@@ -78,13 +68,16 @@ void APickupActor::OnConstruction(const FTransform& Transform)
 void APickupActor::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
-
 }
 
 void APickupActor::Interact_Implementation(AActor* Interactor)
 {
-    UE_LOG(LogTemp, Warning, TEXT("PickupActor::Interact called on %s by %s"),
-        *GetName(), *Interactor->GetName());
+    UPuzzleInteractionComponent* PuzzleComp = FindComponentByClass<UPuzzleInteractionComponent>();
+    if (PuzzleComp && PuzzleComp->bCanBePickedUp)
+    {
+        PuzzleComp->PickUp(Interactor);
+        return;
+    }
 
     if (PickupItem(Interactor))
     {
@@ -103,6 +96,7 @@ void APickupActor::Interact_Implementation(AActor* Interactor)
         SetLifeSpan(0.1f);
     }
 }
+
 
 bool APickupActor::CanInteract_Implementation(AActor* Interactor)
 {
