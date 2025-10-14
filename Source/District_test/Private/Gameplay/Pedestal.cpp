@@ -1,9 +1,6 @@
-// Pedestal.cpp
 #include "Gameplay/Pedestal.h"
 #include "Kismet/GameplayStatics.h"
 #include "Character/HamoniaCharacter.h"
-#include "Gameplay/PickupActor.h"
-
 
 APedestal::APedestal()
 {
@@ -18,12 +15,8 @@ APedestal::APedestal()
     TargetGridColumn = 0;
     TargetPuzzleArea = nullptr;
 
-    if (!MeshComponent)
-    {
-        MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
-        RootComponent = MeshComponent;
-    }
-
+    MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
+    RootComponent = MeshComponent;
     MeshComponent->SetCollisionProfileName(TEXT("BlockAll"));
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     MeshComponent->SetGenerateOverlapEvents(true);
@@ -40,9 +33,6 @@ APedestal::APedestal()
     AttachmentPoint->SetRelativeLocation(FVector(0, 0, 80.0f));
     AttachmentPoint->SetMobility(EComponentMobility::Movable);
 
-    AttachedActorComponent = CreateDefaultSubobject<UChildActorComponent>(TEXT("AttachedActorComponent"));
-    AttachedActorComponent->SetupAttachment(AttachmentPoint);
-
 #if WITH_EDITORONLY_DATA
     AttachmentPoint->bVisualizeComponent = true;
 #endif
@@ -52,42 +42,14 @@ APedestal::APedestal()
 
     InteractionText = "Interact with Pedestal";
     InteractionType = EInteractionType::Default;
-
     bAutoSnapToGrid = true;
+    SpawnedChildActor = nullptr;
 }
 
 void APedestal::BeginPlay()
 {
     Super::BeginPlay();
 
-    if (AttachedActorComponent)
-    {
-        AttachedActorComponent->SetVisibility(true);
-        AttachedActorComponent->SetHiddenInGame(false);
-
-        if (AActor* ChildActor = AttachedActorComponent->GetChildActor())
-        {
-            ChildActor->SetActorHiddenInGame(false);
-
-            if (APickupActor* Pickup = Cast<APickupActor>(ChildActor))
-            {
-                if (Pickup->MeshComponent)
-                {
-                    Pickup->MeshComponent->SetVisibility(true);
-                    Pickup->MeshComponent->SetHiddenInGame(false);
-                    Pickup->MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-                    Pickup->MeshComponent->SetSimulatePhysics(false);
-                }
-                if (Pickup->InteractionSphere)
-                {
-                    Pickup->InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-                    Pickup->InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-                }
-            }
-        }
-    }
-
-    // 그리드 시스템 사용하는 경우만
     if (bUseGridSystem)
     {
         if (TargetPuzzleArea)
@@ -102,15 +64,20 @@ void APedestal::BeginPlay()
     }
 }
 
-
-
 void APedestal::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
 
-    if (bApplyInEditor)
+    if (PreAttachedActorClass && !SpawnedChildActor)
     {
-        UpdateAttachedActor();
+        FActorSpawnParameters Params;
+        Params.Owner = this;
+        SpawnedChildActor = GetWorld()->SpawnActor<AActor>(PreAttachedActorClass, AttachmentPoint->GetComponentTransform(), Params);
+
+        if (SpawnedChildActor)
+        {
+            SpawnedChildActor->AttachToComponent(AttachmentPoint, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+        }
     }
 
     if (!bAutoSnapToGrid || !bUseGridSystem)
@@ -127,21 +94,16 @@ void APedestal::OnConstruction(const FTransform& Transform)
     }
 }
 
-
 bool APedestal::MoveToGridPosition(int32 NewRow, int32 NewColumn)
 {
     if (!bUseGridSystem)
         return false;
 
     if (!OwnerPuzzleArea)
-    {
         return false;
-    }
 
     if (!OwnerPuzzleArea->IsValidIndex(NewRow, NewColumn))
-    {
         return false;
-    }
 
     ClearPreviousCell();
 
@@ -215,23 +177,6 @@ void APedestal::PostEditMove(bool bFinished)
         }
     }
 }
-
-void APedestal::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
-{
-    Super::PostEditChangeProperty(PropertyChangedEvent);
-
-    FName PropertyName = (PropertyChangedEvent.Property != nullptr)
-        ? PropertyChangedEvent.Property->GetFName()
-        : NAME_None;
-
-    if (PropertyName == GET_MEMBER_NAME_CHECKED(APedestal, PreAttachedActorClass) ||
-        PropertyName == GET_MEMBER_NAME_CHECKED(APedestal, AttachmentOffset) ||
-        PropertyName == GET_MEMBER_NAME_CHECKED(APedestal, AttachmentRotation) ||
-        PropertyName == GET_MEMBER_NAME_CHECKED(APedestal, AttachmentScale))
-    {
-        UpdateAttachedActor();
-    }
-}
 #endif
 
 void APedestal::FindOwnerPuzzleArea()
@@ -240,9 +185,7 @@ void APedestal::FindOwnerPuzzleArea()
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), APuzzleArea::StaticClass(), FoundAreas);
 
     if (!bAutoSnapToGrid)
-    {
         return;
-    }
 
     for (AActor* Area : FoundAreas)
     {
@@ -272,14 +215,13 @@ void APedestal::FindOwnerPuzzleArea()
 
 void APedestal::Interact_Implementation(AActor* Interactor)
 {
-    Super::Interact_Implementation(Interactor);
+    
 }
 
 bool APedestal::Push(FVector Direction)
 {
     if (!bUseGridSystem)
         return false;
-
 
     Direction = -Direction;
     FVector AdjustedDirection(-Direction.Y, -Direction.X, Direction.Z);
@@ -289,9 +231,7 @@ bool APedestal::Push(FVector Direction)
     {
         FindOwnerPuzzleArea();
         if (!OwnerPuzzleArea)
-        {
             return false;
-        }
     }
 
     EGridDirection GridDirection;
@@ -326,15 +266,11 @@ bool APedestal::Push(FVector Direction)
     }
 
     if (!OwnerPuzzleArea->IsValidIndex(TargetRow, TargetColumn))
-    {
         return false;
-    }
 
     ECellState TargetState = OwnerPuzzleArea->GetCellState(TargetRow, TargetColumn);
     if (TargetState == ECellState::Unwalkable || TargetState == ECellState::Occupied)
-    {
         return false;
-    }
 
     ClearPreviousCell();
 
@@ -359,9 +295,7 @@ void APedestal::SnapToGridCenter()
     {
         FindOwnerPuzzleArea();
         if (!OwnerPuzzleArea)
-        {
             return;
-        }
     }
 
     int32 NearestRow, NearestColumn;
@@ -381,12 +315,10 @@ void APedestal::SnapToGridCenter()
 void APedestal::Rotate(float Degrees)
 {
     if (!bCanRotate)
-    {
         return;
-    }
 
     FRotator NewRotation = GetActorRotation();
-    NewRotation.Yaw += 45.0f;
+    NewRotation.Yaw += Degrees;
     SetActorRotation(NewRotation);
 
     if (PlacedObject && bObjectFollowsRotation)
@@ -397,27 +329,22 @@ void APedestal::Rotate(float Degrees)
 
 AActor* APedestal::GetAttachedChildActor() const
 {
-    return AttachedActorComponent ? AttachedActorComponent->GetChildActor() : nullptr;
+    return SpawnedChildActor;
 }
 
 UActorComponent* APedestal::GetAttachedActorComponent(TSubclassOf<UActorComponent> ComponentClass)
 {
     AActor* ChildActor = GetAttachedChildActor();
     if (!ChildActor || !ComponentClass)
-    {
         return nullptr;
-    }
 
     return ChildActor->GetComponentByClass(ComponentClass);
 }
 
-
 bool APedestal::PlaceObject(AActor* Object)
 {
     if (CurrentState == EPedestalState::Occupied && PlacedObject != Object)
-    {
         return false;
-    }
 
     if (Object)
     {
@@ -448,9 +375,7 @@ bool APedestal::PlaceObject(AActor* Object)
 AActor* APedestal::RemoveObject()
 {
     if (CurrentState != EPedestalState::Occupied || !PlacedObject)
-    {
         return nullptr;
-    }
 
     AActor* RemovedObject = PlacedObject;
     RemovedObject->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
@@ -475,100 +400,6 @@ void APedestal::GetGridPosition(int32& OutRow, int32& OutColumn) const
 {
     OutRow = GridRow;
     OutColumn = GridColumn;
-}
-
-void APedestal::UpdateAttachedActor()
-{
-    if (!AttachedActorComponent)
-        return;
-
-    if (PreAttachedActorClass)
-    {
-        TSubclassOf<AActor> ActorClass = PreAttachedActorClass;
-        AttachedActorComponent->SetChildActorClass(ActorClass);
-        // 트랜스폼 초기화 제거!
-    }
-    else
-    {
-        AttachedActorComponent->SetChildActorClass(nullptr);
-    }
-}
-
-void APedestal::RotateAttachment(float Degrees)
-{
-    if (!AttachmentPoint)
-        return;
-
-    FRotator CurrentRotation = AttachmentPoint->GetRelativeRotation();
-    CurrentRotation.Yaw += Degrees;
-    AttachmentPoint->SetRelativeRotation(CurrentRotation);
-
-    if (AttachedActorComponent)
-    {
-        AttachmentRotation = AttachedActorComponent->GetRelativeRotation();
-    }
-}
-
-float APedestal::GetAttachmentRotation() const
-{
-    if (!AttachmentPoint)
-        return 0.0f;
-
-    return AttachmentPoint->GetRelativeRotation().Yaw;
-}
-
-void APedestal::ClearAttachment()
-{
-    PreAttachedActorClass = nullptr;
-    UpdateAttachedActor();
-}
-
-APickupActor* APedestal::DetachAttachedActor()
-{
-    if (!AttachedActorComponent || !AttachedActorComponent->GetChildActor())
-        return nullptr;
-
-    AActor* ChildActor = AttachedActorComponent->GetChildActor();
-    FVector WorldLocation = ChildActor->GetActorLocation();
-    FRotator WorldRotation = ChildActor->GetActorRotation();
-    FVector WorldScale = ChildActor->GetActorScale3D();
-
-    TSubclassOf<APickupActor> PickupClass = PreAttachedActorClass;
-
-    AttachedActorComponent->SetChildActorClass(nullptr);
-    PreAttachedActorClass = nullptr;
-
-    if (GetWorld() && PickupClass)
-    {
-        FActorSpawnParameters SpawnParams;
-        SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-        APickupActor* NewPickup = GetWorld()->SpawnActor<APickupActor>(PickupClass, WorldLocation, WorldRotation, SpawnParams);
-        
-        if (NewPickup)
-        {
-            NewPickup->SetActorScale3D(WorldScale);
-            NewPickup->MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-            NewPickup->MeshComponent->SetCollisionProfileName(TEXT("OverlapOnlyPawn"));
-            NewPickup->InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-            return NewPickup;
-        }
-    }
-
-    return nullptr;
-}
-
-APickupActor* APedestal::GetAttachedActor() const
-{
-    if (!AttachedActorComponent)
-        return nullptr;
-
-    return Cast<APickupActor>(AttachedActorComponent->GetChildActor());
-}
-
-bool APedestal::HasAttachedActor() const
-{
-    return AttachedActorComponent && AttachedActorComponent->GetChildActor() != nullptr;
 }
 
 void APedestal::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,

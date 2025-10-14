@@ -1,12 +1,12 @@
 #pragma once
 #include "CoreMinimal.h"
-#include "Interaction/InteractableActor.h"
-#include "Gameplay/PuzzleArea.h"
+#include "GameFramework/Actor.h"
+#include "Interaction/InteractableInterface.h"
+#include "Interaction/InteractionEnums.h"
 #include "Components/SphereComponent.h"
+#include "Gameplay/PuzzleArea.h"
 #include "Components/ChildActorComponent.h"
 #include "Pedestal.generated.h"
-
-class APickupActor;
 
 UENUM(BlueprintType)
 enum class EPedestalState : uint8
@@ -15,44 +15,80 @@ enum class EPedestalState : uint8
     Occupied
 };
 
-UCLASS(BlueprintType, Blueprintable)
-class DISTRICT_TEST_API APedestal : public AInteractableActor
+UCLASS()
+class DISTRICT_TEST_API APedestal : public AActor, public IInteractableInterface
 {
     GENERATED_BODY()
+
 public:
     APedestal();
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components", meta = (AllowPrivateAccess = "true"))
+protected:
+    virtual void BeginPlay() override;
+
+public:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UStaticMeshComponent* MeshComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    USphereComponent* InteractionSphere;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     USceneComponent* AttachmentPoint;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attachment | Editor Setup")
-    TSubclassOf<APickupActor> PreAttachedActorClass;
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attached Actor")
-    UChildActorComponent* AttachedActorComponent;
+    TSubclassOf<AActor> PreAttachedActorClass;
 
-    UFUNCTION(BlueprintCallable, Category = "Attached Actor")
-    AActor* GetAttachedChildActor() const;
+    UPROPERTY(BlueprintReadOnly, Category = "Attached Actor")
+    AActor* SpawnedChildActor;
 
-    UFUNCTION(BlueprintCallable, Category = "Attached Actor")
-    UActorComponent* GetAttachedActorComponent(TSubclassOf<UActorComponent> ComponentClass);
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal")
+    bool bCanRotate = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attachment | Editor Setup",
-        meta = (EditCondition = "PreAttachedActorClass != nullptr", EditConditionHides))
-    FVector AttachmentOffset = FVector::ZeroVector;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal")
+    bool bObjectFollowsRotation = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attachment | Editor Setup",
-        meta = (EditCondition = "PreAttachedActorClass != nullptr", EditConditionHides))
-    FRotator AttachmentRotation = FRotator::ZeroRotator;
+    UPROPERTY(BlueprintReadOnly, Category = "Pedestal")
+    EPedestalState CurrentState;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attachment | Editor Setup",
-        meta = (EditCondition = "PreAttachedActorClass != nullptr", EditConditionHides))
-    FVector AttachmentScale = FVector(1.0f, 1.0f, 1.0f);
+    UPROPERTY(BlueprintReadOnly, Category = "Pedestal")
+    AActor* PlacedObject;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attachment | Editor Setup")
-    bool bApplyInEditor = true;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    bool bUseGridSystem = true;
 
-    virtual void Interact_Implementation(AActor* Interactor) override;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    bool bAutoSnapToGrid = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    APuzzleArea* TargetPuzzleArea;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    int32 TargetGridRow = 0;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    int32 TargetGridColumn = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Grid")
+    APuzzleArea* OwnerPuzzleArea;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Grid")
+    int32 GridRow;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Grid")
+    int32 GridColumn;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    FString InteractionText;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    EInteractionType InteractionType;
+
+    UFUNCTION(BlueprintCallable, Category = "Pedestal")
+    void Rotate(float Degrees = 45.0f);
+
+    UFUNCTION(BlueprintCallable, Category = "Pedestal")
+    bool Push(FVector Direction);
 
     UFUNCTION(BlueprintCallable, Category = "Pedestal")
     bool PlaceObject(AActor* Object);
@@ -60,108 +96,50 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Pedestal")
     AActor* RemoveObject();
 
-    UFUNCTION(BlueprintCallable, Category = "Pedestal")
+    UFUNCTION(BlueprintPure, Category = "Pedestal")
     AActor* GetPlacedObject() const { return PlacedObject; }
 
-    UFUNCTION(BlueprintCallable, Category = "Pedestal")
-    void Rotate(float Degrees = 90.0f);
+    UFUNCTION(BlueprintCallable, Category = "Attached Actor")
+    AActor* GetAttachedChildActor() const;
 
-    UFUNCTION(BlueprintCallable, Category = "Pedestal")
-    bool Push(FVector Direction);
+    UFUNCTION(BlueprintCallable, Category = "Attached Actor")
+    UActorComponent* GetAttachedActorComponent(TSubclassOf<UActorComponent> ComponentClass);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal")
-    bool bCanRotate = true;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
-    bool bUseGridSystem = true;
-
-    UFUNCTION(BlueprintCallable, Category = "Attachment")
-    void RotateAttachment(float Degrees);
-
-
-    UFUNCTION(BlueprintPure, Category = "Attachment")
-    float GetAttachmentRotation() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Attachment")
-    void ClearAttachment();
-
-    UFUNCTION(BlueprintCallable, Category = "Attachment")
-    APickupActor* DetachAttachedActor();
-
-    UFUNCTION(BlueprintPure, Category = "Attachment")
-    APickupActor* GetAttachedActor() const;
-
-    UFUNCTION(BlueprintPure, Category = "Attachment")
-    bool HasAttachedActor() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Pedestal")
-    void SetPuzzleArea(APuzzleArea* PuzzleArea);
-
-    UFUNCTION(BlueprintCallable, Category = "Pedestal")
-    void SetGridPosition(int32 Row, int32 Column);
-
-    UFUNCTION(BlueprintCallable, Category = "Pedestal")
-    void GetGridPosition(int32& OutRow, int32& OutColumn) const;
-
-    UFUNCTION(BlueprintCallable, Category = "Pedestal")
+    UFUNCTION(BlueprintCallable, Category = "Grid")
     void SnapToGridCenter();
-
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Interaction")
-    USphereComponent* InteractionSphere;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ExposeOnSpawn = true, AllowedClasses = "PuzzleArea"))
-    TObjectPtr<APuzzleArea> TargetPuzzleArea;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ExposeOnSpawn = true))
-    int32 TargetGridRow = 0;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid", meta = (ExposeOnSpawn = true))
-    int32 TargetGridColumn = 0;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal")
-    bool bObjectFollowsRotation = true;
 
     UFUNCTION(BlueprintCallable, Category = "Grid")
     bool MoveToGridPosition(int32 NewRow, int32 NewColumn);
 
-#if WITH_EDITOR
-    virtual void PostEditMove(bool bFinished) override;
-    virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
-#endif
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    void SetPuzzleArea(APuzzleArea* PuzzleArea);
+
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    void SetGridPosition(int32 Row, int32 Column);
+
+    UFUNCTION(BlueprintPure, Category = "Grid")
+    void GetGridPosition(int32& OutRow, int32& OutColumn) const;
+
+    virtual void Interact_Implementation(AActor* Interactor) override;
+    virtual bool CanInteract_Implementation(AActor* Interactor) override { return true; }
+    virtual FString GetInteractionText_Implementation() override { return InteractionText; }
+    virtual EInteractionType GetInteractionType_Implementation() override { return InteractionType; }
 
 protected:
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal")
-    EPedestalState CurrentState;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pedestal")
-    AActor* PlacedObject;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pedestal")
-    APuzzleArea* OwnerPuzzleArea;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pedestal")
-    int32 GridRow;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pedestal")
-    int32 GridColumn;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
-    bool bAutoSnapToGrid = true;
-
-    virtual void BeginPlay() override;
-    virtual void OnConstruction(const FTransform& Transform) override;
-
     void FindOwnerPuzzleArea();
     void ClearPreviousCell();
-    void UpdateAttachedActor();
 
     UFUNCTION()
     void OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-        UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-        bool bFromSweep, const FHitResult& SweepResult);
+        UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
     UFUNCTION()
     void OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-        UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+        UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex);
+
+    virtual void OnConstruction(const FTransform& Transform) override;
+
+#if WITH_EDITOR
+    virtual void PostEditMove(bool bFinished) override;
+#endif
 };

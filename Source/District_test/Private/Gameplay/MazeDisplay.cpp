@@ -213,7 +213,7 @@ void AMazeDisplay::SetDisplayState(EDisplayState NewState)
 
         if (NewState != EDisplayState::Custom)
         {
-            ShowMessage(Message, Color);
+            //ShowMessage(Message, Color);
         }
 
         OnDisplayStateChanged(NewState);
