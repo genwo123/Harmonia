@@ -44,6 +44,10 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue")
     class UDialogueManagerComponent* DialogueManager;
 
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
+    USceneComponent* HeldObjectAttachPoint;
+
     // DataTable ¼³Á¤¿ë
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
     UDataTable* DefaultDialogueDataTable;
@@ -290,6 +294,7 @@ protected:
 private:
     bool bIsSprinting = false;
 
+    APedestal* FindPedestalFromActor(AActor* Actor);
 
     void SetupEnhancedInput();
 };

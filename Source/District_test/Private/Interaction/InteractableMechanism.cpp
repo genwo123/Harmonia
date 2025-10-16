@@ -119,13 +119,22 @@ void AInteractableMechanism::OnWidgetInteractionSuccess()
         }
     }
 
-    OnInteractionSuccess(UGameplayStatics::GetPlayerPawn(this, 0));
+    AActor* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+
+    OnWidgetSuccess.Broadcast(Player);
+
+    OnInteractionSuccess(Player);
 }
 
 void AInteractableMechanism::OnWidgetInteractionFailed()
 {
     HideInteractionWidget();
-    OnInteractionFailed(UGameplayStatics::GetPlayerPawn(this, 0));
+
+    AActor* Player = UGameplayStatics::GetPlayerPawn(this, 0);
+
+    OnWidgetFailed.Broadcast(Player);
+
+    OnInteractionFailed(Player);
 }
 
 bool AInteractableMechanism::CanInteract_Implementation(AActor* Interactor)

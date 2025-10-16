@@ -38,8 +38,9 @@ void APickupActor::BeginPlay()
     {
         MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
         MeshComponent->SetCollisionObjectType(ECC_WorldDynamic);
-        MeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+        MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
         MeshComponent->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+        MeshComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
     }
 
     ApplyMeshRotation();
@@ -72,15 +73,33 @@ void APickupActor::Tick(float DeltaTime)
 
 void APickupActor::Interact_Implementation(AActor* Interactor)
 {
+    UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] Called on %s by %s"),
+        *GetName(), *Interactor->GetName());
+
     UPuzzleInteractionComponent* PuzzleComp = FindComponentByClass<UPuzzleInteractionComponent>();
-    if (PuzzleComp && PuzzleComp->bCanBePickedUp)
+
+    if (PuzzleComp)
     {
-        PuzzleComp->PickUp(Interactor);
-        return;
+        UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] PuzzleInteractionComponent found"));
+        UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] bCanBePickedUp: %d"), PuzzleComp->bCanBePickedUp);
+
+        if (PuzzleComp->bCanBePickedUp)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] Calling PickUp..."));
+            bool bPickedUp = PuzzleComp->PickUp(Interactor);
+            UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] PickUp result: %d"), bPickedUp);
+            return;
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] No PuzzleInteractionComponent found - treating as regular item"));
     }
 
     if (PickupItem(Interactor))
     {
+        UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] Regular item pickup successful"));
+
         if (MeshComponent)
         {
             MeshComponent->SetVisibility(false);
@@ -95,7 +114,12 @@ void APickupActor::Interact_Implementation(AActor* Interactor)
         OnPickupSuccess(Interactor);
         SetLifeSpan(0.1f);
     }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("[PickupActor::Interact] PickupItem failed!"));
+    }
 }
+
 
 
 bool APickupActor::CanInteract_Implementation(AActor* Interactor)
@@ -107,6 +131,7 @@ bool APickupActor::CanInteract_Implementation(AActor* Interactor)
     }
     return InventoryComponent->HasRoomForItem();
 }
+
 
 FString APickupActor::GetInteractionText_Implementation()
 {

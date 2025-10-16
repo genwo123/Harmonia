@@ -213,6 +213,7 @@ void APedestal::FindOwnerPuzzleArea()
     }
 }
 
+
 void APedestal::Interact_Implementation(AActor* Interactor)
 {
     
@@ -274,7 +275,11 @@ bool APedestal::Push(FVector Direction)
 
     ClearPreviousCell();
 
+    // 수정: Z 높이 유지
+    float CurrentZ = GetActorLocation().Z;  // 현재 Z 높이 저장
     FVector NewLocation = OwnerPuzzleArea->GetWorldLocationFromGridIndex(TargetRow, TargetColumn);
+    NewLocation.Z = CurrentZ;  // 원래 Z 높이로 복원
+
     SetActorLocation(NewLocation);
 
     GridRow = TargetRow;

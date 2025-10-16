@@ -40,6 +40,10 @@ struct DISTRICT_TEST_API FHintImageData : public FTableRowBase
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMechanismCompleted, FString, MechanismID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWidgetSuccess, AActor*, Interactor);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWidgetFailed, AActor*, Interactor);
+
+
 
 UCLASS()
 class DISTRICT_TEST_API AInteractableMechanism : public AActor, public IInteractableInterface
@@ -178,6 +182,14 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Interaction|Widget")
     void HideInteractionWidget();
+
+    UPROPERTY(BlueprintAssignable, Category = "Interaction|Widget Events")
+    FOnWidgetSuccess OnWidgetSuccess;
+
+    UPROPERTY(BlueprintAssignable, Category = "Interaction|Widget Events")
+    FOnWidgetFailed OnWidgetFailed;
+
+
 
     UFUNCTION(BlueprintCallable, Category = "Interaction|Widget")
     void OnWidgetInteractionSuccess();

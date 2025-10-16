@@ -22,6 +22,7 @@ void AInteractableActor::Interact_Implementation(AActor* Interactor)
 
 bool AInteractableActor::CanInteract_Implementation(AActor* Interactor)
 {
+    UE_LOG(LogTemp, Warning, TEXT("[InteractableActor] CanInteract called - bCanBeInteracted: %d"), bCanBeInteracted);
     return bCanBeInteracted;
 }
 
