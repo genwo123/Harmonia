@@ -18,7 +18,10 @@ APuzzleArea::APuzzleArea()
     AreaBox->SetBoxExtent(AreaBoxExtent);
     AreaBox->SetRelativeLocation(AreaBoxOffset);
     AreaBox->SetMobility(EComponentMobility::Movable);
+
+#if WITH_EDITOR
     AreaBox->bVisualizeComponent = true;
+#endif
 
     GridRows = 5;
     GridColumns = 5;

@@ -228,7 +228,10 @@ void AGridTile::SetGridPosition(int32 X, int32 Y)
     GridY = Y;
 
     FString TileName = FString::Printf(TEXT("GridTile_%d_%d"), X, Y);
+
+#if WITH_EDITOR
     SetActorLabel(*TileName);
+#endif
 }
 
 void AGridTile::SetOwnerManager(AGridMazeManager* Manager)

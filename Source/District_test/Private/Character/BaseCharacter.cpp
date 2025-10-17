@@ -14,7 +14,7 @@ ABaseCharacter::ABaseCharacter()
     GetCharacterMovement()->bOrientRotationToMovement = false;
     GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
     GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
-    GetCharacterMovement()->CrouchedHalfHeight = 60.0f;
+    GetCharacterMovement()->SetCrouchedHalfHeight(60.0f);
 
     // Create camera component
     CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
