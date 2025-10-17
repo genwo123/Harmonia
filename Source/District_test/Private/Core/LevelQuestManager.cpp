@@ -7,7 +7,7 @@ ALevelQuestManager::ALevelQuestManager()
     CurrentLevel = "Level_01"; // 기본 시작 레벨
 
     // 기본 데이터 테이블 경로 설정 (선택사항)
-    static ConstructorHelpers::FObjectFinder<UDataTable> QuestDTObject(TEXT("/Game/Data/DT_LevelQuests"));
+    static ConstructorHelpers::FObjectFinder<UDataTable> QuestDTObject(TEXT("/Game/Hamonia/H_DataTable/DT_LevelQuest"));
     if (QuestDTObject.Succeeded())
     {
         LevelDataTable = QuestDTObject.Object;

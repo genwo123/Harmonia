@@ -11,7 +11,7 @@ UEnhancedQuestComponent::UEnhancedQuestComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
 
-    static ConstructorHelpers::FObjectFinder<UDataTable> QuestDTObject(TEXT("/Game/Data/DT_LevelQuests"));
+    static ConstructorHelpers::FObjectFinder<UDataTable> QuestDTObject(TEXT("/Game/Hamonia/H_DataTable/DT_LevelQuest"));
     if (QuestDTObject.Succeeded())
     {
         QuestDataTable = QuestDTObject.Object;
