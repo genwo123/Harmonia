@@ -473,20 +473,24 @@ void AUnia::LoadStateFromGameInstance()
 
 void AUnia::OnDialogueWidgetClosed()
 {
+    UE_LOG(LogTemp, Warning, TEXT("[Unia] OnDialogueWidgetClosed called"));
+
     if (AUniaAIController* AIController = GetUniaAIController())
     {
-        // 대화 상태 해제
         AIController->SetDialogueMode(false);
+        UE_LOG(LogTemp, Warning, TEXT("[Unia] Dialogue mode disabled"));
 
-        // 팔로잉 다시 시작 (bCanFollow가 true인 경우)
         if (bCanFollow)
         {
             AIController->StartFollowingPlayer();
+            UE_LOG(LogTemp, Warning, TEXT("[Unia] Started following player"));
         }
     }
 
     if (DialogueManager)
     {
         DialogueManager->bIsInDialogue = false;
+        DialogueManager->CurrentDialogueID = "";
+        UE_LOG(LogTemp, Warning, TEXT("[Unia] DialogueManager state cleared"));
     }
 }

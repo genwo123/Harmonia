@@ -1,13 +1,15 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Engine/DataTable.h"
+#include "Interaction/InteractableMechanism.h"
 #include "HintWidget.generated.h"
 
 class UButton;
 class UTextBlock;
 class UImage;
 class UDataTable;
+class UHamoina_GameInstance;
 
 UCLASS(Abstract, Blueprintable)
 class DISTRICT_TEST_API UHintWidget : public UUserWidget
@@ -17,6 +19,9 @@ class DISTRICT_TEST_API UHintWidget : public UUserWidget
 public:
     virtual void NativeConstruct() override;
     virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+
+    UFUNCTION(BlueprintCallable, Category = "Hint")
+    void InitializeHint(int32 InLevelNumber);
 
     UFUNCTION(BlueprintCallable, Category = "Hint")
     void ResetHintWidget();
@@ -50,7 +55,10 @@ protected:
     UTextBlock* CooldownText;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hint Settings")
-    float RevealCooldown = 90.0f;
+    float RevealCooldown = 60.0f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "State")
+    int32 CurrentLevelNumber = 0;
 
     UPROPERTY(BlueprintReadOnly, Category = "State")
     TArray<bool> RevealedBlocks;
@@ -87,6 +95,9 @@ protected:
     void StartCooldown();
     void UpdateCooldown(float DeltaTime);
 
+    void LoadStateFromSaveGame();
+    void SaveStateToSaveGame();
+
     UFUNCTION(BlueprintImplementableEvent, Category = "Hint")
     void OnBlockRevealed(int32 BlockIndex);
 
@@ -95,4 +106,5 @@ protected:
 
 private:
     TArray<UButton*> BlockButtons;
+    UHamoina_GameInstance* GameInstance;
 };

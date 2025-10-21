@@ -9,6 +9,7 @@
 #include "GameProgressSaveData.h"
 #include "UniaSaveData.h"
 #include "GameStatsSaveData.h"
+#include "HintSaveData.h"
 
 #include "Hamonia_SaveGame.generated.h"
 
@@ -55,7 +56,7 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Save Info")
     FString SaveDescription = TEXT("Auto Save");
 
-    // Game Data
+    // Game Data (여기 한 번만!)
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Game Data")
     FPlayerSaveData PlayerData;
 
@@ -70,6 +71,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Game Data")
     FGameStatsSaveData StatsData;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Game Data")
+    FHintSaveData HintData;  // 힌트 데이터 추가
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Level System")
     TMap<FString, bool> UnlockedLevels;
@@ -174,6 +178,25 @@ public:
     UFUNCTION(BlueprintPure, Category = "Stats")
     int32 GetUnlockedLevelCount() const;
 
+    // Hint System Functions (힌트 함수들)
+    UFUNCTION(BlueprintCallable, Category = "Hint")
+    void InitializeHintForLevel(int32 LevelNumber);
+
+    UFUNCTION(BlueprintCallable, Category = "Hint")
+    void SetHintBlockStates(int32 LevelNumber, const TArray<bool>& BlockStates);
+
+    UFUNCTION(BlueprintPure, Category = "Hint")
+    TArray<bool> GetHintBlockStates(int32 LevelNumber) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Hint")
+    void SetHintCooldownTime(int32 LevelNumber, float CooldownTime);
+
+    UFUNCTION(BlueprintPure, Category = "Hint")
+    float GetHintCooldownTime(int32 LevelNumber) const;
+
+    UFUNCTION(BlueprintCallable, Category = "Hint")
+    void ResetHintForLevel(int32 LevelNumber);
+
     // Debug Functions
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void UnlockAllLevels();
@@ -186,7 +209,6 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void SetGameCompleted();
-
 
 protected:
     bool CheckVersionCompatibility() const;

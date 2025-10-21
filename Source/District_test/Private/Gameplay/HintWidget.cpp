@@ -1,9 +1,10 @@
 #include "Gameplay/HintWidget.h"
-#include "Interaction/InteractableMechanism.h"
 #include "Components/Button.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Engine/Texture2D.h"
+#include "Save_Instance/Hamoina_GameInstance.h"
+#include "Kismet/GameplayStatics.h"
 
 void UHintWidget::NativeConstruct()
 {
@@ -17,8 +18,15 @@ void UHintWidget::NativeConstruct()
     BlockButtons.Add(Block4Button);
     BlockButtons.Add(Block5Button);
 
+    // GameInstance 참조 가져오기
+    GameInstance = Cast<UHamoina_GameInstance>(UGameplayStatics::GetGameInstance(this));
+
     InitializeBlocks();
     BindButtonEvents();
+
+    // SaveGame에서 상태 불러오기
+    LoadStateFromSaveGame();
+
     UpdateBlockVisibility();
 }
 
@@ -29,9 +37,24 @@ void UHintWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     if (bIsOnCooldown)
     {
         UpdateCooldown(InDeltaTime);
+        // 쿨다운 시간도 저장
+        SaveStateToSaveGame();
     }
 
     UpdateCooldownDisplay();
+}
+
+void UHintWidget::InitializeHint(int32 InLevelNumber)
+{
+    CurrentLevelNumber = InLevelNumber;
+
+    if (GameInstance && GameInstance->CurrentSaveData)
+    {
+        GameInstance->CurrentSaveData->InitializeHintForLevel(CurrentLevelNumber);
+    }
+
+    LoadStateFromSaveGame();
+    UpdateBlockVisibility();
 }
 
 void UHintWidget::InitializeBlocks()
@@ -78,35 +101,12 @@ void UHintWidget::BindButtonEvents()
         Block5Button->OnClicked.AddDynamic(this, &UHintWidget::OnBlock5Clicked);
 }
 
-void UHintWidget::OnBlock0Clicked()
-{
-    HandleBlockClick(0);
-}
-
-void UHintWidget::OnBlock1Clicked()
-{
-    HandleBlockClick(1);
-}
-
-void UHintWidget::OnBlock2Clicked()
-{
-    HandleBlockClick(2);
-}
-
-void UHintWidget::OnBlock3Clicked()
-{
-    HandleBlockClick(3);
-}
-
-void UHintWidget::OnBlock4Clicked()
-{
-    HandleBlockClick(4);
-}
-
-void UHintWidget::OnBlock5Clicked()
-{
-    HandleBlockClick(5);
-}
+void UHintWidget::OnBlock0Clicked() { HandleBlockClick(0); }
+void UHintWidget::OnBlock1Clicked() { HandleBlockClick(1); }
+void UHintWidget::OnBlock2Clicked() { HandleBlockClick(2); }
+void UHintWidget::OnBlock3Clicked() { HandleBlockClick(3); }
+void UHintWidget::OnBlock4Clicked() { HandleBlockClick(4); }
+void UHintWidget::OnBlock5Clicked() { HandleBlockClick(5); }
 
 void UHintWidget::HandleBlockClick(int32 BlockIndex)
 {
@@ -130,8 +130,13 @@ void UHintWidget::HandleBlockClick(int32 BlockIndex)
         return;
     }
 
+    // 블록 해금
     RevealedBlocks[BlockIndex] = true;
     StartCooldown();
+
+    // SaveGame에 저장
+    SaveStateToSaveGame();
+
     UpdateBlockVisibility();
     OnBlockRevealed(BlockIndex);
 }
@@ -150,6 +155,9 @@ void UHintWidget::UpdateCooldown(float DeltaTime)
     {
         CurrentCooldown = 0.0f;
         bIsOnCooldown = false;
+
+        // 쿨다운 끝났으니 저장
+        SaveStateToSaveGame();
     }
 }
 
@@ -170,11 +178,56 @@ void UHintWidget::UpdateCooldownDisplay()
     if (!CooldownText)
         return;
 
-    int32 Minutes = FMath::FloorToInt(CurrentCooldown / 60.0f);
-    int32 Seconds = FMath::FloorToInt(CurrentCooldown) % 60;
-    FString CooldownString = FString::Printf(TEXT("%02d:%02d"), Minutes, Seconds);
-    CooldownText->SetText(FText::FromString(CooldownString));
-    CooldownText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+    if (bIsOnCooldown)
+    {
+        int32 Minutes = FMath::FloorToInt(CurrentCooldown / 60.0f);
+        int32 Seconds = FMath::FloorToInt(CurrentCooldown) % 60;
+        FString CooldownString = FString::Printf(TEXT("%02d:%02d"), Minutes, Seconds);
+        CooldownText->SetText(FText::FromString(CooldownString));
+        CooldownText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+    }
+    else
+    {
+        CooldownText->SetText(FText::FromString(TEXT("--:--")));
+        CooldownText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+    }
+}
+
+void UHintWidget::LoadStateFromSaveGame()
+{
+    if (!GameInstance || !GameInstance->CurrentSaveData)
+        return;
+
+    // SaveGame에서 불러오기
+    TArray<bool> SavedBlocks = GameInstance->CurrentSaveData->GetHintBlockStates(CurrentLevelNumber);
+
+    if (SavedBlocks.Num() == 6)
+    {
+        RevealedBlocks = SavedBlocks;
+    }
+
+    float SavedCooldown = GameInstance->CurrentSaveData->GetHintCooldownTime(CurrentLevelNumber);
+    if (SavedCooldown > 0.0f)
+    {
+        bIsOnCooldown = true;
+        CurrentCooldown = SavedCooldown;
+    }
+    else
+    {
+        bIsOnCooldown = false;
+        CurrentCooldown = 0.0f;
+    }
+}
+
+void UHintWidget::SaveStateToSaveGame()
+{
+    if (!GameInstance || !GameInstance->CurrentSaveData)
+        return;
+
+    // SaveGame에 저장
+    GameInstance->CurrentSaveData->SetHintBlockStates(CurrentLevelNumber, RevealedBlocks);
+    GameInstance->CurrentSaveData->SetHintCooldownTime(CurrentLevelNumber, CurrentCooldown);
+    GameInstance->SaveContinueGame();
 }
 
 void UHintWidget::ResetHintWidget()
@@ -186,5 +239,9 @@ void UHintWidget::ResetHintWidget()
 
     bIsOnCooldown = false;
     CurrentCooldown = 0.0f;
+
+    // SaveGame에도 리셋 저장
+    SaveStateToSaveGame();
+
     UpdateBlockVisibility();
 }

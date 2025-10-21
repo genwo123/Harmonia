@@ -288,6 +288,12 @@ bool APedestal::Push(FVector Direction)
     TargetGridColumn = TargetColumn;
 
     OwnerPuzzleArea->RegisterPedestal(this, TargetRow, TargetColumn);
+    if (PushSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, PushSound, GetActorLocation());
+    }
+
+
     return true;
 }
 
@@ -330,6 +336,11 @@ void APedestal::Rotate(float Degrees)
     {
         PlacedObject->SetActorRotation(NewRotation);
     }
+
+    if (RotateSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, RotateSound, GetActorLocation());
+    }
 }
 
 AActor* APedestal::GetAttachedChildActor() const
@@ -371,8 +382,19 @@ bool APedestal::PlaceObject(AActor* Object)
 
         PlacedObject = Object;
         CurrentState = EPedestalState::Occupied;
+
+        if (PlaceObjectSound)
+        {
+            UGameplayStatics::PlaySoundAtLocation(this, PlaceObjectSound, GetActorLocation());
+        }
+
         return true;
     }
+
+
+
+
+
 
     return false;
 }
@@ -386,6 +408,11 @@ AActor* APedestal::RemoveObject()
     RemovedObject->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
     PlacedObject = nullptr;
     CurrentState = EPedestalState::Empty;
+
+    if (RemoveObjectSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, RemoveObjectSound, GetActorLocation());
+    }
 
     return RemovedObject;
 }

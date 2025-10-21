@@ -7,6 +7,8 @@ UHamonia_SaveGame::UHamonia_SaveGame()
     UserIndex = 0;
     GameVersion = TEXT("1.0.0");
 
+
+
     ResetToDefault();
 }
 
@@ -64,6 +66,8 @@ void UHamonia_SaveGame::ResetToDefault()
     UniaData.CompletedDialogues.Empty();
 
     StatsData = FGameStatsSaveData();
+
+    HintData.LevelHintStates.Empty();
 
     SetupDefaultLevels();
 }
@@ -431,4 +435,99 @@ void UHamonia_SaveGame::SetCurrentDialogueID(const FString& DialogueID)
 FString UHamonia_SaveGame::GetCurrentDialogueID() const
 {
     return UniaData.CurrentDialogueID;
+}
+
+
+
+void UHamonia_SaveGame::InitializeHintForLevel(int32 LevelNumber)
+{
+    if (!HintData.LevelHintStates.Contains(LevelNumber))
+    {
+        FHintBlockState NewState;
+        HintData.LevelHintStates.Add(LevelNumber, NewState);
+    }
+}
+
+void UHamonia_SaveGame::SetHintBlockStates(int32 LevelNumber, const TArray<bool>& BlockStates)
+{
+    FHintBlockState* State = HintData.LevelHintStates.Find(LevelNumber);
+    if (!State)
+    {
+        InitializeHintForLevel(LevelNumber);
+        State = HintData.LevelHintStates.Find(LevelNumber);
+    }
+
+    if (State && BlockStates.Num() == 6)
+    {
+        State->RevealedBlocks = BlockStates;
+        State->LastSaveTime = FDateTime::Now();
+    }
+}
+
+TArray<bool> UHamonia_SaveGame::GetHintBlockStates(int32 LevelNumber) const
+{
+    const FHintBlockState* State = HintData.LevelHintStates.Find(LevelNumber);
+    if (State)
+    {
+        return State->RevealedBlocks;
+    }
+
+    // 없으면 초기 상태 반환
+    TArray<bool> EmptyState;
+    EmptyState.SetNum(6);
+    for (int32 i = 0; i < 6; i++)
+    {
+        EmptyState[i] = false;
+    }
+    return EmptyState;
+}
+
+void UHamonia_SaveGame::SetHintCooldownTime(int32 LevelNumber, float CooldownTime)
+{
+    FHintBlockState* State = HintData.LevelHintStates.Find(LevelNumber);
+    if (!State)
+    {
+        InitializeHintForLevel(LevelNumber);
+        State = HintData.LevelHintStates.Find(LevelNumber);
+    }
+
+    if (State)
+    {
+        FDateTime Now = FDateTime::Now();
+
+        if (State->LastSaveTime != FDateTime::MinValue())
+        {
+            FTimespan TimeDiff = Now - State->LastSaveTime;
+            float ElapsedTime = TimeDiff.GetTotalSeconds();
+
+            CooldownTime = FMath::Max(0.0f, CooldownTime - ElapsedTime);
+        }
+
+        State->CurrentCooldown = CooldownTime;
+        State->bIsOnCooldown = (CooldownTime > 0.0f);
+        State->LastSaveTime = Now;
+    }
+}
+
+float UHamonia_SaveGame::GetHintCooldownTime(int32 LevelNumber) const
+{
+    const FHintBlockState* State = HintData.LevelHintStates.Find(LevelNumber);
+    if (State)
+    {
+        // 마지막 저장 이후 경과 시간 계산
+        FDateTime Now = FDateTime::Now();
+        FTimespan TimeDiff = Now - State->LastSaveTime;
+        float ElapsedTime = TimeDiff.GetTotalSeconds();
+
+        float RemainingCooldown = FMath::Max(0.0f, State->CurrentCooldown - ElapsedTime);
+        return RemainingCooldown;
+    }
+
+    return 0.0f;
+}
+
+void UHamonia_SaveGame::ResetHintForLevel(int32 LevelNumber)
+{
+    FHintBlockState ResetState;
+    HintData.LevelHintStates.Add(LevelNumber, ResetState);
 }

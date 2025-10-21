@@ -18,19 +18,24 @@ void UDialogueManagerComponent::BeginPlay()
 
 bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
 {
+    UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Attempting to start: %s"), *DialogueID);
+
     if (bIsInDialogue)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Already in dialogue, aborting"));
         return false;
     }
 
     FDialogueData* DialogueData = GetDialogueData(DialogueID);
     if (!DialogueData)
     {
+        UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Dialogue data not found: %s"), *DialogueID);
         return false;
     }
 
     if (!CheckAllConditions(*DialogueData))
     {
+        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Conditions not met for: %s"), *DialogueID);
         return false;
     }
 
@@ -38,6 +43,7 @@ bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
     CurrentDialogueID = DialogueID;
     CurrentDialogue = *DialogueData;
 
+    UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Successfully started: %s"), *DialogueID);
     ProcessDialogue(*DialogueData);
 
     return true;
@@ -45,14 +51,19 @@ bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
 
 void UDialogueManagerComponent::EndDialogue()
 {
+    UE_LOG(LogTemp, Warning, TEXT("[EndDialogue] Ending dialogue: %s"), *CurrentDialogueID);
+
     if (!bIsInDialogue)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[EndDialogue] Not in dialogue, returning"));
         return;
     }
 
     bIsInDialogue = false;
+    FString PrevDialogueID = CurrentDialogueID;
     CurrentDialogueID = "";
 
+    UE_LOG(LogTemp, Warning, TEXT("[EndDialogue] Dialogue ended, broadcasting event"));
     OnDialogueEnded.Broadcast();
 }
 
@@ -60,46 +71,66 @@ void UDialogueManagerComponent::ProgressDialogue()
 {
     if (!bIsInDialogue)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] Not in dialogue, returning"));
         return;
     }
 
-    // ChainBreak 체크 수정
-    if (CurrentDialogue.bChainBreak)
-    {
-        // 다음 대화 ID가 있으면 그것을 저장, 없으면 빈 문자열 저장
-        if (!CurrentDialogue.NextDialogueID.IsEmpty())
-        {
-            SaveLastDialogueID(CurrentDialogue.NextDialogueID);
-            UE_LOG(LogTemp, Warning, TEXT("ChainBreak: Saved Next Dialogue ID: %s"), *CurrentDialogue.NextDialogueID);
-        }
-        else
-        {
-            SaveLastDialogueID("");
-            UE_LOG(LogTemp, Warning, TEXT("ChainBreak: No Next Dialogue, clearing save"));
-        }
-        EndDialogue();
-        return;
-    }
+    UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] Current Dialogue: %s"), *CurrentDialogueID);
 
     if (CurrentDialogue.NextDialogueID.IsEmpty())
     {
+        UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] No next dialogue, ending"));
         EndDialogue();
         return;
     }
 
     FString NextID = CurrentDialogue.NextDialogueID;
+    UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] Next Dialogue ID: %s"), *NextID);
+
+    FDialogueData* NextDialogueData = GetDialogueData(NextID);
+
+    if (!NextDialogueData)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[ProgressDialogue] Next dialogue data not found: %s"), *NextID);
+        EndDialogue();
+        return;
+    }
+
+    if (NextDialogueData->bChainBreak)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] Next dialogue is ChainBreak: %s"), *NextID);
+
+        if (!NextDialogueData->NextDialogueID.IsEmpty())
+        {
+            SaveLastDialogueID(NextDialogueData->NextDialogueID);
+            UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] ChainBreak: Saved Next ID: %s"), *NextDialogueData->NextDialogueID);
+        }
+        else
+        {
+            SaveLastDialogueID("");
+            UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] ChainBreak: No next ID, clearing save"));
+        }
+
+        EndDialogue();
+        StartDialogue(NextID);
+        return;
+    }
 
     if (!CanProgressToDialogue(NextID))
     {
+        UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] Cannot progress to: %s, trying macro"), *NextID);
+
         FString MacroDialogue = GetMacroDialogue(GetCurrentLevelName(), GetCurrentSubStep());
         if (!MacroDialogue.IsEmpty())
         {
+            UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] Starting macro dialogue: %s"), *MacroDialogue);
             EndDialogue();
             StartDialogue(MacroDialogue);
             return;
         }
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] Normal progression to: %s"), *NextID);
     EndDialogue();
     StartDialogue(NextID);
 }

@@ -4,7 +4,7 @@
 ALevelQuestManager::ALevelQuestManager()
 {
     PrimaryActorTick.bCanEverTick = false;
-    CurrentLevel = "Level_01"; // 기본 시작 레벨
+    CurrentLevel = "Level_Main_0"; // 기본 시작 레벨
 
     // 기본 데이터 테이블 경로 설정 (선택사항)
     static ConstructorHelpers::FObjectFinder<UDataTable> QuestDTObject(TEXT("/Game/Hamonia/H_DataTable/DT_LevelQuest"));

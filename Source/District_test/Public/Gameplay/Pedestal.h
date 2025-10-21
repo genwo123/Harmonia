@@ -4,6 +4,7 @@
 #include "Interaction/InteractableInterface.h"
 #include "Interaction/InteractionEnums.h"
 #include "Components/SphereComponent.h"
+#include "Sound/SoundBase.h"
 #include "Gameplay/PuzzleArea.h"
 #include "Components/ChildActorComponent.h"
 #include "Pedestal.generated.h"
@@ -116,6 +117,19 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Grid")
     void SetGridPosition(int32 Row, int32 Column);
+
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+    USoundBase* RotateSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+    USoundBase* PushSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+    USoundBase* PlaceObjectSound;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+    USoundBase* RemoveObjectSound;
 
     UFUNCTION(BlueprintPure, Category = "Grid")
     void GetGridPosition(int32& OutRow, int32& OutColumn) const;

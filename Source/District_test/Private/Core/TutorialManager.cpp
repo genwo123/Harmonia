@@ -1,4 +1,4 @@
-#include "Core/TutorialTrigger.h"
+#include "Core/TutorialManager.h"
 #include "Core/TutorialWidget.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -6,7 +6,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 
-ATutorialTrigger::ATutorialTrigger()
+ATutorialManager::ATutorialManager()
 {
     PrimaryActorTick.bCanEverTick = false;
 
@@ -31,11 +31,11 @@ ATutorialTrigger::ATutorialTrigger()
     MessageGroupIndex = 0;
 }
 
-void ATutorialTrigger::BeginPlay()
+void ATutorialManager::BeginPlay()
 {
     Super::BeginPlay();
 
-    TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &ATutorialTrigger::OnTriggerBeginOverlap);
+    TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &ATutorialManager::OnTriggerBeginOverlap);
 
     if (VisualMesh)
     {
@@ -45,7 +45,7 @@ void ATutorialTrigger::BeginPlay()
     GetOrCreateTutorialWidget();
 }
 
-bool ATutorialTrigger::LoadMessageGroupFromDataTable()
+bool ATutorialManager::LoadMessageGroupFromDataTable()
 {
     if (!TutorialMessageDataTable)
     {
@@ -81,7 +81,7 @@ bool ATutorialTrigger::LoadMessageGroupFromDataTable()
     }
 }
 
-void ATutorialTrigger::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+void ATutorialManager::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
     UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
     ACharacter* PlayerCharacter = Cast<ACharacter>(OtherActor);
@@ -94,7 +94,7 @@ void ATutorialTrigger::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComp
     StartTutorial();
 }
 
-void ATutorialTrigger::StartTutorial()
+void ATutorialManager::StartTutorial()
 {
     if (bHasTriggered && bIsOneTimeUse)
         return;
@@ -108,7 +108,7 @@ void ATutorialTrigger::StartTutorial()
     ShowCurrentMessage();
 }
 
-void ATutorialTrigger::ShowCurrentMessage()
+void ATutorialManager::ShowCurrentMessage()
 {
     if (CurrentMessageIndex >= CurrentMessageData.Messages.Num())
     {
@@ -140,12 +140,12 @@ void ATutorialTrigger::ShowCurrentMessage()
     }
 }
 
-void ATutorialTrigger::ShowNextMessage()
+void ATutorialManager::ShowNextMessage()
 {
     ShowCurrentMessage();
 }
 
-void ATutorialTrigger::HideCurrentMessage()
+void ATutorialManager::HideCurrentMessage()
 {
     GetWorld()->GetTimerManager().ClearTimer(MessageTimerHandle);
 
@@ -159,7 +159,7 @@ void ATutorialTrigger::HideCurrentMessage()
     }
 }
 
-void ATutorialTrigger::EndTutorial()
+void ATutorialManager::EndTutorial()
 {
     HideCurrentMessage();
 
@@ -170,14 +170,14 @@ void ATutorialTrigger::EndTutorial()
     }
 }
 
-void ATutorialTrigger::ResetTrigger()
+void ATutorialManager::ResetTrigger()
 {
     bHasTriggered = false;
     CurrentMessageIndex = 0;
     HideCurrentMessage();
 }
 
-UUserWidget* ATutorialTrigger::GetOrCreateTutorialWidget()
+UUserWidget* ATutorialManager::GetOrCreateTutorialWidget()
 {
     if (!TutorialWidget && TutorialWidgetClass)
     {
@@ -189,4 +189,20 @@ UUserWidget* ATutorialTrigger::GetOrCreateTutorialWidget()
         }
     }
     return TutorialWidget;
+}
+
+void ATutorialManager::StartTutorialWithGroup(int32 GroupIndex)
+{
+    if (bHasTriggered && bIsOneTimeUse)
+        return;
+
+    MessageGroupIndex = GroupIndex;
+
+    if (!LoadMessageGroupFromDataTable())
+        return;
+
+    bHasTriggered = true;
+    CurrentMessageIndex = 0;
+
+    ShowCurrentMessage();
 }

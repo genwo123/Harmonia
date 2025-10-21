@@ -5,7 +5,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Blueprint/UserWidget.h"
 #include "Engine/DataTable.h"
-#include "TutorialTrigger.generated.h"
+#include "TutorialManager.generated.h"
 
 class UTutorialWidget;
 
@@ -28,12 +28,12 @@ struct DISTRICT_TEST_API FTutorialMessageData : public FTableRowBase
 };
 
 UCLASS()
-class DISTRICT_TEST_API ATutorialTrigger : public AActor
+class DISTRICT_TEST_API ATutorialManager : public AActor
 {
     GENERATED_BODY()
 
 public:
-    ATutorialTrigger();
+    ATutorialManager();
 
 protected:
     virtual void BeginPlay() override;
@@ -57,6 +57,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
     bool bIsOneTimeUse;
 
+    UFUNCTION(BlueprintCallable, Category = "Tutorial")
+    void StartTutorialWithGroup(int32 GroupIndex);
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial")
     bool bIsActive;
 
@@ -74,7 +77,6 @@ protected:
     UUserWidget* TutorialWidget;
 
     FTutorialMessageData CurrentMessageData;
-
     FTimerHandle MessageTimerHandle;
 
 public:
