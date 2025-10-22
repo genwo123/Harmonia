@@ -141,91 +141,93 @@ void UPuzzleInteractionComponent::TickComponent(float DeltaTime, ELevelTick Tick
     }
 }
 
+bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
+{
+    if (!HoldingActor)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[PutDown] No HoldingActor"));
+        return false;
+    }
+
+    AActor* Owner = GetOwner();
+    if (!Owner)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[PutDown] No Owner"));
+        return false;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Before Detach - Owner: %s, HoldingActor: %s"),
+        *Owner->GetName(), *HoldingActor->GetName());
+
+    FVector CurrentWorldLocation = Owner->GetActorLocation();
+    FRotator CurrentWorldRotation = Owner->GetActorRotation();
+
+    Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Detached"));
+
+    if (bEnablePhysicsWhenDropped)
+    {
+        EnablePhysics();
+        UE_LOG(LogTemp, Warning, TEXT("[PutDown] Physics Enabled"));
+    }
+
+    HoldingActor = nullptr;
+    UE_LOG(LogTemp, Warning, TEXT("[PutDown] HoldingActor set to nullptr, bCanBePickedUp: %s"),
+        bCanBePickedUp ? TEXT("True") : TEXT("False"));
+
+    return true;
+}
+
 bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
 {
+    UE_LOG(LogTemp, Warning, TEXT("[PickUp] Called - bCanBePickedUp: %s, HoldingActor: %s"),
+        bCanBePickedUp ? TEXT("True") : TEXT("False"),
+        HoldingActor ? *HoldingActor->GetName() : TEXT("None"));
+
     if (!bCanBePickedUp)
     {
+        UE_LOG(LogTemp, Error, TEXT("[PickUp] Cannot be picked up!"));
         return false;
     }
 
     if (HoldingActor)
     {
+        UE_LOG(LogTemp, Error, TEXT("[PickUp] Already held by: %s"), *HoldingActor->GetName());
         return false;
     }
 
     AActor* Owner = GetOwner();
     if (!Owner)
     {
+        UE_LOG(LogTemp, Error, TEXT("[PickUp] No Owner"));
         return false;
     }
 
-    // 받침대에서 제거 (이미 Interact에서 처리했지만 안전하게 한 번 더)
     if (CurrentPedestal)
     {
         RemoveFromPedestal();
     }
 
-    // 피직스 비활성화
     DisablePhysics();
 
-    // HoldingActor 설정
     HoldingActor = Picker;
+    UE_LOG(LogTemp, Warning, TEXT("[PickUp] Success - HoldingActor set to: %s"), *Picker->GetName());
 
-    // 플레이어의 HeldObjectAttachPoint 찾기
     AHamoniaCharacter* Character = Cast<AHamoniaCharacter>(Picker);
     if (Character && Character->HeldObjectAttachPoint)
     {
-        // AttachPoint에 부착
         Owner->AttachToComponent(
             Character->HeldObjectAttachPoint,
             FAttachmentTransformRules::SnapToTargetNotIncludingScale
         );
 
-        // 상대 위치/회전 초기화 (AttachPoint의 위치 그대로 사용)
         Owner->SetActorRelativeLocation(FVector::ZeroVector);
         Owner->SetActorRelativeRotation(FRotator::ZeroRotator);
     }
     else
     {
-        // HeldObjectAttachPoint가 없으면 기존 방식 (수동 위치 업데이트)
         Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
     }
-
-    return true;
-}
-
-
-bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
-{
-    if (!HoldingActor)
-    {
-        return false;
-    }
-
-    AActor* Owner = GetOwner();
-    if (!Owner)
-    {
-        return false;
-    }
-
-    // 현재 월드 위치/회전 저장 (Attach된 상태에서의 위치)
-    FVector CurrentWorldLocation = Owner->GetActorLocation();
-    FRotator CurrentWorldRotation = Owner->GetActorRotation();
-
-    // Detach
-    Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-
-    // KeepWorldTransform 규칙으로 Detach했으므로 이미 현재 위치 유지됨
-    // 추가 설정 불필요
-
-    // 내려놓을 때 피직스 활성화
-    if (bEnablePhysicsWhenDropped)
-    {
-        EnablePhysics();
-    }
-
-    // HoldingActor 초기화
-    HoldingActor = nullptr;
 
     return true;
 }

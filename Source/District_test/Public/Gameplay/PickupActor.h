@@ -20,11 +20,11 @@ protected:
 public:
     virtual void Tick(float DeltaTime) override;
 
-    // 메시 컴포넌트 (다시 루트로)
+
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
     class UStaticMeshComponent* MeshComponent;
 
-    // 상호작용 영역
+
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
     class USphereComponent* InteractionSphere;
 
@@ -67,6 +67,18 @@ public:
     USceneComponent* SceneComponent;
 
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    class UWidgetComponent* InteractionWidgetComponent;
+
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+    void ShowInteractionWidget();
+    virtual void ShowInteractionWidget_Implementation() override;
+
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+    void HideInteractionWidget();
+    virtual void HideInteractionWidget_Implementation() override;
+
+
 
     // 메시 회전 설정
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ExposeOnSpawn = true))
@@ -86,6 +98,10 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bDrawDebug = true;
+
+
+
+
 
 #if WITH_EDITOR
     virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;

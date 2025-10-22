@@ -362,6 +362,9 @@ bool APedestal::PlaceObject(AActor* Object)
     if (CurrentState == EPedestalState::Occupied && PlacedObject != Object)
         return false;
 
+    if (!CanPlaceObjectByFilter(Object))
+        return false;
+
     if (Object)
     {
         if (!AttachmentPoint)
@@ -390,11 +393,6 @@ bool APedestal::PlaceObject(AActor* Object)
 
         return true;
     }
-
-
-
-
-
 
     return false;
 }
@@ -458,4 +456,35 @@ void APedestal::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedCom
         Character->CurrentInteractableActor = nullptr;
         Character->CurrentInteractionText = FString();
     }
+}
+
+
+bool APedestal::CanPlaceObjectByFilter(AActor* Object) const
+{
+    if (!Object)
+        return false;
+
+    if (!bUseObjectFilter)
+        return true;
+
+    for (const FName& BlockedTag : BlockedObjectTags)
+    {
+        if (Object->ActorHasTag(BlockedTag))
+        {
+            return false;
+        }
+    }
+
+    if (AllowedObjectTags.Num() == 0)
+        return true;
+
+    for (const FName& AllowedTag : AllowedObjectTags)
+    {
+        if (Object->ActorHasTag(AllowedTag))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }

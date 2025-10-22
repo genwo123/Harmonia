@@ -43,8 +43,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMechanismCompleted, FString, Mech
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWidgetSuccess, AActor*, Interactor);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWidgetFailed, AActor*, Interactor);
 
-
-
 UCLASS()
 class DISTRICT_TEST_API AInteractableMechanism : public AActor, public IInteractableInterface
 {
@@ -64,6 +62,9 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     class USphereComponent* InteractionSphere;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    class UWidgetComponent* InteractionPromptWidgetComponent;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
     FString InteractionText;
@@ -123,8 +124,7 @@ public:
         meta = (EditCondition = "MechanismType == EMechanismType::Widget"))
     EWidgetSubType WidgetSubType;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction|Widget",
-        meta = (EditCondition = "MechanismType == EMechanismType::Widget"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction|Widget")
     TSubclassOf<class UUserWidget> InteractionWidgetClass;
 
     UPROPERTY(BlueprintReadOnly, Category = "Interaction|Widget")
@@ -171,6 +171,14 @@ public:
     EInteractionType GetInteractionType();
     virtual EInteractionType GetInteractionType_Implementation() override;
 
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+    void ShowInteractionWidget();
+    virtual void ShowInteractionWidget_Implementation() override;
+
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
+    void HideInteractionWidget();
+    virtual void HideInteractionWidget_Implementation() override;
+
     void HandleDoorInteraction(AActor* Interactor);
     void HandleWidgetInteraction(AActor* Interactor);
 
@@ -180,16 +188,11 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "Interaction|Door")
     void OnDoorOpened();
 
-    UFUNCTION(BlueprintCallable, Category = "Interaction|Widget")
-    void HideInteractionWidget();
-
     UPROPERTY(BlueprintAssignable, Category = "Interaction|Widget Events")
     FOnWidgetSuccess OnWidgetSuccess;
 
     UPROPERTY(BlueprintAssignable, Category = "Interaction|Widget Events")
     FOnWidgetFailed OnWidgetFailed;
-
-
 
     UFUNCTION(BlueprintCallable, Category = "Interaction|Widget")
     void OnWidgetInteractionSuccess();

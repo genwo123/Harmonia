@@ -2,7 +2,8 @@
 #include "Gameplay/InventoryComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
-#include "Blueprint/UserWidget.h"
+#include "Blueprint/UserWidget.h"           
+#include "Components/WidgetComponent.h" 
 #include "Kismet/GameplayStatics.h"
 
 AInteractableMechanism::AInteractableMechanism()
@@ -22,6 +23,15 @@ AInteractableMechanism::AInteractableMechanism()
     InteractionSphere->SetGenerateOverlapEvents(true);
     InteractionSphere->SetMobility(EComponentMobility::Movable);
     InteractionSphere->bHiddenInGame = false;
+
+
+    InteractionPromptWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionPromptWidgetComponent"));
+    InteractionPromptWidgetComponent->SetupAttachment(RootComponent);
+    InteractionPromptWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 100.f));
+    InteractionPromptWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
+    InteractionPromptWidgetComponent->SetDrawSize(FVector2D(200.f, 50.f));
+    InteractionPromptWidgetComponent->SetVisibility(false);
+
 
     InteractionText = TEXT("Interact");
     bRequiresKey = false;
@@ -94,18 +104,6 @@ void AInteractableMechanism::HandleWidgetInteraction(AActor* Interactor)
     OnShowWidget(Cast<APlayerController>(Interactor->GetInstigatorController()));
 }
 
-void AInteractableMechanism::HideInteractionWidget()
-{
-    APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
-    if (PC)
-    {
-        FInputModeGameOnly InputMode;
-        PC->SetInputMode(InputMode);
-        PC->bShowMouseCursor = false;
-    }
-
-    OnHideWidget();
-}
 
 void AInteractableMechanism::OnWidgetInteractionSuccess()
 {
@@ -265,5 +263,22 @@ void AInteractableMechanism::OnRequiredMechanismCompleted(FString CompletedMecha
     if (bAllCompleted)
     {
         OnAllRequiredMechanismsCompleted();
+    }
+}
+
+void AInteractableMechanism::ShowInteractionWidget_Implementation()
+{
+    if (InteractionPromptWidgetComponent)
+    {
+        InteractionPromptWidgetComponent->SetVisibility(true);
+    }
+}
+
+
+void AInteractableMechanism::HideInteractionWidget_Implementation()
+{
+    if (InteractionPromptWidgetComponent)
+    {
+        InteractionPromptWidgetComponent->SetVisibility(false);
     }
 }

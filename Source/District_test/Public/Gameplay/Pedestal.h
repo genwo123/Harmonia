@@ -139,6 +139,21 @@ public:
     virtual FString GetInteractionText_Implementation() override { return InteractionText; }
     virtual EInteractionType GetInteractionType_Implementation() override { return InteractionType; }
 
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal|Filter")
+    bool bUseObjectFilter = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal|Filter",
+        meta = (EditCondition = "bUseObjectFilter"))
+    TArray<FName> AllowedObjectTags;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal|Filter",
+        meta = (EditCondition = "bUseObjectFilter"))
+    TArray<FName> BlockedObjectTags;
+
+    UFUNCTION(BlueprintCallable, Category = "Pedestal")
+    bool CanPlaceObjectByFilter(AActor* Object) const;
+
 protected:
     void FindOwnerPuzzleArea();
     void ClearPreviousCell();

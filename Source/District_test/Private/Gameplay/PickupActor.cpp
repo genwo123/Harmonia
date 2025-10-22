@@ -3,6 +3,8 @@
 #include "Gameplay/PuzzleInteractionComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
+#include "Blueprint/UserWidget.h"           
+#include "Components/WidgetComponent.h" 
 #include "Kismet/GameplayStatics.h"
 
 APickupActor::APickupActor()
@@ -20,6 +22,18 @@ APickupActor::APickupActor()
     MeshComponent->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
     MeshComponent->SetSimulatePhysics(false);
     MeshComponent->SetMobility(EComponentMobility::Movable);
+
+
+
+    InteractionWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidgetComponent"));
+    InteractionWidgetComponent->SetupAttachment(RootComponent);
+    InteractionWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 100.f));
+    InteractionWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
+    InteractionWidgetComponent->SetDrawSize(FVector2D(200.f, 50.f));
+    InteractionWidgetComponent->SetVisibility(false);
+
+
+
 
     InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
     InteractionSphere->SetupAttachment(RootComponent);
@@ -124,6 +138,12 @@ void APickupActor::Interact_Implementation(AActor* Interactor)
 
 bool APickupActor::CanInteract_Implementation(AActor* Interactor)
 {
+    UPuzzleInteractionComponent* PuzzleComp = FindComponentByClass<UPuzzleInteractionComponent>();
+    if (PuzzleComp)
+    {
+        return true; 
+    }
+
     UInventoryComponent* InventoryComponent = Interactor->FindComponentByClass<UInventoryComponent>();
     if (!InventoryComponent || !ItemClass)
     {
@@ -131,7 +151,6 @@ bool APickupActor::CanInteract_Implementation(AActor* Interactor)
     }
     return InventoryComponent->HasRoomForItem();
 }
-
 
 FString APickupActor::GetInteractionText_Implementation()
 {
@@ -197,3 +216,21 @@ void APickupActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChanged
     }
 }
 #endif
+
+
+void APickupActor::ShowInteractionWidget_Implementation()
+{
+    if (InteractionWidgetComponent)
+    {
+        InteractionWidgetComponent->SetVisibility(true);
+    }
+}
+
+
+void APickupActor::HideInteractionWidget_Implementation()
+{
+    if (InteractionWidgetComponent)
+    {
+        InteractionWidgetComponent->SetVisibility(false);
+    }
+}

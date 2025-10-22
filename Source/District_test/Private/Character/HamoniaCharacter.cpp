@@ -44,13 +44,12 @@ AHamoniaCharacter::AHamoniaCharacter()
 	HeldItemDisplay->SetRelativeLocation(FVector(50.0f, 20.0f, -10.0f));
 	HeldItemDisplay->SetVisibility(false);
 
-	CurrentDisplayedItem = nullptr;  // 이 줄 확인
+	CurrentDisplayedItem = nullptr;
 
 	DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
 
 	bShowDebugLines = true;
 }
-
 
 APedestal* AHamoniaCharacter::FindPedestalFromActor(AActor* Actor)
 {
@@ -59,14 +58,12 @@ APedestal* AHamoniaCharacter::FindPedestalFromActor(AActor* Actor)
 		return nullptr;
 	}
 
-	// 직접 Pedestal인 경우
 	APedestal* Pedestal = Cast<APedestal>(Actor);
 	if (Pedestal)
 	{
 		return Pedestal;
 	}
 
-	// 부모를 찾아서 Pedestal인지 확인
 	AActor* ParentActor = Actor->GetAttachParentActor();
 	while (ParentActor)
 	{
@@ -196,7 +193,6 @@ void AHamoniaCharacter::Tick(float DeltaTime)
 	}
 }
 
-
 void AHamoniaCharacter::DrawDebugInteractionLine()
 {
 	if (!bShowDebugLines) return;
@@ -294,139 +290,71 @@ void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] Function Called"));
-
 	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
 
 	if (EnhancedInputComponent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] EnhancedInputComponent Cast Success"));
-
 		if (MoveAction)
 		{
 			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Move);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] MoveAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] MoveAction is NULL"));
 		}
 
 		if (LookAction)
 		{
 			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Look);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] LookAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] LookAction is NULL"));
 		}
 
 		if (JumpAction)
 		{
 			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
 			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] JumpAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] JumpAction is NULL"));
 		}
 
 		if (SprintAction)
 		{
 			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::StartSprint);
 			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHamoniaCharacter::StopSprint);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] SprintAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] SprintAction is NULL"));
 		}
 
 		if (CrouchAction)
 		{
 			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::ToggleCrouch);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] CrouchAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] CrouchAction is NULL"));
 		}
 
 		if (RotateAction)
 		{
 			EnhancedInputComponent->BindAction(RotateAction, ETriggerEvent::Started, this, &AHamoniaCharacter::RotateObject);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] RotateAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] RotateAction is NULL"));
 		}
 
 		if (PushAction)
 		{
 			EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnEKeyPressed);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] PushAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] PushAction is NULL"));
 		}
 
 		if (InteractAction)
 		{
 			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHamoniaCharacter::Interact);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] InteractAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] InteractAction is NULL"));
 		}
 
 		if (InventoryToggleAction)
 		{
 			EnhancedInputComponent->BindAction(InventoryToggleAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryToggle);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] InventoryToggleAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] InventoryToggleAction is NULL"));
 		}
 
 		if (InventoryLeftAction)
 		{
 			EnhancedInputComponent->BindAction(InventoryLeftAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryMoveLeft);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] InventoryLeftAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] InventoryLeftAction is NULL"));
 		}
 
 		if (InventoryRightAction)
 		{
 			EnhancedInputComponent->BindAction(InventoryRightAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryMoveRight);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] InventoryRightAction Bound"));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] InventoryRightAction is NULL"));
 		}
 
 		if (InventoryUseAction)
 		{
 			EnhancedInputComponent->BindAction(InventoryUseAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryUse);
-			UE_LOG(LogTemp, Warning, TEXT("[SetupPlayerInputComponent] InventoryUseAction Bound"));
 		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] InventoryUseAction is NULL"));
-		}
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("[SetupPlayerInputComponent] EnhancedInputComponent Cast Failed"));
 	}
 }
 
@@ -456,18 +384,15 @@ void AHamoniaCharacter::PushObject()
 		}
 	}
 }
+
 void AHamoniaCharacter::OnEKeyPressed()
 {
-	UE_LOG(LogTemp, Warning, TEXT("[OnEKeyPressed] Function Called"));
-
 	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[OnEKeyPressed] Inventory is open - calling OnInventoryUse()"));
 		OnInventoryUse();
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[OnEKeyPressed] Inventory is closed - calling PushObject()"));
 		PushObject();
 	}
 }
@@ -485,94 +410,100 @@ void AHamoniaCharacter::Interact()
 
 	if (CurrentInteractableNPC)
 	{
+		if (!bIsLookingAtInteractable)
+		{
+			return;
+		}
+
 		CurrentInteractableNPC->HandlePlayerInteraction();
 		return;
 	}
 
-	if (bIsLookingAtInteractable && CurrentInteractableActor)
+	AActor* HeldObject = GetHeldObject();
+	if (HeldObject)
 	{
-		AActor* HeldObject = GetHeldObject();
-
-		if (HeldObject)
+		UPuzzleInteractionComponent* HeldItemComp = HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
+		if (HeldItemComp)
 		{
-			UPuzzleInteractionComponent* HeldItemComp = HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
-			if (HeldItemComp)
+			if (bIsLookingAtInteractable && CurrentInteractableActor)
 			{
 				APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
-
 				if (Pedestal)
 				{
-					HeldItemComp->PlaceOnPedestal(Pedestal);
-				}
-				else
-				{
-					FVector DropLocation = GetActorLocation() + (GetActorForwardVector() * 150.0f);
-					DropLocation.Z = GetActorLocation().Z;
-					HeldItemComp->PutDown(DropLocation, GetActorRotation());
-				}
-
-				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-				{
-					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-				}
-				return;
-			}
-		}
-		else
-		{
-			UItem* HeldInventoryItem = GetCurrentHeldInventoryItem();
-			if (HeldInventoryItem && HandleInventoryItemInteraction(HeldInventoryItem, CurrentInteractableActor))
-			{
-				return;
-			}
-
-			APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
-			if (Pedestal)
-			{
-				AActor* ObjectOnPedestal = Pedestal->GetPlacedObject();
-				if (ObjectOnPedestal)
-				{
-					UPuzzleInteractionComponent* InteractionComp = ObjectOnPedestal->FindComponentByClass<UPuzzleInteractionComponent>();
-					if (InteractionComp)
+					if (Pedestal->GetPlacedObject() != nullptr)
 					{
-						Pedestal->RemoveObject();
-						InteractionComp->PickUp(this);
-
-						if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-						{
-							IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-						}
 						return;
 					}
+					if (!Pedestal->CanPlaceObjectByFilter(HeldObject))
+					{
+						return;
+					}
+					HeldItemComp->PlaceOnPedestal(Pedestal);
+					if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+					{
+						IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+					}
+					return;
 				}
-				IInteractableInterface::Execute_Interact(Pedestal, this);
-				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-				{
-					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-				}
-				return;
 			}
-
-			UPuzzleInteractionComponent* InteractionComp = CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
-			if (InteractionComp && InteractionComp->bCanBePickedUp)
+			FVector DropLocation = HeldObjectAttachPoint->GetComponentLocation();
+			HeldItemComp->PutDown(DropLocation, GetActorRotation());
+			if (bIsLookingAtInteractable && CurrentInteractableActor &&
+				CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 			{
-				APedestal* ParentPedestal = FindPedestalFromActor(CurrentInteractableActor);
-
-				if (ParentPedestal && ParentPedestal->GetPlacedObject() == CurrentInteractableActor)
-				{
-					ParentPedestal->RemoveObject();
-				}
-
-				InteractionComp->PickUp(this);
-
-				if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-				{
-					IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-				}
-				return;
+				IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
 			}
+			return;
 		}
+	}
 
+	if (bIsLookingAtInteractable && CurrentInteractableActor)
+	{
+		UItem* HeldInventoryItem = GetCurrentHeldInventoryItem();
+		if (HeldInventoryItem && HandleInventoryItemInteraction(HeldInventoryItem, CurrentInteractableActor))
+		{
+			return;
+		}
+		APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
+		if (Pedestal)
+		{
+			AActor* ObjectOnPedestal = Pedestal->GetPlacedObject();
+			if (ObjectOnPedestal)
+			{
+				UPuzzleInteractionComponent* InteractionComp = ObjectOnPedestal->FindComponentByClass<UPuzzleInteractionComponent>();
+				if (InteractionComp)
+				{
+					Pedestal->RemoveObject();
+					InteractionComp->PickUp(this);
+					if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+					{
+						IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+					}
+					return;
+				}
+			}
+			IInteractableInterface::Execute_Interact(Pedestal, this);
+			if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+			{
+				IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+			}
+			return;
+		}
+		UPuzzleInteractionComponent* InteractionComp = CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
+		if (InteractionComp && InteractionComp->bCanBePickedUp)
+		{
+			APedestal* ParentPedestal = FindPedestalFromActor(CurrentInteractableActor);
+			if (ParentPedestal && ParentPedestal->GetPlacedObject() == CurrentInteractableActor)
+			{
+				ParentPedestal->RemoveObject();
+			}
+			InteractionComp->PickUp(this);
+			if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+			{
+				IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
+			}
+			return;
+		}
 		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
 		if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 		{
@@ -580,7 +511,6 @@ void AHamoniaCharacter::Interact()
 		}
 	}
 }
-
 
 AActor* AHamoniaCharacter::GetHeldObject()
 {
@@ -603,9 +533,16 @@ AActor* AHamoniaCharacter::GetHeldObject()
 
 void AHamoniaCharacter::CheckForInteractables()
 {
+	if (CurrentInteractableActor && IsValid(CurrentInteractableActor))
+	{
+		if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+		{
+			IInteractableInterface::Execute_HideInteractionWidget(CurrentInteractableActor);
+		}
+	}
+
 	FVector Start = CameraComponent->GetComponentLocation();
 	FVector End = Start + (CameraComponent->GetForwardVector() * InteractionDistance);
-
 	FHitResult HitResult;
 	FCollisionQueryParams QueryParams;
 	QueryParams.AddIgnoredActor(this);
@@ -645,13 +582,11 @@ void AHamoniaCharacter::CheckForInteractables()
 		}
 	}
 
-	// 근접 검사 (LineTrace 실패 또는 Interactable 못 찾았을 때)
 	if (!bIsLookingAtInteractable)
 	{
 		float ClosestDistance = InteractionDistance;
 		AActor* ClosestActor = nullptr;
 
-		// Pedestal 검사
 		for (TActorIterator<APedestal> It(GetWorld()); It; ++It)
 		{
 			APedestal* Pedestal = *It;
@@ -666,7 +601,6 @@ void AHamoniaCharacter::CheckForInteractables()
 			}
 		}
 
-		// PickupActor 검사 추가
 		for (TActorIterator<APickupActor> It(GetWorld()); It; ++It)
 		{
 			APickupActor* PickupActor = *It;
@@ -689,8 +623,15 @@ void AHamoniaCharacter::CheckForInteractables()
 			CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(ClosestActor);
 		}
 	}
-}
 
+	if (bIsLookingAtInteractable && CurrentInteractableActor)
+	{
+		if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+		{
+			IInteractableInterface::Execute_ShowInteractionWidget(CurrentInteractableActor);
+		}
+	}
+}
 
 EInteractionType AHamoniaCharacter::GetCurrentInteractionType() const
 {
@@ -706,8 +647,6 @@ FString AHamoniaCharacter::GetCurrentInteractionText() const
 {
 	return CurrentInteractionText;
 }
-
-
 
 void AHamoniaCharacter::OnDialogueStarted(ESpeakerType Speaker, FText DialogueText, EDialogueType Type, float Duration)
 {
@@ -758,11 +697,9 @@ void AHamoniaCharacter::OnInventoryMoveRight()
 	}
 }
 
-
-
 void AHamoniaCharacter::OnInventoryUse()
 {
-	if (InventoryComponent)
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
 	{
 		InventoryComponent->UseSelectedItem();
 	}

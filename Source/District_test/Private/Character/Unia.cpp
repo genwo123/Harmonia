@@ -49,6 +49,16 @@ void AUnia::BeginPlay()
         InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &AUnia::OnInteractionSphereEndOverlap);
     }
 
+    if (GetCapsuleComponent())
+    {
+        GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+    }
+
+    if (GetMesh())
+    {
+        GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+    }
+
     bCanFollow = false;
 
     if (AUniaAIController* AIController = GetUniaAIController())
@@ -157,10 +167,17 @@ void AUnia::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedCompone
 
 void AUnia::HandlePlayerInteraction()
 {
+
+    if (DialogueManager && DialogueManager->bIsInDialogue)
+    {
+        return;
+    }
+
     if (bPlayerInRange && PlayerPawn)
     {
         Interact_Implementation(PlayerPawn);
     }
+
 }
 
 void AUnia::Interact_Implementation(AActor* Interactor)
@@ -169,6 +186,12 @@ void AUnia::Interact_Implementation(AActor* Interactor)
     {
         return;
     }
+
+    if (DialogueManager && DialogueManager->bIsInDialogue)
+    {
+        return;
+    }
+
     StartDialogue(Interactor);
 }
 
