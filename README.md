@@ -8,9 +8,9 @@
 ### 🎬 프로모션 영상
 *이미지를 클릭시면 YouTube의 PV영상을 보실 수 있습니다*
 
-[![하모니아 프로모션](./docs/Harmonia_PV.png)](https://youtu.be/rGCgl6xelgo?si=o7_9UaGb29jtHJu8)
+[![하모니아 프로모션](./Docs/Harmonia_PV.png)](https://youtu.be/rGCgl6xelgo?si=o7_9UaGb29jtHJu8)
 
-<img src="./docs/Harmonia_Intro.jpg" alt="하모니아 게임 소개" width="100%">
+<img src="./Docs/Harmonia_Intro.jpg" alt="하모니아 게임 소개" width="100%">
 
 ---
 
@@ -23,16 +23,16 @@
 | **엔진** | Unreal Engine 5.6 |
 | **개발 언어** | C++17, Blueprint |
 | **개발 기간** | 2024.03 ~ 2024.11 |
-| **개발 규모** | 7인 팀 프로젝트 |
+| **개발 규모** | 6인 팀 프로젝트 |
 
 ## 👥 개발팀
 
 | 역할 | 인원 | 담당 |
 |------|------|------|
 | 🖥️ **프로그래밍** | 1명 | 김건우 |
-| 📝 **게임 기획** | 2명 | 게임/레벨 디자인, 퍼즐 설계 |
-| 🎨 **아트** | 3명 | 3D 모델링, 캐릭터, UI/UX |
-| 🎵 **사운드** | 1명 | 음향 효과, 배경음악 |
+| 📝 **게임 기획** | 1명 | 정영서 |
+| 🎨 **아트** | 3명 | 류지원, 박지우, 박소율 |
+| 🎵 **사운드** | 1명 | 박세이 |
 
 ---
 
@@ -64,5 +64,6 @@
 ![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
 
 ---
+
 
 </div>
