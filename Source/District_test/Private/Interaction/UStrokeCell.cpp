@@ -64,33 +64,6 @@ void UStrokeCell::UpdateVisuals()
     UpdateDebugDisplay(ParentGrid ? ParentGrid->bShowGridNumbers : false);
 }
 
-FLinearColor UStrokeCell::GetCellColor() const
-{
-    if (CellData.bIsVisited && CellData.CellType != EStrokeCellType::Start)
-    {
-        if (ParentGrid)
-        {
-            return ParentGrid->CurrentPathLineColor;
-        }
-        return FLinearColor(0.5f, 0.5f, 0.5f, 1.0f);
-    }
-
-    if (IsTeleportPortal())
-    {
-        int32 PortalID = GetTeleportPortalID();
-        switch (PortalID)
-        {
-        case 1: return FLinearColor(0.0f, 0.5f, 1.0f, 1.0f);
-        case 2: return FLinearColor(1.0f, 1.0f, 0.0f, 1.0f);
-        case 3: return FLinearColor(1.0f, 0.0f, 1.0f, 1.0f);
-        case 4: return FLinearColor(0.0f, 1.0f, 1.0f, 1.0f);
-        default: return FLinearColor(0.8f, 0.8f, 0.8f, 1.0f);
-        }
-    }
-
-    return GetCustomCellColor();
-}
-
 UTexture2D* UStrokeCell::GetCustomCellImage() const
 {
     if (!ParentGrid)
@@ -101,13 +74,30 @@ UTexture2D* UStrokeCell::GetCustomCellImage() const
     if (IsTeleportPortal())
     {
         int32 PortalID = GetTeleportPortalID();
-        switch (PortalID)
+
+        // 방문한 포탈은 Visited 이미지 표시
+        if (CellData.bIsVisited)
         {
-        case 1: return ParentGrid->TeleportPortal1Image;
-        case 2: return ParentGrid->TeleportPortal2Image;
-        case 3: return ParentGrid->TeleportPortal3Image;
-        case 4: return ParentGrid->TeleportPortal4Image;
-        default: return nullptr;
+            switch (PortalID)
+            {
+            case 1: return ParentGrid->TeleportPortal1VisitedImage;
+            case 2: return ParentGrid->TeleportPortal2VisitedImage;
+            case 3: return ParentGrid->TeleportPortal3VisitedImage;
+            case 4: return ParentGrid->TeleportPortal4VisitedImage;
+            default: return nullptr;
+            }
+        }
+        // 방문하지 않은 포탈은 일반 이미지
+        else
+        {
+            switch (PortalID)
+            {
+            case 1: return ParentGrid->TeleportPortal1Image;
+            case 2: return ParentGrid->TeleportPortal2Image;
+            case 3: return ParentGrid->TeleportPortal3Image;
+            case 4: return ParentGrid->TeleportPortal4Image;
+            default: return nullptr;
+            }
         }
     }
 
@@ -171,6 +161,25 @@ UTexture2D* UStrokeCell::GetCustomCellImage() const
     }
 
     return nullptr;
+}
+
+FLinearColor UStrokeCell::GetCellColor() const
+{
+    if (CellData.bIsVisited && CellData.CellType != EStrokeCellType::Start)
+    {
+        if (ParentGrid)
+        {
+            return ParentGrid->CurrentPathLineColor;
+        }
+        return FLinearColor(0.5f, 0.5f, 0.5f, 1.0f);
+    }
+
+    if (IsTeleportPortal())
+    {
+        return FLinearColor::White;
+    }
+
+    return GetCustomCellColor();
 }
 
 void UStrokeCell::SetPlayerPresence(bool bPresent)

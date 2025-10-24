@@ -33,6 +33,12 @@ bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
         return false;
     }
 
+    if (DialogueData->bIsLevelEnd)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Level ended dialogue, blocking"));
+        return false;
+    }
+
     if (!CheckAllConditions(*DialogueData))
     {
         UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Conditions not met for: %s"), *DialogueID);
@@ -48,12 +54,15 @@ bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
 
     return true;
 }
+
 void UDialogueManagerComponent::EndDialogue()
 {
     if (!bIsInDialogue)
     {
         return;
     }
+
+    UE_LOG(LogTemp, Warning, TEXT("[EndDialogue] Ending dialogue"));
 
     bIsInDialogue = false;
     FString PrevDialogueID = CurrentDialogueID;
@@ -86,28 +95,49 @@ void UDialogueManagerComponent::ProgressDialogue()
 
     if (NextDialogueData->bChainBreak)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] ChainBreak: %s"), *NextID);
+
+        // ChainBreak 대화까지 표시
+        EndDialogue();
+        StartDialogue(NextID);
+
+        // 다음 ID 저장 (ChainBreak 이후)
         if (!NextDialogueData->NextDialogueID.IsEmpty())
         {
             SaveLastDialogueID(NextDialogueData->NextDialogueID);
         }
-        else
-        {
-            SaveLastDialogueID("");
-        }
 
-        EndDialogue();
-        StartDialogue(NextID);
+        // 대화 강제 종료 (ChainBreak!)
+        FTimerHandle ChainBreakTimer;
+        GetWorld()->GetTimerManager().SetTimer(ChainBreakTimer, [this]()
+            {
+                EndDialogue();
+            }, NextDialogueData->DisplayDuration, false);
 
         return;
     }
 
-    if (!CanProgressToDialogue(NextID))
+    if (NextDialogueData->bIsLocked)
     {
-        FString MacroDialogue = GetMacroDialogue(GetCurrentLevelName(), GetCurrentSubStep());
-        if (!MacroDialogue.IsEmpty())
+        if (!ValidateSubStepRequirement(*NextDialogueData))
         {
             EndDialogue();
-            StartDialogue(MacroDialogue);
+
+            FString RandomID = GetRandomFromFallbackTable("DT_Unia_Random");
+            if (!RandomID.IsEmpty())
+            {
+                StartDialogue(RandomID);
+            }
+
+            SaveLastDialogueID(NextID);
+
+            // 랜덤 대사 후 종료
+            FTimerHandle LockTimer;
+            GetWorld()->GetTimerManager().SetTimer(LockTimer, [this]()
+                {
+                    EndDialogue();
+                }, 3.0f, false);
+
             return;
         }
     }
@@ -135,10 +165,8 @@ void UDialogueManagerComponent::SelectChoice(int32 ChoiceIndex)
         return;
     }
 
-    if (!StartDialogue(TargetDialogueID))
-    {
-        EndDialogue();
-    }
+    EndDialogue();
+    StartDialogue(TargetDialogueID);
 }
 
 TArray<FString> UDialogueManagerComponent::GetCurrentChoices()
@@ -164,6 +192,18 @@ bool UDialogueManagerComponent::CanProgressToDialogue(const FString& DialogueID)
 
 FString UDialogueManagerComponent::FindDialogueForCurrentLevel()
 {
+    FString SavedID = GetLastDialogueID();
+    if (!SavedID.IsEmpty())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[FindDialogue] Found saved ID: %s"), *SavedID);
+
+        FDialogueData* SavedData = GetDialogueData(SavedID);
+        if (SavedData && !SavedData->bIsLevelEnd)
+        {
+            return SavedID;
+        }
+    }
+
     FString CurrentLevel = GetCurrentLevelName();
     if (CurrentLevel.IsEmpty())
     {
@@ -173,18 +213,13 @@ FString UDialogueManagerComponent::FindDialogueForCurrentLevel()
     TArray<FString> LevelDialogues = GetDialoguesForLevel(CurrentLevel, EDialogueCategory::MainStory);
     for (const FString& DialogueID : LevelDialogues)
     {
-        if (CanProgressToDialogue(DialogueID))
+        FDialogueData* DialogueData = GetDialogueData(DialogueID);
+        if (DialogueData && !DialogueData->bIsLevelEnd)
         {
-            // Lock 체크
-            if (FDialogueData* DialogueData = GetDialogueData(DialogueID))
+            if (CanProgressToDialogue(DialogueID))
             {
-                if (DialogueData->bIsLocked)
-                {
-                    // 락 걸림 → 랜덤 힌트 반환
-                    return GetRandomFromFallbackTable(DialogueData->FallbackTableName);
-                }
+                return DialogueID;
             }
-            return DialogueID;
         }
     }
 
@@ -265,14 +300,7 @@ int32 UDialogueManagerComponent::GetCurrentSubStep()
 
     if (CachedQuestManager)
     {
-        for (int32 i = 0; i < CachedQuestManager->GetSubStepCount(); i++)
-        {
-            if (!CachedQuestManager->IsSubStepCompleted(i))
-            {
-                return i;
-            }
-        }
-        return FMath::Max(0, CachedQuestManager->GetSubStepCount() - 1);
+        return CachedQuestManager->GetCurrentSubStep();
     }
 
     return 0;
@@ -322,10 +350,6 @@ bool UDialogueManagerComponent::CheckAllConditions(const FDialogueData& Dialogue
     if (!ValidateSubStepRequirement(DialogueData))
     {
         return false;
-    }
-
-    for (const FString& Condition : DialogueData.CustomConditions)
-    {
     }
 
     return true;
@@ -390,37 +414,33 @@ bool UDialogueManagerComponent::ValidateSubStepRequirement(const FDialogueData& 
     }
 
     bool bCompleted = IsSubStepCompleted(DialogueData.RequiredSubStep);
-
     return bCompleted;
 }
 
-// 추가된 함수들
 void UDialogueManagerComponent::SaveLastDialogueID(const FString& DialogueID)
 {
-    // GameInstance를 통해 세이브 데이터에 저장
     if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance()))
     {
         if (UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData())
         {
             SaveData->SetPendingTriggerDialogue(DialogueID);
-            UE_LOG(LogTemp, Warning, TEXT("Saved Last Dialogue ID: %s"), *DialogueID);
+            UE_LOG(LogTemp, Warning, TEXT("[SaveLastDialogueID] Saved: %s"), *DialogueID);
         }
     }
 }
 
 FString UDialogueManagerComponent::GetLastDialogueID()
 {
-    // GameInstance에서 로드
     if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance()))
     {
         if (UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData())
         {
-            return SaveData->GetPendingTriggerDialogue();
+            FString SavedID = SaveData->GetPendingTriggerDialogue();
+            return SavedID;
         }
     }
     return "";
 }
-
 
 FString UDialogueManagerComponent::GetRandomFromFallbackTable(const FString& TableName)
 {
@@ -432,8 +452,13 @@ FString UDialogueManagerComponent::GetRandomFromFallbackTable(const FString& Tab
         TEXT("Hint_Puzzle_005")
     };
 
-    int32 RandomIndex = FMath::RandRange(0, HintDialogues.Num() - 1);
-    return HintDialogues[RandomIndex];
+    if (HintDialogues.Num() > 0)
+    {
+        int32 RandomIndex = FMath::RandRange(0, HintDialogues.Num() - 1);
+        return HintDialogues[RandomIndex];
+    }
+
+    return "";
 }
 
 bool UDialogueManagerComponent::IsDialogueLocked(const FString& DialogueID)
@@ -454,5 +479,5 @@ FString UDialogueManagerComponent::GetLockedDialogueReplacement(const FString& D
             return GetRandomFromFallbackTable(DialogueData->FallbackTableName);
         }
     }
-    return DialogueID; // 락이 없으면 원본 반환
+    return DialogueID;
 }

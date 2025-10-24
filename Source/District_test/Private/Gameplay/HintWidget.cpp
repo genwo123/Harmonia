@@ -10,24 +10,61 @@ void UHintWidget::NativeConstruct()
 {
     Super::NativeConstruct();
 
-    BlockButtons.Empty();
-    BlockButtons.Add(Block0Button);
-    BlockButtons.Add(Block1Button);
-    BlockButtons.Add(Block2Button);
-    BlockButtons.Add(Block3Button);
-    BlockButtons.Add(Block4Button);
-    BlockButtons.Add(Block5Button);
+    // GameInstance 참조 가져오기 (한 번만)
+    if (!GameInstance)
+    {
+        GameInstance = Cast<UHamoina_GameInstance>(UGameplayStatics::GetGameInstance(this));
+    }
 
-    // GameInstance 참조 가져오기
-    GameInstance = Cast<UHamoina_GameInstance>(UGameplayStatics::GetGameInstance(this));
+    // BlockButtons 배열 초기화 (한 번만)
+    if (BlockButtons.Num() == 0)
+    {
+        BlockButtons.Empty();
+        BlockButtons.Add(Block0Button);
+        BlockButtons.Add(Block1Button);
+        BlockButtons.Add(Block2Button);
+        BlockButtons.Add(Block3Button);
+        BlockButtons.Add(Block4Button);
+        BlockButtons.Add(Block5Button);
+    }
 
-    InitializeBlocks();
-    BindButtonEvents();
+    // 버튼 이벤트 바인딩 (한 번만)
+    if (!bButtonsBound)
+    {
+        BindButtonEvents();
+        bButtonsBound = true;
+    }
 
-    // SaveGame에서 상태 불러오기
-    LoadStateFromSaveGame();
+    // 최초 초기화가 아직 안 되었다면
+    if (!bIsInitialized)
+    {
+        InitializeBlocks();
+        bIsInitialized = true;
+    }
 
+    // 레벨 리셋 체크
+    if (CheckIfLevelWasReset())
+    {
+        OnLevelReset();
+    }
+    else
+    {
+        // SaveGame에서 상태 복원
+        LoadStateFromSaveGame();
+    }
+
+    // UI 업데이트
     UpdateBlockVisibility();
+    UpdateCooldownDisplay();
+}
+
+void UHintWidget::NativeDestruct()
+{
+    // 위젯이 파괴될 때 버튼 바인딩 해제
+    UnbindButtonEvents();
+    bButtonsBound = false;
+
+    Super::NativeDestruct();
 }
 
 void UHintWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -37,11 +74,8 @@ void UHintWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     if (bIsOnCooldown)
     {
         UpdateCooldown(InDeltaTime);
-        // 쿨다운 시간도 저장
-        SaveStateToSaveGame();
+        UpdateCooldownDisplay();
     }
-
-    UpdateCooldownDisplay();
 }
 
 void UHintWidget::InitializeHint(int32 InLevelNumber)
@@ -55,6 +89,7 @@ void UHintWidget::InitializeHint(int32 InLevelNumber)
 
     LoadStateFromSaveGame();
     UpdateBlockVisibility();
+    UpdateCooldownDisplay();
 }
 
 void UHintWidget::InitializeBlocks()
@@ -87,18 +122,34 @@ void UHintWidget::LoadHintImage(UDataTable* HintTable, int32 LevelNumber)
 
 void UHintWidget::BindButtonEvents()
 {
-    if (Block0Button)
+    if (Block0Button && !Block0Button->OnClicked.IsBound())
         Block0Button->OnClicked.AddDynamic(this, &UHintWidget::OnBlock0Clicked);
-    if (Block1Button)
+    if (Block1Button && !Block1Button->OnClicked.IsBound())
         Block1Button->OnClicked.AddDynamic(this, &UHintWidget::OnBlock1Clicked);
-    if (Block2Button)
+    if (Block2Button && !Block2Button->OnClicked.IsBound())
         Block2Button->OnClicked.AddDynamic(this, &UHintWidget::OnBlock2Clicked);
-    if (Block3Button)
+    if (Block3Button && !Block3Button->OnClicked.IsBound())
         Block3Button->OnClicked.AddDynamic(this, &UHintWidget::OnBlock3Clicked);
-    if (Block4Button)
+    if (Block4Button && !Block4Button->OnClicked.IsBound())
         Block4Button->OnClicked.AddDynamic(this, &UHintWidget::OnBlock4Clicked);
-    if (Block5Button)
+    if (Block5Button && !Block5Button->OnClicked.IsBound())
         Block5Button->OnClicked.AddDynamic(this, &UHintWidget::OnBlock5Clicked);
+}
+
+void UHintWidget::UnbindButtonEvents()
+{
+    if (Block0Button)
+        Block0Button->OnClicked.RemoveDynamic(this, &UHintWidget::OnBlock0Clicked);
+    if (Block1Button)
+        Block1Button->OnClicked.RemoveDynamic(this, &UHintWidget::OnBlock1Clicked);
+    if (Block2Button)
+        Block2Button->OnClicked.RemoveDynamic(this, &UHintWidget::OnBlock2Clicked);
+    if (Block3Button)
+        Block3Button->OnClicked.RemoveDynamic(this, &UHintWidget::OnBlock3Clicked);
+    if (Block4Button)
+        Block4Button->OnClicked.RemoveDynamic(this, &UHintWidget::OnBlock4Clicked);
+    if (Block5Button)
+        Block5Button->OnClicked.RemoveDynamic(this, &UHintWidget::OnBlock5Clicked);
 }
 
 void UHintWidget::OnBlock0Clicked() { HandleBlockClick(0); }
@@ -189,7 +240,7 @@ void UHintWidget::UpdateCooldownDisplay()
     else
     {
         CooldownText->SetText(FText::FromString(TEXT("--:--")));
-        CooldownText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+        CooldownText->SetColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f)));
     }
 }
 
@@ -244,4 +295,31 @@ void UHintWidget::ResetHintWidget()
     SaveStateToSaveGame();
 
     UpdateBlockVisibility();
+    UpdateCooldownDisplay();
+}
+
+bool UHintWidget::CheckIfLevelWasReset()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+        return false;
+
+    float WorldTime = World->GetTimeSeconds();
+    return (WorldTime < 5.0f);
+}
+
+void UHintWidget::OnLevelReset()
+{
+    for (int32 i = 0; i < RevealedBlocks.Num(); i++)
+    {
+        RevealedBlocks[i] = false;
+    }
+
+    bIsOnCooldown = false;
+    CurrentCooldown = 0.0f;
+
+    SaveStateToSaveGame();
+
+    UpdateBlockVisibility();
+    UpdateCooldownDisplay();
 }

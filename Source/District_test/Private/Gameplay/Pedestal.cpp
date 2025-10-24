@@ -50,6 +50,19 @@ void APedestal::BeginPlay()
 {
     Super::BeginPlay();
 
+    if (SpawnedChildActor)
+    {
+        PlacedObject = SpawnedChildActor;
+        CurrentState = EPedestalState::Occupied;
+
+        UPuzzleInteractionComponent* PuzzleComp = SpawnedChildActor->FindComponentByClass<UPuzzleInteractionComponent>();
+        if (PuzzleComp)
+        {
+            PuzzleComp->CurrentPedestal = this;
+            PuzzleComp->bCanBePickedUp = true;
+        }
+    }
+
     if (bUseGridSystem)
     {
         if (TargetPuzzleArea)
@@ -77,6 +90,8 @@ void APedestal::OnConstruction(const FTransform& Transform)
         if (SpawnedChildActor)
         {
             SpawnedChildActor->AttachToComponent(AttachmentPoint, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+            PlacedObject = SpawnedChildActor;
+            CurrentState = EPedestalState::Occupied;
         }
     }
 
@@ -386,6 +401,12 @@ bool APedestal::PlaceObject(AActor* Object)
         PlacedObject = Object;
         CurrentState = EPedestalState::Occupied;
 
+        UPuzzleInteractionComponent* PuzzleComp = Object->FindComponentByClass<UPuzzleInteractionComponent>();
+        if (PuzzleComp)
+        {
+            PuzzleComp->CurrentPedestal = this;
+        }
+
         if (PlaceObjectSound)
         {
             UGameplayStatics::PlaySoundAtLocation(this, PlaceObjectSound, GetActorLocation());
@@ -396,7 +417,6 @@ bool APedestal::PlaceObject(AActor* Object)
 
     return false;
 }
-
 AActor* APedestal::RemoveObject()
 {
     if (CurrentState != EPedestalState::Occupied || !PlacedObject)
@@ -404,6 +424,12 @@ AActor* APedestal::RemoveObject()
 
     AActor* RemovedObject = PlacedObject;
     RemovedObject->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+    if (RemovedObject == SpawnedChildActor)
+    {
+        SpawnedChildActor = nullptr;
+    }
+
     PlacedObject = nullptr;
     CurrentState = EPedestalState::Empty;
 

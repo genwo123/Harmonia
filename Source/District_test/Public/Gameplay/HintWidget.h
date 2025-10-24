@@ -18,6 +18,7 @@ class DISTRICT_TEST_API UHintWidget : public UUserWidget
 
 public:
     virtual void NativeConstruct() override;
+    virtual void NativeDestruct() override;
     virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
     UFUNCTION(BlueprintCallable, Category = "Hint")
@@ -71,30 +72,25 @@ protected:
 
     UFUNCTION()
     void OnBlock0Clicked();
-
     UFUNCTION()
     void OnBlock1Clicked();
-
     UFUNCTION()
     void OnBlock2Clicked();
-
     UFUNCTION()
     void OnBlock3Clicked();
-
     UFUNCTION()
     void OnBlock4Clicked();
-
     UFUNCTION()
     void OnBlock5Clicked();
 
     void BindButtonEvents();
+    void UnbindButtonEvents();
     void HandleBlockClick(int32 BlockIndex);
     void UpdateBlockVisibility();
     void UpdateCooldownDisplay();
     void InitializeBlocks();
     void StartCooldown();
     void UpdateCooldown(float DeltaTime);
-
     void LoadStateFromSaveGame();
     void SaveStateToSaveGame();
 
@@ -104,7 +100,14 @@ protected:
     UFUNCTION(BlueprintImplementableEvent, Category = "Hint")
     void OnRevealFailed(int32 BlockIndex, const FString& Reason);
 
+    UFUNCTION(BlueprintCallable, Category = "Hint")
+    void OnLevelReset();
+
+    bool CheckIfLevelWasReset();
+
 private:
     TArray<UButton*> BlockButtons;
     UHamoina_GameInstance* GameInstance;
+    bool bIsInitialized = false;
+    bool bButtonsBound = false;
 };

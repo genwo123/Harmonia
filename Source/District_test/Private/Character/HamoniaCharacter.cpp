@@ -410,11 +410,7 @@ void AHamoniaCharacter::Interact()
 
 	if (CurrentInteractableNPC)
 	{
-		if (!bIsLookingAtInteractable)
-		{
-			return;
-		}
-
+		UE_LOG(LogTemp, Warning, TEXT("[Player] NPC Interact - bIsLookingAtInteractable: %s"), bIsLookingAtInteractable ? TEXT("TRUE") : TEXT("FALSE"));
 		CurrentInteractableNPC->HandlePlayerInteraction();
 		return;
 	}
@@ -511,6 +507,7 @@ void AHamoniaCharacter::Interact()
 		}
 	}
 }
+
 
 AActor* AHamoniaCharacter::GetHeldObject()
 {

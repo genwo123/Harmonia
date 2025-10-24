@@ -1,519 +1,471 @@
 #include "Character/Unia.h"
-#include "Engine/Engine.h"
-#include "GameFramework/PlayerController.h"
-#include "Kismet/GameplayStatics.h"
-#include "Components/CapsuleComponent.h"
-#include "GameFramework/CharacterMovementComponent.h"
-#include "Core/DialogueManagerComponent.h"
 #include "Character/HamoniaCharacter.h"
 #include "Character/UniaWaitSpot.h"
+#include "Core/DialogueManagerComponent.h"
+#include "AI/UniaAIController.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Save_Instance/Hamoina_GameInstance.h"
-#include "BehaviorTree/BlackboardComponent.h"
 
 AUnia::AUnia()
 {
-    PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = true;
 
-    InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
-    InteractionSphere->SetupAttachment(RootComponent);
-    InteractionSphere->SetSphereRadius(InteractionRange);
-    InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-    InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
-    InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-    InteractionSphere->SetGenerateOverlapEvents(true);
-    InteractionSphere->bHiddenInGame = false;
+	InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
+	InteractionSphere->SetupAttachment(RootComponent);
+	InteractionSphere->SetSphereRadius(InteractionRange);
+	InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	InteractionSphere->SetCollisionObjectType(ECC_Pawn);
+	InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+	InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-    DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
+	bLookAtPlayer = true;
+	LookAtSpeed = 2.0f;
+	LookAtRange = 600.0f;
+	bIsFollowingPlayer = false;
+	bCanFollow = false;
 
-    GetCapsuleComponent()->SetCapsuleSize(42.0f, 96.0f);
-    GetCharacterMovement()->bOrientRotationToMovement = false;
-    GetCharacterMovement()->RotationRate = FRotator(0.0f, 540.0f, 0.0f);
-    GetCharacterMovement()->JumpZVelocity = 0.0f;
-    GetCharacterMovement()->AirControl = 0.0f;
-
-    AIControllerClass = AUniaAIController::StaticClass();
-
-    bIsFollowingPlayer = false;
-    bPlayerInRange = false;
+	AIControllerClass = AUniaAIController::StaticClass();
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 }
 
 void AUnia::BeginPlay()
 {
-    Super::BeginPlay();
-    FindPlayerPawn();
+	Super::BeginPlay();
 
-    if (InteractionSphere)
-    {
-        InteractionSphere->SetSphereRadius(InteractionRange);
-        InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &AUnia::OnInteractionSphereBeginOverlap);
-        InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &AUnia::OnInteractionSphereEndOverlap);
-    }
+	UE_LOG(LogTemp, Warning, TEXT("[Unia] BeginPlay - Location: %s"), *GetActorLocation().ToString());
 
-    if (GetCapsuleComponent())
-    {
-        GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-    }
+	InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &AUnia::OnInteractionSphereBeginOverlap);
+	InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &AUnia::OnInteractionSphereEndOverlap);
 
-    if (GetMesh())
-    {
-        GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-    }
+	UE_LOG(LogTemp, Warning, TEXT("[Unia] Overlap events bound"));
 
-    bCanFollow = false;
-
-    if (AUniaAIController* AIController = GetUniaAIController())
-    {
-        AIController->StopFollowing();
-        if (AIController->GetBlackboardComponent())
-        {
-            AIController->GetBlackboardComponent()->ClearValue(TEXT("TargetLocation"));
-        }
-    }
-    InitializeLevelSettings();
-}
-
-void AUnia::CheckSpotArrival()
-{
-    if (CurrentTargetSpotID.IsEmpty())
-    {
-        GetWorld()->GetTimerManager().ClearTimer(SpotCheckTimer);
-        return;
-    }
-
-    AUniaWaitSpot* TargetSpot = FindWaitSpot(CurrentTargetSpotID);
-    if (TargetSpot)
-    {
-        float Distance = FVector::Dist(GetActorLocation(), TargetSpot->GetWaitLocation());
-        if (Distance <= SpotArrivalThreshold)
-        {
-            GetWorld()->GetTimerManager().ClearTimer(SpotCheckTimer);
-            CurrentTargetSpotID = TEXT("");
-
-            if (AUniaAIController* AIController = GetUniaAIController())
-            {
-                if (UBlackboardComponent* BBComp = AIController->GetBlackboardComponent())
-                {
-                    BBComp->ClearValue(TEXT("TargetLocation"));
-                }
-            }
-        }
-    }
-}
-
-void AUnia::InitializeLevelSettings()
-{
-    if (AUniaAIController* AIController = GetUniaAIController())
-    {
-        if (bStartWithFollowing)
-        {
-            bCanFollow = true;
-            AIController->StartFollowingPlayer();
-        }
-        else if (!DefaultWaitSpotID.IsEmpty())
-        {
-            MoveToWaitSpot(DefaultWaitSpotID);
-        }
-        else
-        {
-            bCanFollow = false;
-            AIController->StopFollowing();
-        }
-
-        if (UBlackboardComponent* BBComp = AIController->GetBlackboardComponent())
-        {
-            BBComp->SetValueAsFloat(TEXT("TeleportDistance"), TeleportDistance);
-        }
-    }
+	FindPlayerPawn();
+	InitializeLevelSettings();
+	LoadStateFromGameInstance();
 }
 
 void AUnia::Tick(float DeltaTime)
 {
-    Super::Tick(DeltaTime);
-    if (bLookAtPlayer && PlayerPawn && !IsInDialogue())
-    {
-        UpdateLookAtPlayer(DeltaTime);
-    }
+	Super::Tick(DeltaTime);
+
+	if (bLookAtPlayer && PlayerPawn && bPlayerInRange)
+	{
+		UpdateLookAtPlayer(DeltaTime);
+	}
 }
 
 void AUnia::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-    Super::SetupPlayerInputComponent(PlayerInputComponent);
-}
-
-void AUnia::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-    UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
-{
-    AHamoniaCharacter* HamoniaCharacter = Cast<AHamoniaCharacter>(OtherActor);
-    if (HamoniaCharacter)
-    {
-        bPlayerInRange = true;
-        PlayerPawn = HamoniaCharacter;
-        HamoniaCharacter->SetCurrentInteractableNPC(this);
-        OnPlayerEnterRange(HamoniaCharacter);
-    }
-}
-
-void AUnia::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-    UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex)
-{
-    AHamoniaCharacter* HamoniaCharacter = Cast<AHamoniaCharacter>(OtherActor);
-    if (HamoniaCharacter)
-    {
-        bPlayerInRange = false;
-        HamoniaCharacter->RemoveInteractableNPC(this);
-        OnPlayerExitRange(HamoniaCharacter);
-    }
-}
-
-void AUnia::HandlePlayerInteraction()
-{
-
-    if (DialogueManager && DialogueManager->bIsInDialogue)
-    {
-        return;
-    }
-
-    if (bPlayerInRange && PlayerPawn)
-    {
-        Interact_Implementation(PlayerPawn);
-    }
-
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
 }
 
 void AUnia::Interact_Implementation(AActor* Interactor)
 {
-    if (!CanInteract_Implementation(Interactor))
-    {
-        return;
-    }
-
-    if (DialogueManager && DialogueManager->bIsInDialogue)
-    {
-        return;
-    }
-
-    StartDialogue(Interactor);
+	UE_LOG(LogTemp, Warning, TEXT("[Unia] Interact_Implementation called"));
+	StartDialogue(Interactor);
 }
 
 bool AUnia::CanInteract_Implementation(AActor* Interactor)
 {
-    AHamoniaCharacter* HamoniaCharacter = Cast<AHamoniaCharacter>(Interactor);
-    if (!HamoniaCharacter)
-    {
-        return false;
-    }
-
-    float Distance = FVector::Dist(GetActorLocation(), Interactor->GetActorLocation());
-    return Distance <= InteractionRange;
+	bool bCan = bPlayerInRange && !IsInDialogue();
+	UE_LOG(LogTemp, Warning, TEXT("[Unia] CanInteract: %s"), bCan ? TEXT("TRUE") : TEXT("FALSE"));
+	return bCan;
 }
 
 FString AUnia::GetInteractionText_Implementation()
 {
-    if (IsInDialogue())
-    {
-        return TEXT("Dialogue...");
-    }
-    return FString::Printf(TEXT("Talk to %s"), *NPCName);
+	return FString::Printf(TEXT("Talk to %s"), *NPCName);
 }
 
 EInteractionType AUnia::GetInteractionType_Implementation()
 {
-    return EInteractionType::Activate;
+	return EInteractionType::Use;
 }
 
 void AUnia::StartDialogue(AActor* Interactor)
 {
-    if (!DialogueManager)
-    {
-        return;
-    }
+	UE_LOG(LogTemp, Warning, TEXT("[Unia] StartDialogue called"));
 
-    if (bIsFollowingPlayer)
-    {
-        StopFollowingPlayer();
-    }
+	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(Interactor);
+	if (!Player)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Unia] Interactor is not HamoniaCharacter"));
+		return;
+	}
 
-    if (AUniaAIController* AIController = GetUniaAIController())
-    {
-        AIController->SetDialogueMode(true);
-        AIController->StopFollowing();
-    }
+	UDialogueManagerComponent* PlayerDM = Player->GetDialogueManagerComponent();
+	if (!PlayerDM)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Unia] PlayerDM is null"));
+		return;
+	}
 
-    if (PlayerPawn)
-    {
-        FVector DirectionToPlayer = PlayerPawn->GetActorLocation() - GetActorLocation();
-        DirectionToPlayer.Z = 0;
-        DirectionToPlayer.Normalize();
-        FRotator TargetRotation = DirectionToPlayer.Rotation();
-        SetActorRotation(TargetRotation);
-    }
+	if (!PlayerDM->DialogueDataTable)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Unia] DialogueDataTable is null"));
+		return;
+	}
 
-    AHamoniaCharacter* HamoniaCharacter = Cast<AHamoniaCharacter>(Interactor);
-    UDataTable* TableToUse = nullptr;
+	if (PlayerDM->bIsInDialogue)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Unia] Already in dialogue"));
+		return;
+	}
 
-    if (HamoniaCharacter)
-    {
-        UDialogueManagerComponent* PlayerDialogueManager = HamoniaCharacter->GetDialogueManagerComponent();
-        if (PlayerDialogueManager && PlayerDialogueManager->DialogueDataTable)
-        {
-            TableToUse = PlayerDialogueManager->DialogueDataTable;
-            DialogueManager->DialogueDataTable = TableToUse;
-        }
-    }
-
-    if (!TableToUse && UniaRandomDialogueTable)
-    {
-        TableToUse = UniaRandomDialogueTable;
-        DialogueManager->DialogueDataTable = TableToUse;
-    }
-
-    FString DialogueIDToUse = DialogueManager->FindDialogueForCurrentLevel();
-
-    if (DialogueIDToUse.IsEmpty())
-    {
-        DialogueIDToUse = DialogueManager->GetMacroDialogue(
-            DialogueManager->GetCurrentLevelName(),
-            DialogueManager->GetCurrentSubStep()
-        );
-    }
-
-    if (DialogueIDToUse.IsEmpty())
-    {
-        DialogueIDToUse = UniaRandomDialogueID;
-    }
-
-    OnUniaDialogueActivated.Broadcast(DialogueIDToUse, TableToUse);
-    OnDialogueStarted();
-}
-
-void AUnia::SetFollowPlayer(bool bShouldFollow)
-{
-    if (bShouldFollow && bCanFollow && !IsInDialogue())
-    {
-        bIsFollowingPlayer = true;
-        StartFollowingPlayer();
-    }
-    else
-    {
-        bIsFollowingPlayer = false;
-        StopFollowingPlayer();
-    }
-}
-
-bool AUnia::IsInDialogue() const
-{
-    return DialogueManager ? DialogueManager->bIsInDialogue : false;
-}
-
-void AUnia::SetDialogueState(bool bInDialogue)
-{
-    if (DialogueManager)
-    {
-        DialogueManager->bIsInDialogue = bInDialogue;
-    }
-}
-
-void AUnia::UpdateLookAtPlayer(float DeltaTime)
-{
-    if (!PlayerPawn)
-    {
-        FindPlayerPawn();
-        return;
-    }
-
-    float Distance = FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation());
-    if (Distance <= LookAtRange)
-    {
-        return;
-    }
-
-    FVector DirectionToPlayer = PlayerPawn->GetActorLocation() - GetActorLocation();
-    DirectionToPlayer.Z = 0;
-    DirectionToPlayer.Normalize();
-
-    FRotator TargetRotation = DirectionToPlayer.Rotation();
-    FRotator CurrentRotation = GetActorRotation();
-    FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, LookAtSpeed);
-    SetActorRotation(NewRotation);
-}
-
-void AUnia::FindPlayerPawn()
-{
-    PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
-}
-
-void AUnia::LookAtPlayer()
-{
-    if (!PlayerPawn || IsInDialogue())
-    {
-        return;
-    }
-
-    FVector DirectionToPlayer = PlayerPawn->GetActorLocation() - GetActorLocation();
-    DirectionToPlayer.Z = 0;
-    DirectionToPlayer.Normalize();
-    FRotator TargetRotation = DirectionToPlayer.Rotation();
-    SetActorRotation(TargetRotation);
-}
-
-AUniaAIController* AUnia::GetUniaAIController() const
-{
-    return Cast<AUniaAIController>(GetController());
-}
-
-void AUnia::SetAIFollowing(bool bShouldFollow)
-{
-    if (AUniaAIController* AIController = GetUniaAIController())
-    {
-        if (bShouldFollow)
-        {
-            AIController->StartFollowingPlayer();
-        }
-        else
-        {
-            AIController->StopFollowing();
-        }
-    }
-
-    SetFollowPlayer(bShouldFollow);
-}
-
-void AUnia::MoveAIToLocation(const FVector& Location)
-{
-    if (AUniaAIController* AIController = GetUniaAIController())
-    {
-        AIController->MoveToTargetLocation(Location);
-    }
-}
-
-void AUnia::EnableFollowing()
-{
-    bCanFollow = true;
-    SetAIFollowing(true);
+	UE_LOG(LogTemp, Warning, TEXT("[Unia] Broadcasting dialogue: %s"), *DialogueSceneID);
+	OnUniaDialogueActivated.Broadcast(DialogueSceneID, PlayerDM->DialogueDataTable);
+	OnDialogueStarted();
+	UE_LOG(LogTemp, Warning, TEXT("[Unia] Dialogue broadcast complete"));
 }
 
 void AUnia::EndDialogue()
 {
-    if (AUniaAIController* AIController = GetUniaAIController())
-    {
-        AIController->SetDialogueMode(false);
-
-        if (bCanFollow)
-        {
-            AIController->StartFollowingPlayer();
-        }
-    }
-
-    if (DialogueManager)
-    {
-        DialogueManager->bIsInDialogue = false;
-    }
-}
-
-bool AUnia::MoveToWaitSpot(const FString& SpotID)
-{
-    AUniaWaitSpot* TargetSpot = FindWaitSpot(SpotID);
-    if (!TargetSpot)
-    {
-        return false;
-    }
-
-    if (AUniaAIController* AIController = GetUniaAIController())
-    {
-        AIController->MoveToTargetLocation(TargetSpot->GetWaitLocation());
-
-        GetWorld()->GetTimerManager().SetTimer(SpotCheckTimer, this, &AUnia::CheckSpotArrival, 0.5f, true);
-
-        return true;
-    }
-
-    return false;
-}
-
-void AUnia::SetDialogueSpotMapping(const FString& DialogueID, const FString& SpotID)
-{
-    DialogueToSpotMap.Add(DialogueID, SpotID);
-}
-
-void AUnia::CheckDialogueForAIAction(const FString& DialogueID)
-{
-    // 디버깅용 로그 추가
-    UE_LOG(LogTemp, Warning, TEXT("CheckDialogueForAIAction called with: %s"), *DialogueID);
-
-    if (FollowActivationDialogues.Contains(DialogueID))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Enabling following for dialogue: %s"), *DialogueID);
-        EnableFollowing();
-        return;
-    }
-
-    if (FString* SpotID = DialogueToSpotMap.Find(DialogueID))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Moving to spot for dialogue: %s"), *DialogueID);
-        MoveToWaitSpot(*SpotID);
-        return;
-    }
-
-    UE_LOG(LogTemp, Warning, TEXT("No action found for dialogue: %s"), *DialogueID);
-}
-
-AUniaWaitSpot* AUnia::FindWaitSpot(const FString& SpotID)
-{
-    TArray<AActor*> FoundActors;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUniaWaitSpot::StaticClass(), FoundActors);
-
-    FString CurrentLevel = UGameplayStatics::GetCurrentLevelName(GetWorld());
-
-    for (AActor* Actor : FoundActors)
-    {
-        if (AUniaWaitSpot* Spot = Cast<AUniaWaitSpot>(Actor))
-        {
-            if (Spot->SpotID.Equals(SpotID) && Spot->IsValidForLevel(CurrentLevel))
-            {
-                return Spot;
-            }
-        }
-    }
-
-    return nullptr;
-}
-
-void AUnia::SaveStateToGameInstance()
-{
-    if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance()))
-    {
-
-    }
-}
-
-void AUnia::LoadStateFromGameInstance()
-{
-    if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance()))
-    {
-
-    }
+	SetDialogueState(false);
 }
 
 void AUnia::OnDialogueWidgetClosed()
 {
-    UE_LOG(LogTemp, Warning, TEXT("[Unia] OnDialogueWidgetClosed called"));
+	SetDialogueState(false);
 
-    if (AUniaAIController* AIController = GetUniaAIController())
-    {
-        AIController->SetDialogueMode(false);
-        UE_LOG(LogTemp, Warning, TEXT("[Unia] Dialogue mode disabled"));
+	if (bCanFollow && !bIsFollowingPlayer)
+	{
+		SetAIFollowing(true);
+		StartFollowingPlayer();
+	}
+}
 
-        if (bCanFollow)
-        {
-            AIController->StartFollowingPlayer();
-            UE_LOG(LogTemp, Warning, TEXT("[Unia] Started following player"));
-        }
-    }
+bool AUnia::IsInDialogue() const
+{
+	if (PlayerPawn)
+	{
+		AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(PlayerPawn);
+		if (Player)
+		{
+			UDialogueManagerComponent* PlayerDM = Player->GetDialogueManagerComponent();
+			if (PlayerDM)
+			{
+				return PlayerDM->bIsInDialogue;
+			}
+		}
+	}
+	return false;
+}
 
-    if (DialogueManager)
-    {
-        DialogueManager->bIsInDialogue = false;
-        DialogueManager->CurrentDialogueID = "";
-        UE_LOG(LogTemp, Warning, TEXT("[Unia] DialogueManager state cleared"));
-    }
+void AUnia::SetDialogueState(bool bInDialogue)
+{
+	if (AUniaAIController* AIController = GetUniaAIController())
+	{
+		AIController->SetDialogueMode(bInDialogue);
+	}
+}
+
+void AUnia::HandlePlayerInteraction()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Unia] HandlePlayerInteraction called"));
+	if (PlayerPawn)
+	{
+		StartDialogue(PlayerPawn);
+	}
+}
+
+void AUnia::EnableFollowing()
+{
+	bCanFollow = true;
+	SetAIFollowing(true);
+}
+
+void AUnia::SetFollowPlayer(bool bShouldFollow)
+{
+	bIsFollowingPlayer = bShouldFollow;
+
+	if (AUniaAIController* AIController = GetUniaAIController())
+	{
+		if (bShouldFollow)
+		{
+			AIController->StartFollowingPlayer();
+		}
+		else
+		{
+			AIController->StopFollowing();
+		}
+	}
+}
+
+AUniaAIController* AUnia::GetUniaAIController() const
+{
+	return Cast<AUniaAIController>(GetController());
+}
+
+void AUnia::SetAIFollowing(bool bShouldFollow)
+{
+	if (AUniaAIController* AIController = GetUniaAIController())
+	{
+		if (bShouldFollow)
+		{
+			AIController->StartFollowingPlayer();
+			bIsFollowingPlayer = true;
+		}
+		else
+		{
+			AIController->StopFollowing();
+			bIsFollowingPlayer = false;
+		}
+	}
+}
+
+void AUnia::MoveAIToLocation(const FVector& Location)
+{
+	if (AUniaAIController* AIController = GetUniaAIController())
+	{
+		AIController->MoveToTargetLocation(Location);
+	}
+}
+
+bool AUnia::MoveToWaitSpot(const FString& SpotID)
+{
+	AUniaWaitSpot* WaitSpot = FindWaitSpot(SpotID);
+	if (!WaitSpot)
+	{
+		return false;
+	}
+
+	CurrentTargetSpotID = SpotID;
+	MoveAIToLocation(WaitSpot->GetWaitLocation());
+
+	GetWorld()->GetTimerManager().SetTimer(SpotCheckTimer, this, &AUnia::CheckSpotArrival, 0.5f, true);
+
+	return true;
+}
+
+void AUnia::SetDialogueSpotMapping(const FString& DialogueID, const FString& SpotID)
+{
+	DialogueToSpotMap.Add(DialogueID, SpotID);
+}
+
+void AUnia::CheckDialogueForAIAction(const FString& DialogueID)
+{
+	if (FollowActivationDialogues.Contains(DialogueID))
+	{
+		EnableFollowing();
+		return;
+	}
+
+	if (DialogueToSpotMap.Contains(DialogueID))
+	{
+		FString SpotID = DialogueToSpotMap[DialogueID];
+		MoveToWaitSpot(SpotID);
+	}
+}
+
+void AUnia::InitializeLevelSettings()
+{
+	if (bStartWithFollowing)
+	{
+		EnableFollowing();
+	}
+
+	if (!DefaultWaitSpotID.IsEmpty())
+	{
+		FTimerHandle InitTimer;
+		GetWorld()->GetTimerManager().SetTimer(InitTimer, [this]()
+			{
+				MoveToWaitSpot(DefaultWaitSpotID);
+			}, 0.5f, false);
+	}
+}
+
+void AUnia::SaveStateToGameInstance()
+{
+	UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
+	if (!GameInstance)
+	{
+		return;
+	}
+
+	UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData();
+	if (!SaveData)
+	{
+		return;
+	}
+
+	FString CurrentLevel = GetWorld()->GetMapName();
+	CurrentLevel.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
+
+	SaveData->SetUniaLocation(CurrentLevel, GetActorLocation(), GetActorRotation());
+	SaveData->UniaData.bCanFollow = bCanFollow;
+	SaveData->UniaData.bIsFollowingPlayer = bIsFollowingPlayer;
+}
+
+void AUnia::LoadStateFromGameInstance()
+{
+	UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
+	if (!GameInstance)
+	{
+		return;
+	}
+
+	UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData();
+	if (!SaveData)
+	{
+		return;
+	}
+
+	FString CurrentLevel = GetWorld()->GetMapName();
+	CurrentLevel.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
+
+	if (SaveData->UniaData.CurrentLevel == CurrentLevel)
+	{
+		SetActorLocation(SaveData->UniaData.UniaLocation);
+		SetActorRotation(SaveData->UniaData.UniaRotation);
+		bCanFollow = SaveData->UniaData.bCanFollow;
+		bIsFollowingPlayer = SaveData->UniaData.bIsFollowingPlayer;
+
+		if (bIsFollowingPlayer)
+		{
+			SetAIFollowing(true);
+		}
+	}
+}
+
+void AUnia::LookAtPlayer()
+{
+	if (!PlayerPawn || !bLookAtPlayer)
+	{
+		return;
+	}
+
+	float Distance = FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation());
+	if (Distance > LookAtRange)
+	{
+		return;
+	}
+
+	FVector Direction = PlayerPawn->GetActorLocation() - GetActorLocation();
+	Direction.Z = 0.0f;
+	FRotator TargetRotation = Direction.Rotation();
+
+	SetActorRotation(FMath::RInterpTo(GetActorRotation(), TargetRotation, GetWorld()->GetDeltaSeconds(), LookAtSpeed));
+}
+
+void AUnia::UpdateLookAtPlayer(float DeltaTime)
+{
+	if (!PlayerPawn || IsInDialogue())
+	{
+		return;
+	}
+
+	float Distance = FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation());
+	if (Distance > LookAtRange)
+	{
+		return;
+	}
+
+	FVector Direction = PlayerPawn->GetActorLocation() - GetActorLocation();
+	Direction.Z = 0.0f;
+
+	if (!Direction.IsNearlyZero())
+	{
+		FRotator TargetRotation = Direction.Rotation();
+		FRotator NewRotation = FMath::RInterpTo(GetActorRotation(), TargetRotation, DeltaTime, LookAtSpeed);
+		SetActorRotation(NewRotation);
+	}
+}
+
+void AUnia::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Unia] Overlap detected with: %s"), *OtherActor->GetName());
+
+	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(OtherActor);
+	if (Player)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Unia] Player entered range"));
+		bPlayerInRange = true;
+		Player->SetCurrentInteractableNPC(this);
+		OnPlayerEnterRange(Player);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Unia] Not a player"));
+	}
+}
+
+void AUnia::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+	UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex)
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Unia] Overlap ended with: %s"), *OtherActor->GetName());
+
+	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(OtherActor);
+	if (Player)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Unia] Player exited range"));
+		bPlayerInRange = false;
+		Player->RemoveInteractableNPC(this);
+		OnPlayerExitRange(Player);
+	}
+}
+
+void AUnia::FindPlayerPawn()
+{
+	PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
+	if (PlayerPawn)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Unia] Player found: %s"), *PlayerPawn->GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Unia] Player not found!"));
+	}
+}
+
+void AUnia::CheckSpotArrival()
+{
+	if (CurrentTargetSpotID.IsEmpty())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(SpotCheckTimer);
+		return;
+	}
+
+	AUniaWaitSpot* WaitSpot = FindWaitSpot(CurrentTargetSpotID);
+	if (!WaitSpot)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(SpotCheckTimer);
+		return;
+	}
+
+	float Distance = FVector::Dist(GetActorLocation(), WaitSpot->GetWaitLocation());
+	if (Distance <= SpotArrivalThreshold)
+	{
+		CurrentTargetSpotID = TEXT("");
+		GetWorld()->GetTimerManager().ClearTimer(SpotCheckTimer);
+
+		if (AUniaAIController* AIController = GetUniaAIController())
+		{
+			AIController->StopMovement();
+		}
+	}
+}
+
+AUniaWaitSpot* AUnia::FindWaitSpot(const FString& SpotID)
+{
+	TArray<AActor*> FoundSpots;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUniaWaitSpot::StaticClass(), FoundSpots);
+
+	FString CurrentLevel = GetWorld()->GetMapName();
+	CurrentLevel.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
+
+	for (AActor* Actor : FoundSpots)
+	{
+		AUniaWaitSpot* WaitSpot = Cast<AUniaWaitSpot>(Actor);
+		if (WaitSpot && WaitSpot->SpotID == SpotID)
+		{
+			if (WaitSpot->IsValidForLevel(CurrentLevel))
+			{
+				return WaitSpot;
+			}
+		}
+	}
+
+	return nullptr;
 }

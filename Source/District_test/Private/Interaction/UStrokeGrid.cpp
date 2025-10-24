@@ -922,7 +922,7 @@ void UStrokeGrid::ApplyGridLayout()
     {
         if (Cell)
         {
-        
+
         }
     }
 }
@@ -979,7 +979,6 @@ bool UStrokeGrid::MovePlayer(FIntPoint Direction)
         return false;
     }
 
-
     PlaySound(MoveSound, MoveSoundVolume);
 
     UStrokeCell* OldCell = GetCellAtPosition(CurrentPlayerPosition);
@@ -1000,7 +999,6 @@ bool UStrokeGrid::MovePlayer(FIntPoint Direction)
         {
             VisitedRequiredPoints.Add(CurrentPlayerPosition);
             UpdatePathColor();
-
 
             if (OldCellType == EStrokeCellType::RedPoint)
             {
@@ -1025,7 +1023,19 @@ bool UStrokeGrid::MovePlayer(FIntPoint Direction)
     FIntPoint FinalPosition = CheckTeleport(CurrentPlayerPosition);
     if (FinalPosition != CurrentPlayerPosition)
     {
+        UStrokeCell* TeleportEntryCell = GetCellAtPosition(CurrentPlayerPosition);
+        if (TeleportEntryCell)
+        {
+            TeleportEntryCell->SetVisited(true);
+        }
+
         CurrentPlayerPosition = FinalPosition;
+
+        UStrokeCell* TeleportExitCell = GetCellAtPosition(CurrentPlayerPosition);
+        if (TeleportExitCell)
+        {
+            TeleportExitCell->SetVisited(true);
+        }
     }
 
     UStrokeCell* NewCell = GetCellAtPosition(CurrentPlayerPosition);

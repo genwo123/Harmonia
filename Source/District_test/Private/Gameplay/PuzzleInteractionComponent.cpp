@@ -96,10 +96,16 @@ void UPuzzleInteractionComponent::DisablePhysics()
 
     if (PrimComp)
     {
+        // Physics 완전히 비활성화
         PrimComp->SetSimulatePhysics(false);
+        PrimComp->SetEnableGravity(false);  // 추가
         PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 
+        // 속도 초기화 (중요!) - 추가
+        PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
+        PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
 
+        UE_LOG(LogTemp, Warning, TEXT("[DisablePhysics] Physics disabled for %s"), *Owner->GetName());
     }
 }
 
@@ -180,9 +186,9 @@ bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
 
 bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
 {
-    UE_LOG(LogTemp, Warning, TEXT("[PickUp] Called - bCanBePickedUp: %s, HoldingActor: %s"),
-        bCanBePickedUp ? TEXT("True") : TEXT("False"),
-        HoldingActor ? *HoldingActor->GetName() : TEXT("None"));
+    UE_LOG(LogTemp, Warning, TEXT("[PickUp] Called on %s - bCanBePickedUp: %s"),
+        *GetOwner()->GetName(),
+        bCanBePickedUp ? TEXT("True") : TEXT("False"));
 
     if (!bCanBePickedUp)
     {
@@ -208,21 +214,31 @@ bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
         RemoveFromPedestal();
     }
 
+    // Physics 완전히 비활성화
     DisablePhysics();
 
     HoldingActor = Picker;
-    UE_LOG(LogTemp, Warning, TEXT("[PickUp] Success - HoldingActor set to: %s"), *Picker->GetName());
 
     AHamoniaCharacter* Character = Cast<AHamoniaCharacter>(Picker);
     if (Character && Character->HeldObjectAttachPoint)
     {
-        Owner->AttachToComponent(
-            Character->HeldObjectAttachPoint,
-            FAttachmentTransformRules::SnapToTargetNotIncludingScale
-        );
+        // Detach 먼저 (이전 attachment 제거)
+        Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
-        Owner->SetActorRelativeLocation(FVector::ZeroVector);
-        Owner->SetActorRelativeRotation(FRotator::ZeroRotator);
+        // 짧은 지연 후 Attach (Physics 상태 완전히 정리) - 수정된 부분
+        FTimerHandle AttachTimer;
+        Owner->GetWorldTimerManager().SetTimer(AttachTimer, [Owner, Character]()
+            {
+                Owner->AttachToComponent(
+                    Character->HeldObjectAttachPoint,
+                    FAttachmentTransformRules::SnapToTargetNotIncludingScale
+                );
+
+                Owner->SetActorRelativeLocation(FVector::ZeroVector);
+                Owner->SetActorRelativeRotation(FRotator::ZeroRotator);
+
+                UE_LOG(LogTemp, Warning, TEXT("[PickUp] Attached successfully"));
+            }, 0.01f, false);
     }
     else
     {
@@ -245,29 +261,23 @@ bool UPuzzleInteractionComponent::PlaceOnPedestal(APedestal* Pedestal)
         return false;
     }
 
-    // 현재 받침대가 있다면 제거
     if (CurrentPedestal)
     {
         RemoveFromPedestal();
     }
 
-    // 플레이어로부터 Detach
     if (HoldingActor)
     {
         Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
     }
 
-    // 새 받침대에 배치
+    // Physics 완전히 비활성화 - 추가
+    DisablePhysics();
+
     if (Pedestal->PlaceObject(Owner))
     {
         CurrentPedestal = Pedestal;
-
-        // 받침대에 놓을 때는 피직스 비활성화
-        DisablePhysics();
-
-        // 더 이상 들고 있지 않음
-        HoldingActor = nullptr;
-
+        HoldingActor = nullptr;  // 추가
         return true;
     }
 

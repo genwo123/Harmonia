@@ -165,13 +165,13 @@ public:
     UPROPERTY(meta = (BindWidget), BlueprintReadWrite, Category = "Widgets")
     class UButton* ResetButton;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Config")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage")
     UDataTable* StageDataTable;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Config")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage")
     int32 CurrentStageNumber = 1;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage Config")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage")
     FName CurrentStageRowName = TEXT("Stage_01");
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Editor Mode")
@@ -337,6 +337,18 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Reset")
     float ResetSoundVolume = 0.5f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Teleport|Visited")
+    UTexture2D* TeleportPortal1VisitedImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Teleport|Visited")
+    UTexture2D* TeleportPortal2VisitedImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Teleport|Visited")
+    UTexture2D* TeleportPortal3VisitedImage;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Images|Teleport|Visited")
+    UTexture2D* TeleportPortal4VisitedImage;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sounds|Settings")
     bool bEnableSounds = true;
