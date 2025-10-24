@@ -681,3 +681,4 @@ bool UHamoina_GameInstance::IsNotePageUnlocked(int32 PageIndex) const
     }
     return false;
 }
+

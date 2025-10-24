@@ -63,8 +63,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup")
     class USoundBase* PickupSound;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    USceneComponent* SceneComponent;
 
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

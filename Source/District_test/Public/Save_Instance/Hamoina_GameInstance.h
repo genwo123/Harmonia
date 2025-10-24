@@ -35,6 +35,7 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Auto Save")
     int32 CurrentAutoSaveSlot = 1;
 
+
 protected:
     FTimerHandle AutoSaveTimerHandle;
 

@@ -1,12 +1,16 @@
 <div align="center">
 
 # 🎭 Harmonia (하모니아)
-> **1인칭 퍼즐 어드벤처 게임 - 2025 졸업전시작**
+> **1인칭 퍼즐 어드벤처 게임 - 숙명여자대학교 2025 졸업전시작**
 
 <br/>
 
 ### 🎬 프로모션 영상
-[![하모니아 프로모션](./docs/Harmonia_PV.jpg)](YOUR_YOUTUBE_LINK)
+*이미지를 클릭시면 YouTube의 PV영상을 보실 수 있습니다*
+
+[![하모니아 프로모션](./docs/Harmonia_PV.png)](https://youtu.be/rGCgl6xelgo?si=o7_9UaGb29jtHJu8)
+
+<img src="./docs/Harmonia_Intro.jpg" alt="하모니아 게임 소개" width="100%">
 
 ---
 
@@ -60,6 +64,5 @@
 ![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
 
 ---
-
 
 </div>

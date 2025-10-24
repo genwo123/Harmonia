@@ -6,6 +6,7 @@
 #include "Save_Instance/Hamoina_GameInstance.h"
 #include "Kismet/GameplayStatics.h"
 
+
 void UHintWidget::NativeConstruct()
 {
     Super::NativeConstruct();
@@ -35,25 +36,26 @@ void UHintWidget::NativeConstruct()
         bButtonsBound = true;
     }
 
-    // 최초 초기화가 아직 안 되었다면
     if (!bIsInitialized)
     {
         InitializeBlocks();
         bIsInitialized = true;
     }
 
-    // 레벨 리셋 체크
+    if (CurrentLevelNumber == 0 && GameInstance)
+    {
+        CurrentLevelNumber = GameInstance->GetCurrentStageNumber();
+    }
+
     if (CheckIfLevelWasReset())
     {
         OnLevelReset();
     }
     else
     {
-        // SaveGame에서 상태 복원
         LoadStateFromSaveGame();
     }
 
-    // UI 업데이트
     UpdateBlockVisibility();
     UpdateCooldownDisplay();
 }
@@ -302,9 +304,10 @@ bool UHintWidget::CheckIfLevelWasReset()
 {
     UWorld* World = GetWorld();
     if (!World)
-        return false;
+        return true;
 
     float WorldTime = World->GetTimeSeconds();
+
     return (WorldTime < 5.0f);
 }
 

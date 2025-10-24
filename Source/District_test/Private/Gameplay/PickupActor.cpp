@@ -11,11 +11,10 @@ APickupActor::APickupActor()
 {
     PrimaryActorTick.bCanEverTick = true;
 
-    SceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("SceneComponent"));
-    RootComponent = SceneComponent;
-
+    // SceneComponent를 Root로 사용하지 말고, MeshComponent를 Root로!
     MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
-    MeshComponent->SetupAttachment(RootComponent);
+    RootComponent = MeshComponent;  // MeshComponent를 Root로 설정!
+
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     MeshComponent->SetCollisionObjectType(ECC_WorldDynamic);
     MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
@@ -23,22 +22,21 @@ APickupActor::APickupActor()
     MeshComponent->SetSimulatePhysics(false);
     MeshComponent->SetMobility(EComponentMobility::Movable);
 
-
-
+    // InteractionWidgetComponent는 MeshComponent에 부착
     InteractionWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidgetComponent"));
-    InteractionWidgetComponent->SetupAttachment(RootComponent);
+    InteractionWidgetComponent->SetupAttachment(MeshComponent);  // RootComponent 대신 MeshComponent
     InteractionWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 100.f));
     InteractionWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
     InteractionWidgetComponent->SetDrawSize(FVector2D(200.f, 50.f));
     InteractionWidgetComponent->SetVisibility(false);
 
-
-
-
+    // InteractionSphere도 MeshComponent에 부착
     InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
-    InteractionSphere->SetupAttachment(RootComponent);
+    InteractionSphere->SetupAttachment(MeshComponent);  // RootComponent 대신 MeshComponent
     InteractionSphere->SetSphereRadius(150.0f);
     InteractionSphere->SetCollisionProfileName(TEXT("OverlapOnlyPawn"));
+
+
 
     bDrawDebug = true;
     MeshRotation = FRotator::ZeroRotator;

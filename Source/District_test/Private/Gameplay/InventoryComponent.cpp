@@ -1,4 +1,5 @@
-// InventoryComponent.cpp
+#include "Save_Instance/Hamoina_GameInstance.h"
+#include "Kismet/GameplayStatics.h"
 #include "Gameplay/InventoryComponent.h"
 
 UInventoryComponent::UInventoryComponent()
@@ -13,17 +14,15 @@ void UInventoryComponent::BeginPlay()
 {
     Super::BeginPlay();
 
-    // 노트 아이템 생성 (없는 경우)
     if (!NoteItem)
     {
         NoteItem = NewObject<UItem>(this, UItem::StaticClass());
         NoteItem->Name = TEXT("Note");
         NoteItem->Description = TEXT("A notebook for recording discovered memos and notes.");
-        // NoteItem->Icon은 블루프린트에서 설정
-
-        // 노트를 첫 번째 슬롯에 추가
         Items.Add(NoteItem);
     }
+
+    LoadInventoryFromGameInstance();
 }
 
 bool UInventoryComponent::AddItem(UItem* Item)
@@ -32,13 +31,12 @@ bool UInventoryComponent::AddItem(UItem* Item)
     {
         return false;
     }
-
     if (Items.Num() >= Capacity)
     {
-        return false; // 인벤토리가 가득 참
+        return false;
     }
-
     Items.Add(Item);
+    SaveInventoryToGameInstance();
     OnInventoryUpdated.Broadcast(this);
     return true;
 }
@@ -49,15 +47,13 @@ bool UInventoryComponent::RemoveItem(UItem* Item)
     {
         return false;
     }
-
-    // 노트는 제거할 수 없음
     if (Item == NoteItem)
     {
         return false;
     }
-
     if (Items.Remove(Item) > 0)
     {
+        SaveInventoryToGameInstance();
         OnInventoryUpdated.Broadcast(this);
         return true;
     }
@@ -159,4 +155,83 @@ UItem* UInventoryComponent::GetItemAtSlot(int32 SlotIndex)
         return Items[SlotIndex];
     }
     return nullptr;
+}
+
+void UInventoryComponent::SaveInventoryToGameInstance()
+{
+    UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(
+        UGameplayStatics::GetGameInstance(this));
+
+    if (!GameInstance || !GameInstance->CurrentSaveData)
+    {
+        return;
+    }
+
+    GameInstance->CurrentSaveData->PlayerData.InventoryItems.Empty();
+    GameInstance->CurrentSaveData->PlayerData.ItemQuantities.Empty();
+
+    for (UItem* Item : Items)
+    {
+        if (Item && Item != NoteItem)
+        {
+            FString ItemID = Item->GetClass()->GetName();
+
+            if (GameInstance->CurrentSaveData->PlayerData.InventoryItems.Contains(ItemID))
+            {
+                int32* Quantity = GameInstance->CurrentSaveData->PlayerData.ItemQuantities.Find(ItemID);
+                if (Quantity)
+                {
+                    (*Quantity)++;
+                }
+            }
+            else
+            {
+                GameInstance->CurrentSaveData->PlayerData.InventoryItems.Add(ItemID);
+                GameInstance->CurrentSaveData->PlayerData.ItemQuantities.Add(ItemID, 1);
+            }
+        }
+    }
+
+    GameInstance->SaveContinueGame();
+}
+
+void UInventoryComponent::LoadInventoryFromGameInstance()
+{
+    UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(
+        UGameplayStatics::GetGameInstance(this));
+
+    if (!GameInstance || !GameInstance->CurrentSaveData)
+    {
+        return;
+    }
+
+    for (int32 i = Items.Num() - 1; i >= 0; i--)
+    {
+        if (Items[i] != NoteItem)
+        {
+            Items.RemoveAt(i);
+        }
+    }
+
+    for (const FString& ItemID : GameInstance->CurrentSaveData->PlayerData.InventoryItems)
+    {
+        int32* Quantity = GameInstance->CurrentSaveData->PlayerData.ItemQuantities.Find(ItemID);
+        int32 ItemCount = Quantity ? *Quantity : 1;
+
+        UClass* ItemClass = StaticLoadClass(UItem::StaticClass(), nullptr, *ItemID);
+
+        if (ItemClass)
+        {
+            for (int32 i = 0; i < ItemCount; i++)
+            {
+                UItem* NewItem = NewObject<UItem>(this, ItemClass);
+                if (NewItem)
+                {
+                    Items.Add(NewItem);
+                }
+            }
+        }
+    }
+
+    OnInventoryUpdated.Broadcast(this);
 }

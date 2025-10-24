@@ -46,6 +46,12 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Inventory")
     FOnSelectionChanged OnSelectionChanged;
 
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void SaveInventoryToGameInstance();
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void LoadInventoryFromGameInstance();
+
 
     UPROPERTY(BlueprintAssignable, Category = "Inventory")
     FOnInventoryToggled OnInventoryToggled;

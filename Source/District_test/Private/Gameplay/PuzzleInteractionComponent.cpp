@@ -151,61 +151,68 @@ bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
 {
     if (!HoldingActor)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[PutDown] No HoldingActor"));
         return false;
     }
 
     AActor* Owner = GetOwner();
     if (!Owner)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[PutDown] No Owner"));
         return false;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Before Detach - Owner: %s, HoldingActor: %s"),
-        *Owner->GetName(), *HoldingActor->GetName());
+    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Starting"));
 
-    FVector CurrentWorldLocation = Owner->GetActorLocation();
-    FRotator CurrentWorldRotation = Owner->GetActorRotation();
-
-    Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Detached"));
-
-    if (bEnablePhysicsWhenDropped)
+    // 1. 현재 Mesh Component의 World 위치 가져오기
+    UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
+    if (!PrimComp)
     {
-        EnablePhysics();
-        UE_LOG(LogTemp, Warning, TEXT("[PutDown] Physics Enabled"));
+        PrimComp = Owner->FindComponentByClass<UStaticMeshComponent>();
+    }
+
+    FVector MeshWorldLocation = FVector::ZeroVector;
+    if (PrimComp)
+    {
+        MeshWorldLocation = PrimComp->GetComponentLocation();
+    }
+
+    // 2. Detach
+    Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+    // 3. Actor 전체를 Mesh 위치로 이동 (중요!)
+    Owner->SetActorLocation(MeshWorldLocation);
+    Owner->SetActorRotation(FRotator::ZeroRotator);
+
+    // 4. Physics 활성화
+    if (bEnablePhysicsWhenDropped && PrimComp)
+    {
+        // Collision 먼저 복원
+        PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+        PrimComp->SetCollisionResponseToAllChannels(ECR_Block);
+        PrimComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+
+        // Physics 활성화
+        PrimComp->SetEnableGravity(true);
+        PrimComp->SetSimulatePhysics(true);
+
+        UE_LOG(LogTemp, Warning, TEXT("[PutDown] Physics Enabled at location: %s"),
+            *MeshWorldLocation.ToString());
     }
 
     HoldingActor = nullptr;
-    UE_LOG(LogTemp, Warning, TEXT("[PutDown] HoldingActor set to nullptr, bCanBePickedUp: %s"),
-        bCanBePickedUp ? TEXT("True") : TEXT("False"));
 
     return true;
 }
 
 bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
 {
-    UE_LOG(LogTemp, Warning, TEXT("[PickUp] Called on %s - bCanBePickedUp: %s"),
-        *GetOwner()->GetName(),
-        bCanBePickedUp ? TEXT("True") : TEXT("False"));
-
-    if (!bCanBePickedUp)
+    if (!bCanBePickedUp || HoldingActor)
     {
-        UE_LOG(LogTemp, Error, TEXT("[PickUp] Cannot be picked up!"));
-        return false;
-    }
-
-    if (HoldingActor)
-    {
-        UE_LOG(LogTemp, Error, TEXT("[PickUp] Already held by: %s"), *HoldingActor->GetName());
         return false;
     }
 
     AActor* Owner = GetOwner();
     if (!Owner)
     {
-        UE_LOG(LogTemp, Error, TEXT("[PickUp] No Owner"));
         return false;
     }
 
@@ -214,35 +221,45 @@ bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
         RemoveFromPedestal();
     }
 
-    // Physics 완전히 비활성화
-    DisablePhysics();
+    // Physics 컴포넌트 찾기
+    UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
+    if (!PrimComp)
+    {
+        PrimComp = Owner->FindComponentByClass<UStaticMeshComponent>();
+    }
+
+    if (PrimComp)
+    {
+        // 1. Mesh의 현재 World 위치 저장
+        FVector MeshLocation = PrimComp->GetComponentLocation();
+
+        // 2. Physics 완전히 정지
+        PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
+        PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+        PrimComp->SetSimulatePhysics(false);
+        PrimComp->SetEnableGravity(false);
+        PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+
+        // 3. Actor를 Mesh 위치로 이동 (동기화!)
+        Owner->SetActorLocation(MeshLocation);
+    }
+
+    // 기존 Attachment 제거
+    Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
     HoldingActor = Picker;
 
     AHamoniaCharacter* Character = Cast<AHamoniaCharacter>(Picker);
     if (Character && Character->HeldObjectAttachPoint)
     {
-        // Detach 먼저 (이전 attachment 제거)
-        Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+        // Attach
+        Owner->AttachToComponent(
+            Character->HeldObjectAttachPoint,
+            FAttachmentTransformRules::SnapToTargetNotIncludingScale
+        );
 
-        // 짧은 지연 후 Attach (Physics 상태 완전히 정리) - 수정된 부분
-        FTimerHandle AttachTimer;
-        Owner->GetWorldTimerManager().SetTimer(AttachTimer, [Owner, Character]()
-            {
-                Owner->AttachToComponent(
-                    Character->HeldObjectAttachPoint,
-                    FAttachmentTransformRules::SnapToTargetNotIncludingScale
-                );
-
-                Owner->SetActorRelativeLocation(FVector::ZeroVector);
-                Owner->SetActorRelativeRotation(FRotator::ZeroRotator);
-
-                UE_LOG(LogTemp, Warning, TEXT("[PickUp] Attached successfully"));
-            }, 0.01f, false);
-    }
-    else
-    {
-        Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+        Owner->SetActorRelativeLocation(FVector::ZeroVector);
+        Owner->SetActorRelativeRotation(FRotator::ZeroRotator);
     }
 
     return true;
