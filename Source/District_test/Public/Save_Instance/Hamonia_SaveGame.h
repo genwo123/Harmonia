@@ -201,6 +201,22 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void UnlockAllLevels();
 
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest")
+    FString CurrentQuestLevel;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest")
+    TArray<FString> CompletedQuestLevels;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest")
+    TArray<bool> CurrentSubStepStatus;
+
+    UFUNCTION(BlueprintCallable, Category = "Quest")
+    void SaveQuestProgress(const FString& CurrentLevel, const TArray<FString>& CompletedLevels, const TArray<bool>& SubStepStatus);
+
+    UFUNCTION(BlueprintCallable, Category = "Quest")
+    void LoadQuestProgress(FString& OutCurrentLevel, TArray<FString>& OutCompletedLevels, TArray<bool>& OutSubStepStatus);
+
     UFUNCTION(BlueprintCallable, Category = "Debug")
     void UnlockAllItems();
 

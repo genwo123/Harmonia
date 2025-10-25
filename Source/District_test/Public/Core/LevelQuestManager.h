@@ -52,6 +52,9 @@ public:
     ALevelQuestManager();
 
 
+    void SaveQuestProgress();
+    void LoadQuestProgress();
+
     UFUNCTION(BlueprintCallable)
     int32 GetCurrentSubStep();
 

@@ -531,3 +531,17 @@ void UHamonia_SaveGame::ResetHintForLevel(int32 LevelNumber)
     FHintBlockState ResetState;
     HintData.LevelHintStates.Add(LevelNumber, ResetState);
 }
+
+void UHamonia_SaveGame::SaveQuestProgress(const FString& CurrentLevel, const TArray<FString>& CompletedLevels, const TArray<bool>& SubStepStatus)
+{
+    ProgressData.CurrentQuestLevel = CurrentLevel;
+    ProgressData.CompletedQuestLevels = CompletedLevels;
+    ProgressData.CurrentSubStepStatus = SubStepStatus;
+}
+
+void UHamonia_SaveGame::LoadQuestProgress(FString& OutCurrentLevel, TArray<FString>& OutCompletedLevels, TArray<bool>& OutSubStepStatus)
+{
+    OutCurrentLevel = ProgressData.CurrentQuestLevel;
+    OutCompletedLevels = ProgressData.CompletedQuestLevels;
+    OutSubStepStatus = ProgressData.CurrentSubStepStatus;
+}

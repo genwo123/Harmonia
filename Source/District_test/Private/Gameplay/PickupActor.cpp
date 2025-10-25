@@ -11,10 +11,11 @@ APickupActor::APickupActor()
 {
     PrimaryActorTick.bCanEverTick = true;
 
-    // SceneComponent를 Root로 사용하지 말고, MeshComponent를 Root로!
-    MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
-    RootComponent = MeshComponent;  // MeshComponent를 Root로 설정!
+    SceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("SceneComponent"));
+    RootComponent = SceneComponent;
 
+    MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
+    MeshComponent->SetupAttachment(RootComponent);
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     MeshComponent->SetCollisionObjectType(ECC_WorldDynamic);
     MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
@@ -22,21 +23,17 @@ APickupActor::APickupActor()
     MeshComponent->SetSimulatePhysics(false);
     MeshComponent->SetMobility(EComponentMobility::Movable);
 
-    // InteractionWidgetComponent는 MeshComponent에 부착
     InteractionWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidgetComponent"));
-    InteractionWidgetComponent->SetupAttachment(MeshComponent);  // RootComponent 대신 MeshComponent
+    InteractionWidgetComponent->SetupAttachment(RootComponent);
     InteractionWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 100.f));
     InteractionWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
     InteractionWidgetComponent->SetDrawSize(FVector2D(200.f, 50.f));
     InteractionWidgetComponent->SetVisibility(false);
 
-    // InteractionSphere도 MeshComponent에 부착
     InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
-    InteractionSphere->SetupAttachment(MeshComponent);  // RootComponent 대신 MeshComponent
+    InteractionSphere->SetupAttachment(RootComponent);
     InteractionSphere->SetSphereRadius(150.0f);
     InteractionSphere->SetCollisionProfileName(TEXT("OverlapOnlyPawn"));
-
-
 
     bDrawDebug = true;
     MeshRotation = FRotator::ZeroRotator;
@@ -85,33 +82,16 @@ void APickupActor::Tick(float DeltaTime)
 
 void APickupActor::Interact_Implementation(AActor* Interactor)
 {
-    UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] Called on %s by %s"),
-        *GetName(), *Interactor->GetName());
-
     UPuzzleInteractionComponent* PuzzleComp = FindComponentByClass<UPuzzleInteractionComponent>();
 
-    if (PuzzleComp)
+    if (PuzzleComp && PuzzleComp->bCanBePickedUp)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] PuzzleInteractionComponent found"));
-        UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] bCanBePickedUp: %d"), PuzzleComp->bCanBePickedUp);
-
-        if (PuzzleComp->bCanBePickedUp)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] Calling PickUp..."));
-            bool bPickedUp = PuzzleComp->PickUp(Interactor);
-            UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] PickUp result: %d"), bPickedUp);
-            return;
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] No PuzzleInteractionComponent found - treating as regular item"));
+        PuzzleComp->PickUp(Interactor);
+        return;
     }
 
     if (PickupItem(Interactor))
     {
-        UE_LOG(LogTemp, Warning, TEXT("[PickupActor::Interact] Regular item pickup successful"));
-
         if (MeshComponent)
         {
             MeshComponent->SetVisibility(false);
@@ -125,10 +105,6 @@ void APickupActor::Interact_Implementation(AActor* Interactor)
 
         OnPickupSuccess(Interactor);
         SetLifeSpan(0.1f);
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("[PickupActor::Interact] PickupItem failed!"));
     }
 }
 

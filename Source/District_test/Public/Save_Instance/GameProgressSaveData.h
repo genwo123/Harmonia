@@ -8,6 +8,16 @@ struct DISTRICT_TEST_API FGameProgressSaveData
 {
     GENERATED_BODY()
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Progress")
+    FString CurrentQuestLevel;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Progress")
+    TArray<FString> CompletedQuestLevels;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quest Progress")
+    TArray<bool> CurrentSubStepStatus;
+
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Progress")
     TArray<FString> CompletedPuzzles;
 

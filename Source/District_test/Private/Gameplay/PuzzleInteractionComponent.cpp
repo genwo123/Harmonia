@@ -9,7 +9,6 @@ UPuzzleInteractionComponent::UPuzzleInteractionComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
 
-    // 기본값 설정
     bCanBePickedUp = true;
     bCanBePlacedOnPedestal = true;
     bStartWithPhysicsDisabled = true;
@@ -17,7 +16,6 @@ UPuzzleInteractionComponent::UPuzzleInteractionComponent()
     CurrentPedestal = nullptr;
     HoldingActor = nullptr;
 
-    // 원래 설정 초기화
     bOriginalSimulatePhysics = false;
     OriginalCollisionEnabled = ECollisionEnabled::QueryAndPhysics;
 }
@@ -36,23 +34,18 @@ void UPuzzleInteractionComponent::SetupInitialPhysics()
     UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
     if (!PrimComp)
     {
-        // StaticMeshComponent 찾기
         PrimComp = Owner->FindComponentByClass<UStaticMeshComponent>();
     }
 
     if (PrimComp)
     {
-        // 원래 설정 저장
         bOriginalSimulatePhysics = PrimComp->IsSimulatingPhysics();
         OriginalCollisionEnabled = PrimComp->GetCollisionEnabled();
 
         if (bStartWithPhysicsDisabled)
         {
-            // 초기에는 피직스 비활성화 (에디터에서 안정적)
             PrimComp->SetSimulatePhysics(false);
             PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-
-
         }
     }
 }
@@ -74,12 +67,9 @@ void UPuzzleInteractionComponent::EnablePhysics()
         PrimComp->SetEnableGravity(true);
         PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 
-        // 적당한 물리 속성 설정
         PrimComp->SetMassOverrideInKg(NAME_None, 5.0f);
         PrimComp->SetLinearDamping(0.1f);
         PrimComp->SetAngularDamping(0.1f);
-
-
     }
 }
 
@@ -96,16 +86,14 @@ void UPuzzleInteractionComponent::DisablePhysics()
 
     if (PrimComp)
     {
-        // Physics 완전히 비활성화
-        PrimComp->SetSimulatePhysics(false);
-        PrimComp->SetEnableGravity(false);  // 추가
-        PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-
-        // 속도 초기화 (중요!) - 추가
         PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
         PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+        PrimComp->SetSimulatePhysics(false);
+        PrimComp->SetEnableGravity(false);
+        PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 
-        UE_LOG(LogTemp, Warning, TEXT("[DisablePhysics] Physics disabled for %s"), *Owner->GetName());
+        PrimComp->SetRelativeLocation(FVector::ZeroVector);
+        PrimComp->SetRelativeRotation(FRotator::ZeroRotator);
     }
 }
 
@@ -113,14 +101,11 @@ void UPuzzleInteractionComponent::TickComponent(float DeltaTime, ELevelTick Tick
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    // Attach 방식을 사용하면 Tick에서 위치 업데이트 불필요
     if (HoldingActor)
     {
         AActor* Owner = GetOwner();
         if (Owner)
         {
-            // Attach되어 있으면 자동으로 따라감
-            // HeldObjectAttachPoint가 없는 경우에만 수동 업데이트
             if (!Owner->GetAttachParentActor())
             {
                 ACharacter* Character = Cast<ACharacter>(HoldingActor);
@@ -147,62 +132,6 @@ void UPuzzleInteractionComponent::TickComponent(float DeltaTime, ELevelTick Tick
     }
 }
 
-bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
-{
-    if (!HoldingActor)
-    {
-        return false;
-    }
-
-    AActor* Owner = GetOwner();
-    if (!Owner)
-    {
-        return false;
-    }
-
-    UE_LOG(LogTemp, Warning, TEXT("[PutDown] Starting"));
-
-    // 1. 현재 Mesh Component의 World 위치 가져오기
-    UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
-    if (!PrimComp)
-    {
-        PrimComp = Owner->FindComponentByClass<UStaticMeshComponent>();
-    }
-
-    FVector MeshWorldLocation = FVector::ZeroVector;
-    if (PrimComp)
-    {
-        MeshWorldLocation = PrimComp->GetComponentLocation();
-    }
-
-    // 2. Detach
-    Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-
-    // 3. Actor 전체를 Mesh 위치로 이동 (중요!)
-    Owner->SetActorLocation(MeshWorldLocation);
-    Owner->SetActorRotation(FRotator::ZeroRotator);
-
-    // 4. Physics 활성화
-    if (bEnablePhysicsWhenDropped && PrimComp)
-    {
-        // Collision 먼저 복원
-        PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-        PrimComp->SetCollisionResponseToAllChannels(ECR_Block);
-        PrimComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
-
-        // Physics 활성화
-        PrimComp->SetEnableGravity(true);
-        PrimComp->SetSimulatePhysics(true);
-
-        UE_LOG(LogTemp, Warning, TEXT("[PutDown] Physics Enabled at location: %s"),
-            *MeshWorldLocation.ToString());
-    }
-
-    HoldingActor = nullptr;
-
-    return true;
-}
-
 bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
 {
     if (!bCanBePickedUp || HoldingActor)
@@ -221,7 +150,6 @@ bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
         RemoveFromPedestal();
     }
 
-    // Physics 컴포넌트 찾기
     UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
     if (!PrimComp)
     {
@@ -230,38 +158,124 @@ bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
 
     if (PrimComp)
     {
-        // 1. Mesh의 현재 World 위치 저장
-        FVector MeshLocation = PrimComp->GetComponentLocation();
+        if (PrimComp != Owner->GetRootComponent())
+        {
+            FVector MeshWorldLocation = PrimComp->GetComponentLocation();
+            FRotator MeshWorldRotation = PrimComp->GetComponentRotation();
 
-        // 2. Physics 완전히 정지
+            Owner->SetActorLocation(MeshWorldLocation);
+            Owner->SetActorRotation(MeshWorldRotation);
+
+            PrimComp->SetRelativeLocation(FVector::ZeroVector);
+            PrimComp->SetRelativeRotation(FRotator::ZeroRotator);
+        }
+
         PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
         PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
         PrimComp->SetSimulatePhysics(false);
         PrimComp->SetEnableGravity(false);
         PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 
-        // 3. Actor를 Mesh 위치로 이동 (동기화!)
-        Owner->SetActorLocation(MeshLocation);
+        PrimComp->SetVisibility(true, true);
+        Owner->SetActorHiddenInGame(false);
     }
 
-    // 기존 Attachment 제거
     Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-
     HoldingActor = Picker;
 
     AHamoniaCharacter* Character = Cast<AHamoniaCharacter>(Picker);
     if (Character && Character->HeldObjectAttachPoint)
     {
-        // Attach
-        Owner->AttachToComponent(
-            Character->HeldObjectAttachPoint,
-            FAttachmentTransformRules::SnapToTargetNotIncludingScale
+        FAttachmentTransformRules AttachRules(
+            EAttachmentRule::SnapToTarget,
+            EAttachmentRule::SnapToTarget,
+            EAttachmentRule::KeepWorld,
+            false
         );
 
+        Owner->AttachToComponent(Character->HeldObjectAttachPoint, AttachRules);
         Owner->SetActorRelativeLocation(FVector::ZeroVector);
         Owner->SetActorRelativeRotation(FRotator::ZeroRotator);
+
+        if (PrimComp && PrimComp != Owner->GetRootComponent())
+        {
+            PrimComp->SetRelativeLocation(FVector::ZeroVector);
+            PrimComp->SetRelativeRotation(FRotator::ZeroRotator);
+        }
     }
 
+    return true;
+}
+
+bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
+{
+    if (!HoldingActor)
+    {
+        return false;
+    }
+
+    AActor* Owner = GetOwner();
+    if (!Owner)
+    {
+        return false;
+    }
+
+    UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
+    if (!PrimComp)
+    {
+        PrimComp = Owner->FindComponentByClass<UStaticMeshComponent>();
+    }
+
+    FVector DropLocation = Owner->GetActorLocation();
+
+    Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+    if (PrimComp && PrimComp != Owner->GetRootComponent())
+    {
+        FVector MeshWorldLocation = PrimComp->GetComponentLocation();
+        Owner->SetActorLocation(MeshWorldLocation);
+        DropLocation = MeshWorldLocation;
+
+        PrimComp->SetRelativeLocation(FVector::ZeroVector);
+        PrimComp->SetRelativeRotation(FRotator::ZeroRotator);
+    }
+    else
+    {
+        Owner->SetActorLocation(DropLocation);
+    }
+
+    if (PrimComp)
+    {
+        PrimComp->SetVisibility(true, true);
+        Owner->SetActorHiddenInGame(false);
+
+        if (bEnablePhysicsWhenDropped)
+        {
+            PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+            PrimComp->SetCollisionResponseToAllChannels(ECR_Block);
+            PrimComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+            PrimComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+
+            GetWorld()->GetTimerManager().SetTimerForNextTick([Owner, PrimComp]()
+                {
+                    if (PrimComp && PrimComp->IsValidLowLevel())
+                    {
+                        if (PrimComp != Owner->GetRootComponent())
+                        {
+                            FVector RootLocation = Owner->GetActorLocation();
+                            PrimComp->SetWorldLocation(RootLocation);
+                            PrimComp->SetRelativeLocation(FVector::ZeroVector);
+                        }
+
+                        PrimComp->SetEnableGravity(true);
+                        PrimComp->SetSimulatePhysics(true);
+                        PrimComp->WakeAllRigidBodies();
+                    }
+                });
+        }
+    }
+
+    HoldingActor = nullptr;
     return true;
 }
 
@@ -288,13 +302,12 @@ bool UPuzzleInteractionComponent::PlaceOnPedestal(APedestal* Pedestal)
         Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
     }
 
-    // Physics 완전히 비활성화 - 추가
     DisablePhysics();
 
     if (Pedestal->PlaceObject(Owner))
     {
         CurrentPedestal = Pedestal;
-        HoldingActor = nullptr;  // 추가
+        HoldingActor = nullptr;
         return true;
     }
 
@@ -311,20 +324,16 @@ bool UPuzzleInteractionComponent::RemoveFromPedestal()
     AActor* Owner = GetOwner();
     if (!Owner)
     {
-
         return false;
     }
 
-    // 받침대에서 제거
     AActor* RemovedObject = CurrentPedestal->RemoveObject();
 
     if (RemovedObject == Owner)
     {
         CurrentPedestal = nullptr;
- 
         return true;
     }
 
-    
     return false;
 }
