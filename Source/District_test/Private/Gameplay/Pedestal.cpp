@@ -1,5 +1,6 @@
 #include "Gameplay/Pedestal.h"
 #include "Kismet/GameplayStatics.h"
+#include "Gameplay/PickupActor.h"
 #include "Character/HamoniaCharacter.h"
 
 APedestal::APedestal()
@@ -30,7 +31,7 @@ APedestal::APedestal()
 
     AttachmentPoint = CreateDefaultSubobject<USceneComponent>(TEXT("AttachmentPoint"));
     AttachmentPoint->SetupAttachment(RootComponent);
-    AttachmentPoint->SetRelativeLocation(FVector(0, 0, 80.0f));
+    AttachmentPoint->SetRelativeLocation(FVector(0, 0, 100.0f));
     AttachmentPoint->SetMobility(EComponentMobility::Movable);
 
 #if WITH_EDITORONLY_DATA
@@ -89,9 +90,44 @@ void APedestal::OnConstruction(const FTransform& Transform)
 
         if (SpawnedChildActor)
         {
-            SpawnedChildActor->AttachToComponent(AttachmentPoint, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+            UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(SpawnedChildActor->GetRootComponent());
+            if (!PrimComp)
+            {
+                PrimComp = SpawnedChildActor->FindComponentByClass<UStaticMeshComponent>();
+            }
+
+            if (PrimComp)
+            {
+                PrimComp->SetSimulatePhysics(false);
+                PrimComp->SetEnableGravity(false);
+                PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+                PrimComp->SetVisibility(true, true);
+            }
+
+            SpawnedChildActor->SetActorHiddenInGame(false);
+            SpawnedChildActor->AttachToComponent(AttachmentPoint, FAttachmentTransformRules::SnapToTargetIncludingScale);
+
+            if (bCenterAlignPlacedObject && PrimComp)
+            {
+                FVector MeshRelativeLocation = PrimComp->GetRelativeLocation();
+                SpawnedChildActor->SetActorRelativeLocation(-MeshRelativeLocation);
+            }
+
             PlacedObject = SpawnedChildActor;
             CurrentState = EPedestalState::Occupied;
+
+            UPuzzleInteractionComponent* PuzzleComp = SpawnedChildActor->FindComponentByClass<UPuzzleInteractionComponent>();
+            if (PuzzleComp)
+            {
+                PuzzleComp->CurrentPedestal = this;
+                PuzzleComp->bCanBePickedUp = true;
+            }
+
+            APickupActor* PickupActor = Cast<APickupActor>(SpawnedChildActor);
+            if (PickupActor)
+            {
+                PickupActor->OnConstruction(SpawnedChildActor->GetTransform());
+            }
         }
     }
 
@@ -108,6 +144,7 @@ void APedestal::OnConstruction(const FTransform& Transform)
         FindOwnerPuzzleArea();
     }
 }
+
 
 bool APedestal::MoveToGridPosition(int32 NewRow, int32 NewColumn)
 {
@@ -387,11 +424,20 @@ bool APedestal::PlaceObject(AActor* Object)
             AttachmentPoint = NewObject<USceneComponent>(this, TEXT("AttachmentPoint"));
             AttachmentPoint->RegisterComponent();
             AttachmentPoint->SetupAttachment(RootComponent);
-            AttachmentPoint->SetRelativeLocation(FVector(0, 0, MeshComponent->Bounds.BoxExtent.Z));
+
+            UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(RootComponent);
+            if (MeshComp)
+            {
+                FVector MeshExtent = MeshComp->Bounds.BoxExtent;
+                AttachmentPoint->SetRelativeLocation(FVector(0, 0, MeshExtent.Z));
+            }
+            else
+            {
+                AttachmentPoint->SetRelativeLocation(FVector(0, 0, 80.0f));
+            }
         }
 
-        Object->AttachToComponent(AttachmentPoint, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-        Object->SetActorRelativeLocation(FVector::ZeroVector);
+        Object->AttachToComponent(AttachmentPoint, FAttachmentTransformRules::SnapToTargetIncludingScale);
 
         if (!bObjectFollowsRotation)
         {
@@ -417,6 +463,7 @@ bool APedestal::PlaceObject(AActor* Object)
 
     return false;
 }
+
 AActor* APedestal::RemoveObject()
 {
     if (CurrentState != EPedestalState::Occupied || !PlacedObject)

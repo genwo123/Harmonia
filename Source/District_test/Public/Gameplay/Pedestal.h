@@ -28,6 +28,10 @@ protected:
     virtual void BeginPlay() override;
 
 public:
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Placement")
+    bool bCenterAlignPlacedObject = false;
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UStaticMeshComponent* MeshComponent;
 

@@ -11,11 +11,8 @@ APickupActor::APickupActor()
 {
     PrimaryActorTick.bCanEverTick = true;
 
-    SceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("SceneComponent"));
-    RootComponent = SceneComponent;
-
     MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
-    MeshComponent->SetupAttachment(RootComponent);
+    RootComponent = MeshComponent;
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     MeshComponent->SetCollisionObjectType(ECC_WorldDynamic);
     MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
@@ -24,14 +21,13 @@ APickupActor::APickupActor()
     MeshComponent->SetMobility(EComponentMobility::Movable);
 
     InteractionWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("InteractionWidgetComponent"));
-    InteractionWidgetComponent->SetupAttachment(RootComponent);
-    InteractionWidgetComponent->SetRelativeLocation(FVector(0.f, 0.f, 100.f));
-    InteractionWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
+    InteractionWidgetComponent->SetupAttachment(MeshComponent);
+    InteractionWidgetComponent->SetWidgetSpace(EWidgetSpace::Screen);
     InteractionWidgetComponent->SetDrawSize(FVector2D(200.f, 50.f));
     InteractionWidgetComponent->SetVisibility(false);
 
     InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
-    InteractionSphere->SetupAttachment(RootComponent);
+    InteractionSphere->SetupAttachment(MeshComponent);
     InteractionSphere->SetSphereRadius(150.0f);
     InteractionSphere->SetCollisionProfileName(TEXT("OverlapOnlyPawn"));
 
@@ -52,7 +48,58 @@ void APickupActor::BeginPlay()
         MeshComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
     }
 
+    if (InteractionWidgetComponent)
+    {
+        InteractionWidgetComponent->SetVisibility(false);
+    }
+
     ApplyMeshRotation();
+}
+
+void APickupActor::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+
+    if (InteractionWidgetComponent && MeshComponent && InteractionWidgetComponent->IsVisible())
+    {
+        FVector MeshBoundsOrigin;
+        FVector MeshBoundsExtent;
+        MeshComponent->GetLocalBounds(MeshBoundsOrigin, MeshBoundsExtent);
+
+        FVector WidgetOffset = MeshBoundsOrigin + FVector(0.f, 0.f, MeshBoundsExtent.Z + 50.f);
+        InteractionWidgetComponent->SetRelativeLocation(WidgetOffset);
+    }
+}
+
+void APickupActor::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+    ApplyMeshRotation();
+
+    if (InteractionWidgetComponent && MeshComponent)
+    {
+        FVector MeshBoundsOrigin;
+        FVector MeshBoundsExtent;
+        MeshComponent->GetLocalBounds(MeshBoundsOrigin, MeshBoundsExtent);
+
+        FVector WidgetOffset = FVector(0.f, 0.f, MeshBoundsExtent.Z + 50.f);
+        InteractionWidgetComponent->SetRelativeLocation(WidgetOffset);
+
+        InteractionWidgetComponent->SetVisibility(false);  // Ãß°¡
+    }
+}
+
+void APickupActor::UpdateWidgetPosition()
+{
+    if (!InteractionWidgetComponent || !MeshComponent)
+        return;
+
+    FVector MeshBoundsOrigin;
+    FVector MeshBoundsExtent;
+    MeshComponent->GetLocalBounds(MeshBoundsOrigin, MeshBoundsExtent);
+
+    FVector WidgetOffset = FVector(0.f, 0.f, MeshBoundsExtent.Z + 50.f);
+    InteractionWidgetComponent->SetRelativeLocation(WidgetOffset);
 }
 
 void APickupActor::ApplyMeshRotation()
@@ -67,17 +114,6 @@ void APickupActor::SetMeshYawRotation(float Yaw)
 {
     MeshRotation.Yaw = Yaw;
     ApplyMeshRotation();
-}
-
-void APickupActor::OnConstruction(const FTransform& Transform)
-{
-    Super::OnConstruction(Transform);
-    ApplyMeshRotation();
-}
-
-void APickupActor::Tick(float DeltaTime)
-{
-    Super::Tick(DeltaTime);
 }
 
 void APickupActor::Interact_Implementation(AActor* Interactor)
@@ -108,14 +144,12 @@ void APickupActor::Interact_Implementation(AActor* Interactor)
     }
 }
 
-
-
 bool APickupActor::CanInteract_Implementation(AActor* Interactor)
 {
     UPuzzleInteractionComponent* PuzzleComp = FindComponentByClass<UPuzzleInteractionComponent>();
     if (PuzzleComp)
     {
-        return true; 
+        return true;
     }
 
     UInventoryComponent* InventoryComponent = Interactor->FindComponentByClass<UInventoryComponent>();
@@ -191,7 +225,6 @@ void APickupActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChanged
 }
 #endif
 
-
 void APickupActor::ShowInteractionWidget_Implementation()
 {
     if (InteractionWidgetComponent)
@@ -199,7 +232,6 @@ void APickupActor::ShowInteractionWidget_Implementation()
         InteractionWidgetComponent->SetVisibility(true);
     }
 }
-
 
 void APickupActor::HideInteractionWidget_Implementation()
 {

@@ -20,10 +20,14 @@ void UInventoryComponent::BeginPlay()
         NoteItem = NewObject<UItem>(this, UItem::StaticClass());
         NoteItem->Name = TEXT("Note");
         NoteItem->Description = TEXT("A notebook for recording discovered memos and notes.");
-        Items.Add(NoteItem);
     }
 
     LoadInventoryFromGameInstance();
+
+    if (!Items.Contains(NoteItem))
+    {
+        Items.Insert(NoteItem, 0);
+    }
 }
 
 bool UInventoryComponent::AddItem(UItem* Item)
@@ -170,12 +174,13 @@ void UInventoryComponent::SaveInventoryToGameInstance()
 
     GameInstance->CurrentSaveData->PlayerData.InventoryItems.Empty();
     GameInstance->CurrentSaveData->PlayerData.ItemQuantities.Empty();
+    GameInstance->CurrentSaveData->PlayerData.CurrentSelectedSlot = CurrentSelectedSlot;
 
     for (UItem* Item : Items)
     {
         if (Item && Item != NoteItem)
         {
-            FString ItemID = Item->GetClass()->GetName();
+            FString ItemID = Item->GetClass()->GetPathName();
 
             if (GameInstance->CurrentSaveData->PlayerData.InventoryItems.Contains(ItemID))
             {
@@ -192,8 +197,6 @@ void UInventoryComponent::SaveInventoryToGameInstance()
             }
         }
     }
-
-    GameInstance->SaveContinueGame();
 }
 
 void UInventoryComponent::LoadInventoryFromGameInstance()
@@ -219,7 +222,8 @@ void UInventoryComponent::LoadInventoryFromGameInstance()
         int32* Quantity = GameInstance->CurrentSaveData->PlayerData.ItemQuantities.Find(ItemID);
         int32 ItemCount = Quantity ? *Quantity : 1;
 
-        UClass* ItemClass = StaticLoadClass(UItem::StaticClass(), nullptr, *ItemID);
+        FSoftClassPath ClassPath(ItemID);
+        UClass* ItemClass = ClassPath.TryLoadClass<UItem>();
 
         if (ItemClass)
         {
@@ -232,6 +236,12 @@ void UInventoryComponent::LoadInventoryFromGameInstance()
                 }
             }
         }
+    }
+
+    CurrentSelectedSlot = GameInstance->CurrentSaveData->PlayerData.CurrentSelectedSlot;
+    if (CurrentSelectedSlot >= Items.Num())
+    {
+        CurrentSelectedSlot = 0;
     }
 
     OnInventoryUpdated.Broadcast(this);

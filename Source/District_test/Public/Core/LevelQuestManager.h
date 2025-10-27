@@ -5,6 +5,8 @@
 #include "Engine/DataTable.h"
 #include "LevelQuestManager.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnQuestUpdated, const FString&, NewLevelID);
+
 USTRUCT(BlueprintType)
 struct FLevelInfo : public FTableRowBase
 {
@@ -85,6 +87,9 @@ public:
     UFUNCTION(BlueprintCallable)
     void CompleteCurrentLevel();
 
+    UPROPERTY(BlueprintAssignable, Category = "Quest")
+    FOnQuestUpdated OnQuestUpdated;
+
     UFUNCTION(BlueprintCallable)
     bool IsLevelCompleted(const FString& LevelID);
 
@@ -93,6 +98,9 @@ public:
 
     UFUNCTION(BlueprintCallable)
     FString GetCurrentLevelDialogue();
+
+    UFUNCTION(BlueprintCallable, Category = "Quest")
+    void RefreshForCurrentLevel();
 
     // === 소목표 시스템 함수들 ===
     UFUNCTION(BlueprintCallable)
@@ -122,4 +130,10 @@ public:
 
     UFUNCTION(BlueprintCallable)
     TArray<FString> GetAllSubStepTexts();  // 모든 소목표 텍스트
+
+    virtual void Tick(float DeltaTime) override;
+
+private:
+
+    FString LastLoadedLevel;
 };

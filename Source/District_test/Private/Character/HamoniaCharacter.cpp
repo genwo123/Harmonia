@@ -12,6 +12,9 @@
 #include "Gameplay/PuzzleInteractionComponent.h" 
 #include "Gameplay/Pedestal.h"
 #include "Interaction/InteractableMechanism.h"
+#include "Save_Instance/Hamoina_GameInstance.h"
+#include "Core/LevelQuestManager.h"  
+#include "EngineUtils.h"
 #include "Gameplay/PickupActor.h"
 #include "TimerManager.h"
 #include <Core/EnhancedQuestComponent.h>
@@ -76,6 +79,20 @@ APedestal* AHamoniaCharacter::FindPedestalFromActor(AActor* Actor)
 	}
 
 	return nullptr;
+}
+
+void AHamoniaCharacter::SaveBeforeLevelTransition()
+{
+	if (InventoryComponent)
+	{
+		InventoryComponent->SaveInventoryToGameInstance();
+	}
+
+	UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
+	if (GameInstance)
+	{
+		GameInstance->SaveContinueGame();
+	}
 }
 
 void AHamoniaCharacter::SetupEnhancedInput()

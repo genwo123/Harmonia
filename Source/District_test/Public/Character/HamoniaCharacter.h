@@ -270,6 +270,8 @@ public:
     UFUNCTION(BlueprintPure, Category = "Interaction")
     bool HasInteractableNPC() const { return CurrentInteractableNPC != nullptr; }
 
+    UFUNCTION(BlueprintCallable, Category = "Save System")
+    void SaveBeforeLevelTransition();
 
 protected:
     virtual void BeginPlay() override;

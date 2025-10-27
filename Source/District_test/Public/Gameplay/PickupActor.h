@@ -16,7 +16,7 @@ public:
 
 protected:
     virtual void BeginPlay() override;
-
+    void UpdateWidgetPosition();
 public:
     virtual void Tick(float DeltaTime) override;
 
@@ -62,9 +62,7 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup")
     class USoundBase* PickupSound;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    USceneComponent* SceneComponent;
+    
 
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

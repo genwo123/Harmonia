@@ -24,6 +24,8 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
     bool bStartWithPhysicsDisabled = true; // 기본적으로 피직스 비활성화로 시작
 
+    bool bIsPhysicsSimulating;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
     bool bEnablePhysicsWhenDropped = true; // 떨어뜨릴 때 피직스 활성화
 

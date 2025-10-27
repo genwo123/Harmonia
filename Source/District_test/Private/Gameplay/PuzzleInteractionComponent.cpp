@@ -18,12 +18,28 @@ UPuzzleInteractionComponent::UPuzzleInteractionComponent()
 
     bOriginalSimulatePhysics = false;
     OriginalCollisionEnabled = ECollisionEnabled::QueryAndPhysics;
+    bIsPhysicsSimulating = false;
 }
 
 void UPuzzleInteractionComponent::BeginPlay()
 {
     Super::BeginPlay();
-    SetupInitialPhysics();
+
+    AActor* Owner = GetOwner();
+    if (!Owner) return;
+
+    UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
+    if (!PrimComp)
+    {
+        PrimComp = Owner->FindComponentByClass<UStaticMeshComponent>();
+    }
+
+    if (PrimComp)
+    {
+        PrimComp->SetSimulatePhysics(false);
+        PrimComp->SetEnableGravity(false);
+        PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    }
 }
 
 void UPuzzleInteractionComponent::SetupInitialPhysics()
@@ -70,6 +86,8 @@ void UPuzzleInteractionComponent::EnablePhysics()
         PrimComp->SetMassOverrideInKg(NAME_None, 5.0f);
         PrimComp->SetLinearDamping(0.1f);
         PrimComp->SetAngularDamping(0.1f);
+
+        bIsPhysicsSimulating = true;
     }
 }
 
@@ -94,43 +112,11 @@ void UPuzzleInteractionComponent::DisablePhysics()
 
         PrimComp->SetRelativeLocation(FVector::ZeroVector);
         PrimComp->SetRelativeRotation(FRotator::ZeroRotator);
+
+        bIsPhysicsSimulating = false;
     }
 }
 
-void UPuzzleInteractionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
-{
-    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-    if (HoldingActor)
-    {
-        AActor* Owner = GetOwner();
-        if (Owner)
-        {
-            if (!Owner->GetAttachParentActor())
-            {
-                ACharacter* Character = Cast<ACharacter>(HoldingActor);
-                if (Character)
-                {
-                    FVector CameraLocation;
-                    FRotator CameraRotation;
-                    Character->GetActorEyesViewPoint(CameraLocation, CameraRotation);
-
-                    FVector NewLocation = CameraLocation +
-                        (CameraRotation.Vector() * HoldOffset.X) +
-                        (FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Y) * HoldOffset.Y) +
-                        (FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Z) * HoldOffset.Z);
-
-                    Owner->SetActorLocation(NewLocation);
-
-                    if (bMatchCameraRotation)
-                    {
-                        Owner->SetActorRotation(CameraRotation);
-                    }
-                }
-            }
-        }
-    }
-}
 
 bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
 {
@@ -158,24 +144,15 @@ bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
 
     if (PrimComp)
     {
-        if (PrimComp != Owner->GetRootComponent())
+        if (PrimComp->IsSimulatingPhysics())
         {
-            FVector MeshWorldLocation = PrimComp->GetComponentLocation();
-            FRotator MeshWorldRotation = PrimComp->GetComponentRotation();
-
-            Owner->SetActorLocation(MeshWorldLocation);
-            Owner->SetActorRotation(MeshWorldRotation);
-
-            PrimComp->SetRelativeLocation(FVector::ZeroVector);
-            PrimComp->SetRelativeRotation(FRotator::ZeroRotator);
+            PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
+            PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
         }
 
-        PrimComp->SetPhysicsLinearVelocity(FVector::ZeroVector);
-        PrimComp->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
         PrimComp->SetSimulatePhysics(false);
         PrimComp->SetEnableGravity(false);
-        PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-
+        PrimComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         PrimComp->SetVisibility(true, true);
         Owner->SetActorHiddenInGame(false);
     }
@@ -196,12 +173,6 @@ bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
         Owner->AttachToComponent(Character->HeldObjectAttachPoint, AttachRules);
         Owner->SetActorRelativeLocation(FVector::ZeroVector);
         Owner->SetActorRelativeRotation(FRotator::ZeroRotator);
-
-        if (PrimComp && PrimComp != Owner->GetRootComponent())
-        {
-            PrimComp->SetRelativeLocation(FVector::ZeroVector);
-            PrimComp->SetRelativeRotation(FRotator::ZeroRotator);
-        }
     }
 
     return true;
@@ -226,57 +197,62 @@ bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
         PrimComp = Owner->FindComponentByClass<UStaticMeshComponent>();
     }
 
-    FVector DropLocation = Owner->GetActorLocation();
+    FVector WorldLocation = Owner->GetActorLocation();
+    FRotator WorldRotation = Owner->GetActorRotation();
 
     Owner->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
-    if (PrimComp && PrimComp != Owner->GetRootComponent())
-    {
-        FVector MeshWorldLocation = PrimComp->GetComponentLocation();
-        Owner->SetActorLocation(MeshWorldLocation);
-        DropLocation = MeshWorldLocation;
-
-        PrimComp->SetRelativeLocation(FVector::ZeroVector);
-        PrimComp->SetRelativeRotation(FRotator::ZeroRotator);
-    }
-    else
-    {
-        Owner->SetActorLocation(DropLocation);
-    }
+    Owner->SetActorLocation(WorldLocation);
+    Owner->SetActorRotation(WorldRotation);
 
     if (PrimComp)
     {
         PrimComp->SetVisibility(true, true);
         Owner->SetActorHiddenInGame(false);
 
-        if (bEnablePhysicsWhenDropped)
-        {
-            PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-            PrimComp->SetCollisionResponseToAllChannels(ECR_Block);
-            PrimComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
-            PrimComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+        PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+        PrimComp->SetCollisionResponseToAllChannels(ECR_Block);
+        PrimComp->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
-            GetWorld()->GetTimerManager().SetTimerForNextTick([Owner, PrimComp]()
-                {
-                    if (PrimComp && PrimComp->IsValidLowLevel())
-                    {
-                        if (PrimComp != Owner->GetRootComponent())
-                        {
-                            FVector RootLocation = Owner->GetActorLocation();
-                            PrimComp->SetWorldLocation(RootLocation);
-                            PrimComp->SetRelativeLocation(FVector::ZeroVector);
-                        }
-
-                        PrimComp->SetEnableGravity(true);
-                        PrimComp->SetSimulatePhysics(true);
-                        PrimComp->WakeAllRigidBodies();
-                    }
-                });
-        }
+        PrimComp->SetMassOverrideInKg(NAME_None, 10.0f, true);
+        PrimComp->SetEnableGravity(true);
+        PrimComp->SetSimulatePhysics(true);
+        PrimComp->WakeAllRigidBodies();
     }
 
     HoldingActor = nullptr;
     return true;
+}
+
+void UPuzzleInteractionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    AActor* Owner = GetOwner();
+    if (!Owner) return;
+
+    if (HoldingActor && !Owner->GetAttachParentActor())
+    {
+        ACharacter* Character = Cast<ACharacter>(HoldingActor);
+        if (Character)
+        {
+            FVector CameraLocation;
+            FRotator CameraRotation;
+            Character->GetActorEyesViewPoint(CameraLocation, CameraRotation);
+
+            FVector NewLocation = CameraLocation +
+                (CameraRotation.Vector() * HoldOffset.X) +
+                (FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Y) * HoldOffset.Y) +
+                (FRotationMatrix(CameraRotation).GetUnitAxis(EAxis::Z) * HoldOffset.Z);
+
+            Owner->SetActorLocation(NewLocation);
+
+            if (bMatchCameraRotation)
+            {
+                Owner->SetActorRotation(CameraRotation);
+            }
+        }
+    }
 }
 
 bool UPuzzleInteractionComponent::PlaceOnPedestal(APedestal* Pedestal)

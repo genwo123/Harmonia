@@ -4,7 +4,7 @@
 
 ALevelQuestManager::ALevelQuestManager()
 {
-    PrimaryActorTick.bCanEverTick = false;
+    PrimaryActorTick.bCanEverTick = true;
     CurrentLevel = "Level_Main_0";
 
     static ConstructorHelpers::FObjectFinder<UDataTable> QuestDTObject(TEXT("/Game/Hamonia/H_DataTable/DT_LevelQuest"));
@@ -36,20 +36,44 @@ void ALevelQuestManager::BeginPlay()
         LevelToStart = CurrentLevel;
     }
 
-    if (CurrentLevel.IsEmpty() || CurrentLevel != LevelToStart)
+    if (!LevelToStart.IsEmpty())
     {
+        LastLoadedLevel = LevelToStart;
         StartLevel(LevelToStart);
+    }
+}
+
+void ALevelQuestManager::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+
+    if (!bAutoDetectLevel) return;
+
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    FString CurrentMapName = World->GetMapName();
+    CurrentMapName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+    if (CurrentMapName != LastLoadedLevel && !CurrentMapName.IsEmpty())
+    {
+        LastLoadedLevel = CurrentMapName;
+        LoadQuestProgress();
+        StartLevel(CurrentMapName);
     }
 }
 
 void ALevelQuestManager::StartLevel(const FString& LevelID)
 {
     if (!LevelDataTable) return;
+
     FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*LevelID, "");
     if (!LevelData) return;
 
     if (CurrentLevel == LevelID && SubStepCompletionStatus.Num() > 0)
     {
+
+        OnQuestUpdated.Broadcast(CurrentLevel);
         return;
     }
 
@@ -60,11 +84,14 @@ void ALevelQuestManager::StartLevel(const FString& LevelID)
     {
         SubStepCompletionStatus[i] = false;
     }
+
+    OnQuestUpdated.Broadcast(CurrentLevel);
 }
 
 void ALevelQuestManager::CompleteCurrentLevel()
 {
     if (CurrentLevel.IsEmpty()) return;
+
     CompletedLevels.AddUnique(CurrentLevel);
     SaveQuestProgress();
 }
@@ -77,6 +104,7 @@ bool ALevelQuestManager::IsLevelCompleted(const FString& LevelID)
 bool ALevelQuestManager::CanStartLevel(const FString& LevelID)
 {
     if (!LevelDataTable) return false;
+
     FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*LevelID, "");
     if (!LevelData) return false;
 
@@ -88,6 +116,7 @@ bool ALevelQuestManager::CanStartLevel(const FString& LevelID)
 FString ALevelQuestManager::GetCurrentLevelDialogue()
 {
     if (!LevelDataTable || CurrentLevel.IsEmpty()) return "";
+
     FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
     return LevelData ? LevelData->LumiDialogueID : "";
 }
@@ -95,6 +124,7 @@ FString ALevelQuestManager::GetCurrentLevelDialogue()
 FString ALevelQuestManager::GetCurrentLevelName()
 {
     if (!LevelDataTable || CurrentLevel.IsEmpty()) return "";
+
     FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
     return LevelData ? LevelData->LevelName : "";
 }
@@ -107,33 +137,33 @@ bool ALevelQuestManager::IsCurrentLevelCompleted()
 bool ALevelQuestManager::HasSubSteps()
 {
     if (!LevelDataTable || CurrentLevel.IsEmpty()) return false;
+
     FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
     return LevelData && LevelData->SubSteps.Num() > 0;
 }
 
 void ALevelQuestManager::CompleteSubStep(int32 StepIndex)
 {
-    if (SubStepCompletionStatus.IsValidIndex(StepIndex))
+    if (!SubStepCompletionStatus.IsValidIndex(StepIndex)) return;
+
+    SubStepCompletionStatus[StepIndex] = true;
+
+    bool bAllCompleted = true;
+    for (bool bCompleted : SubStepCompletionStatus)
     {
-        SubStepCompletionStatus[StepIndex] = true;
-
-        bool bAllCompleted = true;
-        for (bool bCompleted : SubStepCompletionStatus)
+        if (!bCompleted)
         {
-            if (!bCompleted)
-            {
-                bAllCompleted = false;
-                break;
-            }
+            bAllCompleted = false;
+            break;
         }
-
-        if (bAllCompleted)
-        {
-            CompleteCurrentLevel();
-        }
-
-        SaveQuestProgress();
     }
+
+    if (bAllCompleted)
+    {
+        CompleteCurrentLevel();
+    }
+
+    SaveQuestProgress();
 }
 
 bool ALevelQuestManager::IsSubStepCompleted(int32 StepIndex)
@@ -153,6 +183,7 @@ TArray<bool> ALevelQuestManager::GetAllSubStepStatus()
 int32 ALevelQuestManager::GetSubStepCount()
 {
     if (!LevelDataTable || CurrentLevel.IsEmpty()) return 0;
+
     FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
     return LevelData ? LevelData->SubSteps.Num() : 0;
 }
@@ -160,6 +191,7 @@ int32 ALevelQuestManager::GetSubStepCount()
 TArray<FString> ALevelQuestManager::GetAllSubStepTexts()
 {
     if (!LevelDataTable || CurrentLevel.IsEmpty()) return {};
+
     FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
     return LevelData ? LevelData->SubSteps : TArray<FString>();
 }
@@ -167,6 +199,7 @@ TArray<FString> ALevelQuestManager::GetAllSubStepTexts()
 FString ALevelQuestManager::GetCurrentMainObjective()
 {
     if (!LevelDataTable || CurrentLevel.IsEmpty()) return "";
+
     FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
     return LevelData ? LevelData->MainObjective : "";
 }
@@ -196,7 +229,26 @@ void ALevelQuestManager::SaveQuestProgress()
             CompletedLevels,
             SubStepCompletionStatus
         );
-        GameInstance->SaveContinueGame();
+    }
+}
+
+void ALevelQuestManager::RefreshForCurrentLevel()
+{
+    LoadQuestProgress();
+
+    if (bAutoDetectLevel)
+    {
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            FString LevelName = World->GetMapName();
+            LevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+            if (!LevelName.IsEmpty())
+            {
+                StartLevel(LevelName);
+            }
+        }
     }
 }
 
