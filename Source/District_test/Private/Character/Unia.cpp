@@ -27,27 +27,48 @@ AUnia::AUnia()
 
 	AIControllerClass = AUniaAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+
+	bLevelDialogueEnded = false;
+	CurrentLevelName = "";
 }
 
 void AUnia::BeginPlay()
 {
 	Super::BeginPlay();
 
-	UE_LOG(LogTemp, Warning, TEXT("[Unia] BeginPlay - Location: %s"), *GetActorLocation().ToString());
-
 	InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &AUnia::OnInteractionSphereBeginOverlap);
 	InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &AUnia::OnInteractionSphereEndOverlap);
-
-	UE_LOG(LogTemp, Warning, TEXT("[Unia] Overlap events bound"));
 
 	FindPlayerPawn();
 	InitializeLevelSettings();
 	LoadStateFromGameInstance();
+
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		CurrentLevelName = World->GetMapName();
+		CurrentLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+	}
+
+	bLevelDialogueEnded = false;
 }
 
 void AUnia::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		FString NewLevelName = World->GetMapName();
+		NewLevelName.RemoveFromStart(World->StreamingLevelsPrefix);
+
+		if (NewLevelName != CurrentLevelName && !NewLevelName.IsEmpty())
+		{
+			CurrentLevelName = NewLevelName;
+			ResetLevelDialogueState();
+		}
+	}
 
 	if (bLookAtPlayer && PlayerPawn && bPlayerInRange)
 	{
@@ -62,16 +83,28 @@ void AUnia::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 
 void AUnia::Interact_Implementation(AActor* Interactor)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Unia] Interact_Implementation called"));
 	StartDialogue(Interactor);
 }
 
 bool AUnia::CanInteract_Implementation(AActor* Interactor)
 {
-	bool bCan = bPlayerInRange && !IsInDialogue();
-	UE_LOG(LogTemp, Warning, TEXT("[Unia] CanInteract: %s"), bCan ? TEXT("TRUE") : TEXT("FALSE"));
-	return bCan;
+	if (bLevelDialogueEnded)
+	{
+		return false;
+	}
+
+	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(Interactor);
+	if (!Player)
+	{
+		return false;
+	}
+
+	float Distance = FVector::Dist(GetActorLocation(), Player->GetActorLocation());
+
+	return Distance <= InteractionRange && !IsInDialogue();
 }
+
+
 
 FString AUnia::GetInteractionText_Implementation()
 {
@@ -85,42 +118,37 @@ EInteractionType AUnia::GetInteractionType_Implementation()
 
 void AUnia::StartDialogue(AActor* Interactor)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Unia] StartDialogue called"));
-
 	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(Interactor);
 	if (!Player)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[Unia] Interactor is not HamoniaCharacter"));
 		return;
 	}
 
 	UDialogueManagerComponent* PlayerDM = Player->GetDialogueManagerComponent();
-	if (!PlayerDM)
+	if (!PlayerDM || !PlayerDM->DialogueDataTable || PlayerDM->bIsInDialogue)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[Unia] PlayerDM is null"));
 		return;
 	}
 
-	if (!PlayerDM->DialogueDataTable)
-	{
-		UE_LOG(LogTemp, Error, TEXT("[Unia] DialogueDataTable is null"));
-		return;
-	}
-
-	if (PlayerDM->bIsInDialogue)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Unia] Already in dialogue"));
-		return;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("[Unia] Broadcasting dialogue: %s"), *DialogueSceneID);
 	OnUniaDialogueActivated.Broadcast(DialogueSceneID, PlayerDM->DialogueDataTable);
 	OnDialogueStarted();
-	UE_LOG(LogTemp, Warning, TEXT("[Unia] Dialogue broadcast complete"));
 }
 
 void AUnia::EndDialogue()
 {
+	if (PlayerPawn)
+	{
+		AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(PlayerPawn);
+		if (Player)
+		{
+			UDialogueManagerComponent* PlayerDM = Player->GetDialogueManagerComponent();
+			if (PlayerDM && PlayerDM->IsCurrentDialogueLevelEnd())
+			{
+				SetLevelDialogueEnded(true);
+			}
+		}
+	}
+
 	SetDialogueState(false);
 }
 
@@ -162,11 +190,20 @@ void AUnia::SetDialogueState(bool bInDialogue)
 
 void AUnia::HandlePlayerInteraction()
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Unia] HandlePlayerInteraction called"));
 	if (PlayerPawn)
 	{
 		StartDialogue(PlayerPawn);
 	}
+}
+
+void AUnia::SetLevelDialogueEnded(bool bEnded)
+{
+	bLevelDialogueEnded = bEnded;
+}
+
+void AUnia::ResetLevelDialogueState()
+{
+	bLevelDialogueEnded = false;
 }
 
 void AUnia::EnableFollowing()
@@ -375,31 +412,21 @@ void AUnia::UpdateLookAtPlayer(float DeltaTime)
 void AUnia::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Unia] Overlap detected with: %s"), *OtherActor->GetName());
-
 	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(OtherActor);
 	if (Player)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Unia] Player entered range"));
 		bPlayerInRange = true;
 		Player->SetCurrentInteractableNPC(this);
 		OnPlayerEnterRange(Player);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Unia] Not a player"));
 	}
 }
 
 void AUnia::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[Unia] Overlap ended with: %s"), *OtherActor->GetName());
-
 	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(OtherActor);
 	if (Player)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Unia] Player exited range"));
 		bPlayerInRange = false;
 		Player->RemoveInteractableNPC(this);
 		OnPlayerExitRange(Player);
@@ -409,14 +436,6 @@ void AUnia::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedCompone
 void AUnia::FindPlayerPawn()
 {
 	PlayerPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
-	if (PlayerPawn)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Unia] Player found: %s"), *PlayerPawn->GetName());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("[Unia] Player not found!"));
-	}
 }
 
 void AUnia::CheckSpotArrival()

@@ -1,4 +1,3 @@
-// DialogueManagerComponent.h - 통합 버전
 #pragma once
 
 #include "CoreMinimal.h"
@@ -31,7 +30,7 @@ enum class EDialogueCategory : uint8
 };
 
 USTRUCT(BlueprintType)
-struct FDialogueData : public FTableRowBase
+struct DISTRICT_TEST_API FDialogueData : public FTableRowBase
 {
     GENERATED_BODY()
 
@@ -78,7 +77,7 @@ struct FDialogueData : public FTableRowBase
     float DisplayDuration = 0.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Control")
-    bool bChainBreak = false;  // 추가된 필드
+    bool bChainBreak = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Condition")
     TArray<FString> CustomConditions;
@@ -106,7 +105,7 @@ struct FDialogueData : public FTableRowBase
         bBlockOnIncomplete = false;
         DisplayDuration = 0.0f;
         bHasChoices = false;
-        bChainBreak = false;  // 추가된 초기화
+        bChainBreak = false;
         CustomConditions = {};
         bIsLocked = false;
         UnlockCondition = "";
@@ -193,7 +192,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     bool CheckAllConditions(const FDialogueData& DialogueData);
 
-    // 추가된 함수들
     UFUNCTION(BlueprintCallable, Category = "Dialogue Save")
     void SaveLastDialogueID(const FString& DialogueID);
 
@@ -206,6 +204,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Dialogue Lock")
     FString GetLockedDialogueReplacement(const FString& DialogueID);
 
+     
+
+    UFUNCTION(BlueprintPure, Category = "Dialogue")
+    bool IsCurrentDialogueLevelEnd() const;
+
 protected:
     FDialogueData* GetDialogueData(const FString& DialogueID);
     void ProcessDialogue(const FDialogueData& DialogueData);
@@ -215,9 +218,12 @@ protected:
     class ALevelQuestManager* FindLevelQuestManager();
     bool ValidateSubStepRequirement(const FDialogueData& DialogueData);
 
+    FDialogueData* GetCurrentDialogueData();
 private:
     FDialogueData CurrentDialogue;
 
     UPROPERTY()
     class ALevelQuestManager* CachedQuestManager;
+
+    bool bIsLevelEnd = false;
 };

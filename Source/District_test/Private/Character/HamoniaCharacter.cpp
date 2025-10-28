@@ -601,6 +601,20 @@ void AHamoniaCharacter::CheckForInteractables()
 		float ClosestDistance = InteractionDistance;
 		AActor* ClosestActor = nullptr;
 
+		for (TActorIterator<AUnia> It(GetWorld()); It; ++It)
+		{
+			AUnia* Unia = *It;
+			if (IsValid(Unia))
+			{
+				float Distance = FVector::Distance(GetActorLocation(), Unia->GetActorLocation());
+				if (Distance < ClosestDistance && Unia->CanInteract_Implementation(this))
+				{
+					ClosestDistance = Distance;
+					ClosestActor = Unia;
+				}
+			}
+		}
+
 		for (TActorIterator<APedestal> It(GetWorld()); It; ++It)
 		{
 			APedestal* Pedestal = *It;

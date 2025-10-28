@@ -3,45 +3,44 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Save_Instance/Hamoina_GameInstance.h"
+#include "TimerManager.h"
 
 UDialogueManagerComponent::UDialogueManagerComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
     CachedQuestManager = nullptr;
+    bIsLevelEnd = false;
 }
 
 void UDialogueManagerComponent::BeginPlay()
 {
     Super::BeginPlay();
     CachedQuestManager = FindLevelQuestManager();
+    bIsInDialogue = false;
+    bIsLevelEnd = false;
+    CurrentDialogueID = "";
 }
 
 bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
 {
-    UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Attempting to start: %s"), *DialogueID);
-
     if (bIsInDialogue)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Already in dialogue, aborting"));
+        return false;
+    }
+
+    if (bIsLevelEnd)
+    {
         return false;
     }
 
     FDialogueData* DialogueData = GetDialogueData(DialogueID);
     if (!DialogueData)
     {
-        UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Dialogue data not found: %s"), *DialogueID);
-        return false;
-    }
-
-    if (DialogueData->bIsLevelEnd)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Level ended dialogue, blocking"));
         return false;
     }
 
     if (!CheckAllConditions(*DialogueData))
     {
-        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Conditions not met for: %s"), *DialogueID);
         return false;
     }
 
@@ -49,8 +48,19 @@ bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
     CurrentDialogueID = DialogueID;
     CurrentDialogue = *DialogueData;
 
-    UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Successfully started: %s"), *DialogueID);
     ProcessDialogue(*DialogueData);
+
+    if (DialogueData->bIsLevelEnd)
+    {
+        float Duration = DialogueData->DisplayDuration > 0 ? DialogueData->DisplayDuration : 5.0f;
+
+        FTimerHandle LevelEndTimer;
+        GetWorld()->GetTimerManager().SetTimer(LevelEndTimer, [this]()
+            {
+                bIsLevelEnd = true;
+                EndDialogue();
+            }, Duration, false);
+    }
 
     return true;
 }
@@ -62,10 +72,7 @@ void UDialogueManagerComponent::EndDialogue()
         return;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("[EndDialogue] Ending dialogue"));
-
     bIsInDialogue = false;
-    FString PrevDialogueID = CurrentDialogueID;
     CurrentDialogueID = "";
 
     OnDialogueEnded.Broadcast();
@@ -95,19 +102,14 @@ void UDialogueManagerComponent::ProgressDialogue()
 
     if (NextDialogueData->bChainBreak)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[ProgressDialogue] ChainBreak: %s"), *NextID);
-
-        // ChainBreak 대화까지 표시
         EndDialogue();
         StartDialogue(NextID);
 
-        // 다음 ID 저장 (ChainBreak 이후)
         if (!NextDialogueData->NextDialogueID.IsEmpty())
         {
             SaveLastDialogueID(NextDialogueData->NextDialogueID);
         }
 
-        // 대화 강제 종료 (ChainBreak!)
         FTimerHandle ChainBreakTimer;
         GetWorld()->GetTimerManager().SetTimer(ChainBreakTimer, [this]()
             {
@@ -131,7 +133,6 @@ void UDialogueManagerComponent::ProgressDialogue()
 
             SaveLastDialogueID(NextID);
 
-            // 랜덤 대사 후 종료
             FTimerHandle LockTimer;
             GetWorld()->GetTimerManager().SetTimer(LockTimer, [this]()
                 {
@@ -195,8 +196,6 @@ FString UDialogueManagerComponent::FindDialogueForCurrentLevel()
     FString SavedID = GetLastDialogueID();
     if (!SavedID.IsEmpty())
     {
-        UE_LOG(LogTemp, Warning, TEXT("[FindDialogue] Found saved ID: %s"), *SavedID);
-
         FDialogueData* SavedData = GetDialogueData(SavedID);
         if (SavedData && !SavedData->bIsLevelEnd)
         {
@@ -424,7 +423,6 @@ void UDialogueManagerComponent::SaveLastDialogueID(const FString& DialogueID)
         if (UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData())
         {
             SaveData->SetPendingTriggerDialogue(DialogueID);
-            UE_LOG(LogTemp, Warning, TEXT("[SaveLastDialogueID] Saved: %s"), *DialogueID);
         }
     }
 }
@@ -435,8 +433,7 @@ FString UDialogueManagerComponent::GetLastDialogueID()
     {
         if (UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData())
         {
-            FString SavedID = SaveData->GetPendingTriggerDialogue();
-            return SavedID;
+            return SaveData->GetPendingTriggerDialogue();
         }
     }
     return "";
@@ -480,4 +477,19 @@ FString UDialogueManagerComponent::GetLockedDialogueReplacement(const FString& D
         }
     }
     return DialogueID;
+}
+
+FDialogueData* UDialogueManagerComponent::GetCurrentDialogueData()
+{
+    if (CurrentDialogueID.IsEmpty())
+    {
+        return nullptr;
+    }
+
+    return &CurrentDialogue;
+}
+
+bool UDialogueManagerComponent::IsCurrentDialogueLevelEnd() const
+{
+    return bIsLevelEnd;
 }
