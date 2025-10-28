@@ -83,7 +83,7 @@ void AUnia::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 
 void AUnia::Interact_Implementation(AActor* Interactor)
 {
-	StartDialogue(Interactor);
+	//StartDialogue(Interactor);
 }
 
 bool AUnia::CanInteract_Implementation(AActor* Interactor)
@@ -192,6 +192,8 @@ void AUnia::HandlePlayerInteraction()
 {
 	if (PlayerPawn)
 	{
+		
+
 		StartDialogue(PlayerPawn);
 	}
 }

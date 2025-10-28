@@ -427,7 +427,6 @@ void AHamoniaCharacter::Interact()
 
 	if (CurrentInteractableNPC)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Player] NPC Interact - bIsLookingAtInteractable: %s"), bIsLookingAtInteractable ? TEXT("TRUE") : TEXT("FALSE"));
 		CurrentInteractableNPC->HandlePlayerInteraction();
 		return;
 	}
