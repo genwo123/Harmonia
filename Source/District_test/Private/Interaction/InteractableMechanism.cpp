@@ -282,3 +282,26 @@ void AInteractableMechanism::HideInteractionWidget_Implementation()
         InteractionPromptWidgetComponent->SetVisibility(false);
     }
 }
+
+void AInteractableMechanism::OpenConnectedDoors()
+{
+    if (bIsCompleted && !bCanBeUsedAgain)
+    {
+        return;
+    }
+
+    if (InteractionSound)
+    {
+        UGameplayStatics::PlaySound2D(this, InteractionSound);
+    }
+
+    bIsCompleted = true;
+
+    for (AInteractableMechanism* Door : ConnectedDoors)
+    {
+        if (Door)
+        {
+            Door->OnRequiredMechanismCompleted(MechanismID);
+        }
+    }
+}

@@ -1,10 +1,7 @@
+// GridTile.cpp
 #include "Gameplay/GridTile.h"
 #include "Gameplay/GridMazeManager.h"
-#include "Components/StaticMeshComponent.h"
-#include "Components/PointLightComponent.h"
-#include "Components/SphereComponent.h"
 #include "Engine/Engine.h"
-#include "Sound/SoundBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "Engine/StaticMesh.h"
@@ -50,24 +47,18 @@ AGridTile::AGridTile()
     TileLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("TileLight"));
     TileLight->SetupAttachment(PillarMesh);
     TileLight->SetRelativeLocation(FVector(0.0f, 0.0f, LightHeight));
-
-    TileLight->SetIntensity(1500.0f);
-    TileLight->SetLightColor(FLinearColor::Gray);
-    TileLight->SetAttenuationRadius(1000.0f);
+    TileLight->SetIntensity(0.0f);
+    TileLight->SetLightColor(InactiveColor);
+    TileLight->SetAttenuationRadius(LightRadius);
     TileLight->SetSourceRadius(20.0f);
     TileLight->SetMobility(EComponentMobility::Movable);
-    TileLight->SetVisibility(true);
+    TileLight->SetVisibility(false);
     TileLight->SetCastShadows(true);
-
-    ActiveLightIntensity = 1500.0f;
-    DefaultLightIntensity = 1500.0f;
-    LightRadius = 1000.0f;
-    LightHeight = 100.0f;
 
     InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
     InteractionSphere->SetupAttachment(PillarMesh);
-    InteractionSphere->SetSphereRadius(100.0f);
-    InteractionSphere->SetRelativeLocation(FVector(0.0f, 0.0f, 50.0f));
+    InteractionSphere->SetSphereRadius(150.0f);
+    InteractionSphere->SetRelativeLocation(FVector(0.0f, 0.0f, 250.0f));
     InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
@@ -78,10 +69,18 @@ AGridTile::AGridTile()
 void AGridTile::BeginPlay()
 {
     Super::BeginPlay();
-
     ForceMobilitySettings();
+    SetTileState(ETileState::Inactive);
+}
 
-    SetTileState(ETileState::Default);
+void AGridTile::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+
+    if (bIsBlinking)
+    {
+        UpdateBlinking(DeltaTime);
+    }
 }
 
 void AGridTile::SetTileState(ETileState NewState)
@@ -92,174 +91,125 @@ void AGridTile::SetTileState(ETileState NewState)
         CurrentState = NewState;
 
         StopBlinking();
-        StopPulsing();
-
-        FLinearColor StateColor = GetCurrentStateColor();
-
-        switch (NewState)
-        {
-        case ETileState::Default:
-            TurnOnLight(StateColor);
-            break;
-
-        case ETileState::Start:
-            TurnOnLight(StateColor);
-            break;
-
-        case ETileState::StartPoint:
-            TurnOnLight(StateColor);
-            if (bEnableBlinking)
-            {
-                StartBlinking(0.0f);
-            }
-            break;
-
-        case ETileState::Correct:
-            TurnOnLight(StateColor);
-            PlayCorrectSound();
-            OnCorrectInteraction();
-            break;
-
-        case ETileState::Wrong:
-            TurnOnLight(StateColor);
-            if (bEnableBlinking)
-            {
-                StartBlinking(3.0f);
-            }
-            PlayWrongSound();
-            OnWrongInteraction();
-            break;
-
-        case ETileState::Goal:
-            TurnOnLight(StateColor);
-            break;
-
-        case ETileState::Hint:
-            TurnOnLight(StateColor);
-            SetLightIntensity(ActiveLightIntensity * 0.7f);
-            break;
-
-        default:
-            TurnOnLight(StateColor);
-            break;
-        }
+        ApplyStateVisuals(NewState);
 
         OnTileStateChanged.Broadcast(NewState);
         OnStateChanged(OldState, NewState);
     }
 }
 
+void AGridTile::ApplyStateVisuals(ETileState State)
+{
+    FLinearColor StateColor;
+    float StateIntensity;
+
+    switch (State)
+    {
+    case ETileState::Inactive:
+        StateColor = InactiveColor;
+        StateIntensity = InactiveLightIntensity;
+        TurnOffLight();
+        return;
+
+    case ETileState::Preview:
+        StateColor = PreviewColor;
+        StateIntensity = PreviewLightIntensity;
+        break;
+
+    case ETileState::Ready:
+        StateColor = ReadyColor;
+        StateIntensity = ReadyLightIntensity;
+        break;
+
+    case ETileState::FirstStep:
+        StateColor = FirstStepColor;
+        StateIntensity = FirstStepLightIntensity;
+        if (bEnableBlinking && bBlinkOnFirstStep)
+        {
+            StartBlinking(0.0f);  // 무한 깜박임
+        }
+        break;
+
+    case ETileState::Correct:
+        StateColor = CorrectColor;
+        StateIntensity = CorrectLightIntensity;
+        PlayCorrectSound();
+        OnCorrectInteraction();
+        break;
+
+    case ETileState::Wrong:
+        StateColor = WrongColor;
+        StateIntensity = WrongLightIntensity;
+        if (bEnableBlinking && bBlinkOnWrong)
+        {
+            StartBlinking(3.0f);
+        }
+        PlayWrongSound();
+        OnWrongInteraction();
+        break;
+
+    default:
+        StateColor = InactiveColor;
+        StateIntensity = InactiveLightIntensity;
+        break;
+    }
+
+    TurnOnLight(StateColor, StateIntensity);
+}
+
 FLinearColor AGridTile::GetCurrentStateColor() const
 {
-    if (OwnerManager)
-    {
-        switch (CurrentState)
-        {
-        case ETileState::Default:
-            return OwnerManager->WaitingColor;
-        case ETileState::Start:
-            return OwnerManager->ReadyColor;
-        case ETileState::Correct:
-            return OwnerManager->CorrectColor;
-        case ETileState::Wrong:
-            return OwnerManager->WrongColor;
-        case ETileState::StartPoint:
-            return FLinearColor(0.4f, 1.0f, 0.4f, 1.0f);
-        case ETileState::Goal:
-            return FLinearColor::Yellow;
-        case ETileState::Hint:
-            return FLinearColor(0.8f, 0.4f, 1.0f, 1.0f);
-        default:
-            return OwnerManager->WaitingColor;
-        }
-    }
-
-    FLinearColor CustomColor = GetCustomStateColor(CurrentState);
-    if (CustomColor != FLinearColor::Black)
-    {
-        return CustomColor;
-    }
-
     switch (CurrentState)
     {
-    case ETileState::Default:
-        return WaitingColor;
-    case ETileState::Start:
+    case ETileState::Inactive:
+        return InactiveColor;
+    case ETileState::Preview:
+        return PreviewColor;
+    case ETileState::Ready:
         return ReadyColor;
-    case ETileState::StartPoint:
-        return StartPointColor;
+    case ETileState::FirstStep:
+        return FirstStepColor;
     case ETileState::Correct:
         return CorrectColor;
     case ETileState::Wrong:
         return WrongColor;
-    case ETileState::Goal:
-        return GoalColor;
-    case ETileState::Hint:
-        return HintColor;
     default:
-        return WaitingColor;
+        return InactiveColor;
     }
 }
 
-void AGridTile::UpdateFromManagerColors()
+float AGridTile::GetCurrentLightIntensity() const
 {
-    if (OwnerManager && CurrentState != ETileState::Default)
+    switch (CurrentState)
     {
-        FLinearColor NewColor = GetCurrentStateColor();
-        if (TileLight)
-        {
-            TileLight->SetLightColor(NewColor);
-        }
+    case ETileState::Inactive:
+        return InactiveLightIntensity;
+    case ETileState::Preview:
+        return PreviewLightIntensity;
+    case ETileState::Ready:
+        return ReadyLightIntensity;
+    case ETileState::FirstStep:
+        return FirstStepLightIntensity;
+    case ETileState::Correct:
+        return CorrectLightIntensity;
+    case ETileState::Wrong:
+        return WrongLightIntensity;
+    default:
+        return InactiveLightIntensity;
     }
 }
 
-void AGridTile::ForceMobilitySettings()
-{
-    if (TileMesh) TileMesh->SetMobility(EComponentMobility::Movable);
-    if (PillarMesh) PillarMesh->SetMobility(EComponentMobility::Movable);
-    if (TileLight) TileLight->SetMobility(EComponentMobility::Movable);
-    if (InteractionSphere) InteractionSphere->SetMobility(EComponentMobility::Movable);
-    if (RootSceneComponent) RootSceneComponent->SetMobility(EComponentMobility::Movable);
-}
-
-void AGridTile::SetGridPosition(int32 X, int32 Y)
-{
-    GridX = X;
-    GridY = Y;
-
-    FString TileName = FString::Printf(TEXT("GridTile_%d_%d"), X, Y);
-
-#if WITH_EDITOR
-    SetActorLabel(*TileName);
-#endif
-}
-
-void AGridTile::SetOwnerManager(AGridMazeManager* Manager)
-{
-    OwnerManager = Manager;
-}
-
-void AGridTile::SetTileThickness(float NewThickness)
-{
-    if (TileMesh)
-    {
-        FVector CurrentScale = TileMesh->GetRelativeScale3D();
-        CurrentScale.Z = NewThickness / 100.0f;
-        TileMesh->SetRelativeScale3D(CurrentScale);
-    }
-}
-
-void AGridTile::TurnOnLight(FLinearColor Color)
+void AGridTile::TurnOnLight(FLinearColor Color, float Intensity)
 {
     if (TileLight)
     {
         TileLight->SetLightColor(Color);
-        TileLight->SetIntensity(ActiveLightIntensity);
+        TileLight->SetIntensity(Intensity);
         TileLight->SetVisibility(true);
     }
 
     bIsActivated = true;
-    OnLightTurnedOn(Color);
+    OnLightTurnedOn(Color, Intensity);
 }
 
 void AGridTile::TurnOffLight()
@@ -267,6 +217,7 @@ void AGridTile::TurnOffLight()
     if (TileLight)
     {
         TileLight->SetIntensity(0.0f);
+        TileLight->SetVisibility(false);
     }
 
     bIsActivated = false;
@@ -313,51 +264,28 @@ void AGridTile::StopBlinking()
 
         if (TileLight && bIsActivated)
         {
-            TileLight->SetIntensity(ActiveLightIntensity);
+            TileLight->SetIntensity(GetCurrentLightIntensity());
         }
     }
 }
 
-void AGridTile::StartPulsing(float Duration)
+void AGridTile::UpdateBlinking(float DeltaTime)
 {
-    if (!bEnablePulsing) return;
+    if (!bIsBlinking || !TileLight) return;
 
-    bIsPulsing = true;
+    float Time = GetWorld()->GetTimeSeconds();
+    float BlinkFactor = FMath::Sin(Time * BlinkSpeed * PI) * 0.5f + 0.5f;
 
-    GetWorld()->GetTimerManager().SetTimer(PulseTimerHandle, [this]()
-        {
-            StopPulsing();
-        }, Duration, false);
-}
+    float TargetIntensity = GetCurrentLightIntensity();
+    float CurrentIntensity = FMath::Lerp(TargetIntensity * 0.3f, TargetIntensity, BlinkFactor);
 
-void AGridTile::StopPulsing()
-{
-    if (bIsPulsing)
-    {
-        bIsPulsing = false;
-        GetWorld()->GetTimerManager().ClearTimer(PulseTimerHandle);
-    }
-}
-
-void AGridTile::UpdateTileVisuals()
-{
-    FLinearColor CurrentColor = GetCurrentStateColor();
-
-    if (CurrentState == ETileState::Default)
-    {
-        TurnOffLight();
-    }
-    else
-    {
-        TurnOnLight(CurrentColor);
-    }
+    TileLight->SetIntensity(CurrentIntensity);
 }
 
 void AGridTile::ResetToDefault()
 {
-    SetTileState(ETileState::Default);
+    SetTileState(ETileState::Inactive);
     StopBlinking();
-    StopPulsing();
     bIsActivated = false;
 }
 
@@ -367,11 +295,6 @@ void AGridTile::PlayTileSound(USoundBase* Sound)
     {
         UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation(), SoundVolume);
     }
-}
-
-void AGridTile::PlayInteractionSound()
-{
-    PlayTileSound(InteractionSound);
 }
 
 void AGridTile::PlayCorrectSound()
@@ -389,45 +312,43 @@ void AGridTile::SetCanBeInteracted(bool bCanInteract)
     bCanBeInteracted = bCanInteract;
 }
 
-void AGridTile::UpdateBlinking(float DeltaTime)
+void AGridTile::SetGridPosition(int32 X, int32 Y)
 {
-    if (!bIsBlinking || !TileLight) return;
+    GridX = X;
+    GridY = Y;
 
-    float Time = GetWorld()->GetTimeSeconds();
-    float BlinkFactor = FMath::Sin(Time * BlinkSpeed * PI) * 0.5f + 0.5f;
-    float CurrentIntensity = FMath::Lerp(DefaultLightIntensity, ActiveLightIntensity, BlinkFactor);
+    FString TileName = FString::Printf(TEXT("GridTile_%d_%d"), X, Y);
 
-    TileLight->SetIntensity(CurrentIntensity);
+#if WITH_EDITOR
+    SetActorLabel(*TileName);
+#endif
 }
 
-void AGridTile::UpdatePulsing(float DeltaTime)
+void AGridTile::SetOwnerManager(AGridMazeManager* Manager)
 {
-    if (!bIsPulsing) return;
-
-    float Time = GetWorld()->GetTimeSeconds();
-    float PulseFactor = FMath::Sin(Time * PulseSpeed * PI) * 0.3f + 0.7f;
+    OwnerManager = Manager;
 }
 
-void AGridTile::Tick(float DeltaTime)
+void AGridTile::SetTileThickness(float NewThickness)
 {
-    Super::Tick(DeltaTime);
-
-    if (bIsBlinking)
+    if (TileMesh)
     {
-        UpdateBlinking(DeltaTime);
-    }
-
-    if (bIsPulsing)
-    {
-        UpdatePulsing(DeltaTime);
+        FVector CurrentScale = TileMesh->GetRelativeScale3D();
+        CurrentScale.Z = NewThickness / 100.0f;
+        TileMesh->SetRelativeScale3D(CurrentScale);
     }
 }
 
-FLinearColor AGridTile::GetCustomStateColor_Implementation(ETileState State) const
+void AGridTile::ForceMobilitySettings()
 {
-    return FLinearColor::Black;
+    if (TileMesh) TileMesh->SetMobility(EComponentMobility::Movable);
+    if (PillarMesh) PillarMesh->SetMobility(EComponentMobility::Movable);
+    if (TileLight) TileLight->SetMobility(EComponentMobility::Movable);
+    if (InteractionSphere) InteractionSphere->SetMobility(EComponentMobility::Movable);
+    if (RootSceneComponent) RootSceneComponent->SetMobility(EComponentMobility::Movable);
 }
 
+// InteractableInterface 구현
 void AGridTile::Interact_Implementation(AActor* Interactor)
 {
     if (!bCanBeInteracted) return;
@@ -438,8 +359,7 @@ void AGridTile::Interact_Implementation(AActor* Interactor)
     }
 
     OnTileStepped.Broadcast(this, Interactor);
-
-    bIsActivated = true;
+    OnPlayerInteracted(Interactor);
 }
 
 bool AGridTile::CanInteract_Implementation(AActor* Interactor)

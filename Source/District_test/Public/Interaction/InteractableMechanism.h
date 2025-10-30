@@ -215,6 +215,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Interaction|Widget")
     int32 GetMaxAttempts() const { return MaxAttempts; }
 
+    UFUNCTION(BlueprintCallable, Category = "Interaction|Hit")
+    void OpenConnectedDoors();
+
     UFUNCTION(BlueprintCallable, Category = "Interaction|Widget")
     int32 GetMiniGameStageNumber() const { return MiniGameStageNumber; }
 

@@ -162,6 +162,7 @@ void UStrokeGrid::LoadStageDataFromTable(const FStrokeStageData& StageData)
 
     if (StageNameText)
     {
+        
         StageNameText->SetText(FText::FromString(StageData.StageName));
     }
 

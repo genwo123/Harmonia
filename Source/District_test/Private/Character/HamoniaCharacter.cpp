@@ -416,14 +416,20 @@ void AHamoniaCharacter::OnEKeyPressed()
 
 void AHamoniaCharacter::Interact()
 {
+
+
 	if (DialogueManager)
 	{
+
 		if (DialogueManager->bIsInDialogue)
 		{
+
 			OnDialogueProgressRequested.Broadcast();
-			return;
+
+			return;  
 		}
 	}
+
 
 	if (CurrentInteractableNPC)
 	{
@@ -476,6 +482,7 @@ void AHamoniaCharacter::Interact()
 		{
 			return;
 		}
+
 		APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
 		if (Pedestal)
 		{
@@ -501,6 +508,7 @@ void AHamoniaCharacter::Interact()
 			}
 			return;
 		}
+
 		UPuzzleInteractionComponent* InteractionComp = CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
 		if (InteractionComp && InteractionComp->bCanBePickedUp)
 		{
@@ -516,6 +524,7 @@ void AHamoniaCharacter::Interact()
 			}
 			return;
 		}
+
 		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
 		if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 		{
@@ -748,6 +757,26 @@ bool AHamoniaCharacter::HandleInventoryItemInteraction(UItem* Item, AActor* Targ
 		return false;
 	}
 
+	// PuzzleStarter와 상호작용 (새로 추가)
+	APuzzleStarter* PuzzleStarter = Cast<APuzzleStarter>(TargetActor);
+	if (PuzzleStarter)
+	{
+		FName ItemTag = FName(*Item->Name);
+
+		bool bInserted = PuzzleStarter->TryInsertCoreByTag(ItemTag);
+
+		if (bInserted)
+		{
+			if (InventoryComponent)
+			{
+				InventoryComponent->RemoveItem(Item);
+			}
+			return true;
+		}
+		return false;
+	}
+
+	// 기존 Key 로직
 	if (Item->Name.Contains("Key"))
 	{
 		AInteractableMechanism* Door = Cast<AInteractableMechanism>(TargetActor);
@@ -761,6 +790,7 @@ bool AHamoniaCharacter::HandleInventoryItemInteraction(UItem* Item, AActor* Targ
 		}
 	}
 
+	// 기존 Tool 로직
 	if (Item->Name.Contains("Tool"))
 	{
 		APedestal* Pedestal = Cast<APedestal>(TargetActor);
@@ -779,6 +809,7 @@ bool AHamoniaCharacter::HandleInventoryItemInteraction(UItem* Item, AActor* Targ
 
 	return false;
 }
+
 
 void AHamoniaCharacter::UpdateHeldItemDisplay(UItem* NewItem)
 {

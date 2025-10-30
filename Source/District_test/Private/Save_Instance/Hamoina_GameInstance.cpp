@@ -87,8 +87,23 @@ bool UHamoina_GameInstance::SaveToStageSlot(int32 StageNumber)
     if (StageNumber < 2 || StageNumber > 10)
         return false;
 
+    CollectCurrentGameState();
+
+    if (CurrentSaveData)
+    {
+        FString CorrectLevelName = GetLevelNameFromStage(StageNumber);
+        CurrentSaveData->PlayerData.CurrentLevel = CorrectLevelName;
+    }
+
     FString StageSlotName = GetStageSlotName(StageNumber);
-    return SaveGame(false, StageSlotName);
+
+    FString SavePath = GetCustomSaveDirectory() + TEXT("/") + StageSlotName + TEXT(".sav");
+    CurrentSaveData->SetSaveInfo(StageSlotName, false);
+
+    bool bSaveSuccess = SaveGameToCustomPath(CurrentSaveData, SavePath);
+    OnGameSaved.Broadcast(bSaveSuccess);
+
+    return bSaveSuccess;
 }
 
 bool UHamoina_GameInstance::LoadFromStageSlot(int32 StageNumber)
@@ -122,6 +137,11 @@ bool UHamoina_GameInstance::LoadStageAndOpenLevel(int32 StageNumber)
 
 FString UHamoina_GameInstance::GetLevelNameFromStage(int32 StageNumber) const
 {
+    if (StageNumber == 7)
+    {
+        return TEXT("Level_Main_7_Hall");
+    }
+
     return FString::Printf(TEXT("Level_Main_%d"), StageNumber);
 }
 
@@ -260,10 +280,26 @@ FString UHamoina_GameInstance::GetCurrentDialogueID() const
 {
     if (CurrentSaveData)
     {
+        // 먼저 저장된 CurrentDialogueID 확인
+        FString SavedID = CurrentSaveData->GetCurrentDialogueID();
+
+        // 저장된 ID가 있으면 그걸 반환
+        if (!SavedID.IsEmpty())
+        {
+            return SavedID;
+        }
+
+        // 없으면 기존 로직 (Step 기반)
         FString CurrentLevel = GetLevelNameFromStage(GetCurrentStageNumber());
         return CurrentSaveData->GetCurrentDialogueForLevel(CurrentLevel);
     }
     return TEXT("");
+}
+
+
+FString UHamoina_GameInstance::GetTriggerDialogueID() const
+{
+    return CurrentSaveData ? CurrentSaveData->GetTriggerDialogueID() : TEXT("");
 }
 
 void UHamoina_GameInstance::UpdatePlayerLocation(const FString& LevelName, const FVector& Location, const FRotator& Rotation)
@@ -393,6 +429,11 @@ void UHamoina_GameInstance::DevUnlockAllLevels()
 
 int32 UHamoina_GameInstance::GetStageNumberFromLevel(const FString& LevelName) const
 {
+    if (LevelName.Contains(TEXT("Level_Main_7_Hall")))
+    {
+        return 7;
+    }
+
     if (LevelName.Contains(TEXT("Level_Main_")))
     {
         int32 MainIndex = LevelName.Find(TEXT("Level_Main_"), ESearchCase::IgnoreCase);
@@ -490,10 +531,8 @@ void UHamoina_GameInstance::CollectCurrentGameState()
         FVector PlayerLocation = PC->GetPawn()->GetActorLocation();
         FRotator PlayerRotation = PC->GetPawn()->GetActorRotation();
 
-        FString MapName = World->GetMapName();
-        MapName.RemoveFromStart(World->StreamingLevelsPrefix);
-
-        CurrentSaveData->SetPlayerLocation(MapName, PlayerLocation, PlayerRotation);
+        CurrentSaveData->PlayerData.PlayerLocation = PlayerLocation;
+        CurrentSaveData->PlayerData.PlayerRotation = PlayerRotation;
     }
 
     CurrentSaveData->UpdatePlayTime(World->GetDeltaSeconds());
@@ -665,12 +704,28 @@ void UHamoina_GameInstance::SetAutoSaveInterval(float NewInterval)
     }
 }
 
+void UHamoina_GameInstance::SetCurrentDialogueID(const FString& DialogueID)
+{
+    if (CurrentSaveData)
+    {
+        CurrentSaveData->SetCurrentDialogueID(DialogueID);
+        // 저장 후 즉시 세이브
+        SaveContinueGame();
+    }
+}
+
 void UHamoina_GameInstance::UnlockNotePage(int32 PageIndex)
 {
     if (PageIndex >= 0 && PageIndex < UnlockedNotePages.Num())
     {
         UnlockedNotePages[PageIndex] = true;
     }
+}
+
+void UHamoina_GameInstance::AddItemByName(const FString& ItemName, int32 Quantity)
+{
+    FString ItemPath = FString::Printf(TEXT("Blueprint'/Game/Hamonia/RGBCore/%s.%s_C'"), *ItemName, *ItemName);
+    AddItemToInventory(ItemPath, Quantity);
 }
 
 bool UHamoina_GameInstance::IsNotePageUnlocked(int32 PageIndex) const

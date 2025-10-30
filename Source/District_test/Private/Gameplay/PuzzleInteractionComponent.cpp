@@ -2,6 +2,7 @@
 #include "Gameplay/Pedestal.h"
 #include "GameFramework/Character.h"
 #include "Components/PrimitiveComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Character/HamoniaCharacter.h" 
 #include "Components/StaticMeshComponent.h"
 
@@ -175,6 +176,21 @@ bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
         Owner->SetActorRelativeRotation(FRotator::ZeroRotator);
     }
 
+    USoundBase* SoundToPlay = nullptr;
+    if (SoundType == EPuzzleObjectSoundType::Type1)
+    {
+        SoundToPlay = PickupSound_Type1;
+    }
+    else if (SoundType == EPuzzleObjectSoundType::Type2)
+    {
+        SoundToPlay = PickupSound_Type2;
+    }
+
+    if (SoundToPlay)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, SoundToPlay, Owner->GetActorLocation());
+    }
+
     return true;
 }
 
@@ -218,6 +234,21 @@ bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
         PrimComp->SetEnableGravity(true);
         PrimComp->SetSimulatePhysics(true);
         PrimComp->WakeAllRigidBodies();
+    }
+
+    USoundBase* SoundToPlay = nullptr;
+    if (SoundType == EPuzzleObjectSoundType::Type1)
+    {
+        SoundToPlay = DropSound_Type1;
+    }
+    else if (SoundType == EPuzzleObjectSoundType::Type2)
+    {
+        SoundToPlay = DropSound_Type2;
+    }
+
+    if (SoundToPlay)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, SoundToPlay, WorldLocation);
     }
 
     HoldingActor = nullptr;

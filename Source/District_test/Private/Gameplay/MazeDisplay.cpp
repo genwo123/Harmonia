@@ -1,4 +1,4 @@
-// MazeDisplay.cpp - 모든 기능 완전 구현
+// MazeDisplay.cpp
 #include "Gameplay/MazeDisplay.h"
 #include "Gameplay/GridMazeManager.h"
 #include "Components/TextRenderComponent.h"
@@ -12,24 +12,20 @@ AMazeDisplay::AMazeDisplay()
 {
     PrimaryActorTick.bCanEverTick = true;
 
-    // Create root component
     RootSceneComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootSceneComponent"));
     RootComponent = RootSceneComponent;
 
-    // Create display mesh
     DisplayMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DisplayMesh"));
     DisplayMesh->SetupAttachment(RootSceneComponent);
 
-    // Create time text (상단)
     TimeText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("TimeText"));
     TimeText->SetupAttachment(DisplayMesh);
     TimeText->SetRelativeLocation(FVector(2.0f, 0.0f, 30.0f));
-    TimeText->SetTextRenderColor(FColor::Green);
+    TimeText->SetTextRenderColor(FColor::White);
     TimeText->SetHorizontalAlignment(EHTA_Center);
     TimeText->SetVerticalAlignment(EVRTA_TextCenter);
     TimeText->SetWorldSize(TimeTextSize);
 
-    // Create progress text (중간) - 새로 추가
     ProgressText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("ProgressText"));
     ProgressText->SetupAttachment(DisplayMesh);
     ProgressText->SetRelativeLocation(FVector(2.0f, 0.0f, 0.0f));
@@ -38,16 +34,14 @@ AMazeDisplay::AMazeDisplay()
     ProgressText->SetVerticalAlignment(EVRTA_TextCenter);
     ProgressText->SetWorldSize(ProgressTextSize);
 
-    // Create status text (하단)
     StatusText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("StatusText"));
     StatusText->SetupAttachment(DisplayMesh);
     StatusText->SetRelativeLocation(FVector(2.0f, 0.0f, -30.0f));
-    StatusText->SetTextRenderColor(FColor::Green);
+    StatusText->SetTextRenderColor(FColor::White);
     StatusText->SetHorizontalAlignment(EHTA_Center);
     StatusText->SetVerticalAlignment(EVRTA_TextCenter);
     StatusText->SetWorldSize(StatusTextSize);
 
-    // Create display light
     DisplayLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("DisplayLight"));
     DisplayLight->SetupAttachment(DisplayMesh);
     DisplayLight->SetRelativeLocation(FVector(10.0f, 0.0f, 0.0f));
@@ -60,7 +54,6 @@ void AMazeDisplay::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Auto connect to manager if enabled
     if (bAutoConnectToManager)
     {
         AutoConnectToManager();
@@ -70,11 +63,8 @@ void AMazeDisplay::BeginPlay()
         ConnectToManager(ManualManager);
     }
 
-    // Initialize display to READY state
     SetDisplayState(EDisplayState::Ready);
     SetupProgressText();
-
-    // Show ready message immediately
     ShowMessage(ReadyMessage, ReadyColor);
 }
 
@@ -82,7 +72,6 @@ void AMazeDisplay::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    // Update blinking animation
     if (bIsBlinking)
     {
         BlinkTimer += DeltaTime;
@@ -96,54 +85,7 @@ void AMazeDisplay::Tick(float DeltaTime)
     }
 }
 
-// ====== Display Control ======
-void AMazeDisplay::UpdateTime(float TimeRemaining)
-{
-    CurrentTime = TimeRemaining;
-
-    if (bShowTime && TimeText)
-    {
-        FString TimeString = FormatTime(TimeRemaining);
-        TimeText->SetText(FText::FromString(TimeString));
-    }
-
-    // Handle time-based color changes
-    if (ConnectedManager)
-    {
-        float TotalTime = ConnectedManager->PuzzleTimeLimit;
-        HandleTimeWarnings(TimeRemaining, TotalTime);
-
-        FLinearColor TimeColor = GetTimeColor(TimeRemaining, TotalTime);
-        UpdateTextColors(TimeColor);
-        UpdateLightColor(TimeColor);
-    }
-
-    CustomUpdateDisplay(TimeRemaining, ConnectedManager ? ConnectedManager->GetCurrentState() : EPuzzleState::Ready);
-}
-
-void AMazeDisplay::UpdateProgress(int32 Current, int32 Max)
-{
-    CurrentProgress = Current;
-    MaxProgress = Max;
-
-    if (bShowProgress && ProgressText)
-    {
-        FString ProgressString = FormatProgress(Current, Max);
-        ProgressText->SetText(FText::FromString(ProgressString));
-        ProgressText->SetTextRenderColor(ProgressColor.ToFColor(true));
-    }
-}
-
-void AMazeDisplay::ShowMessage(const FString& Message, FLinearColor Color)
-{
-    if (bShowStatus && StatusText)
-    {
-        StatusText->SetText(FText::FromString(Message));
-        StatusText->SetTextRenderColor(Color.ToFColor(true));
-    }
-
-    UpdateLightColor(Color);
-}
+// ============ 디스플레이 제어 ============
 
 void AMazeDisplay::SetDisplayState(EDisplayState NewState)
 {
@@ -152,7 +94,7 @@ void AMazeDisplay::SetDisplayState(EDisplayState NewState)
         CurrentDisplayState = NewState;
 
         FString Message;
-        FLinearColor Color;
+        FLinearColor Color = FLinearColor::White; // 기본값 초기화 추가
 
         switch (NewState)
         {
@@ -207,103 +149,73 @@ void AMazeDisplay::SetDisplayState(EDisplayState NewState)
             break;
 
         case EDisplayState::Custom:
-            // Custom messages are handled separately
+            // Custom 상태에서는 메시지/색상 변경 없음
             break;
         }
 
         if (NewState != EDisplayState::Custom)
         {
-            //ShowMessage(Message, Color);
+            ShowMessage(Message, Color);
         }
 
+        OnDisplayStateChanged_Event.Broadcast(NewState);
         OnDisplayStateChanged(NewState);
     }
 }
 
-// ====== Countdown Functions ======
-void AMazeDisplay::StartCountdown()
+
+void AMazeDisplay::UpdateTime(float TimeRemaining)
 {
-    if (!bEnableCountdown) return;
+    CurrentTime = TimeRemaining;
 
-    bIsCountingDown = true;
-    CurrentCountdown = CountdownDuration;
+    if (bShowTime && TimeText)
+    {
+        FString TimeString = FormatTime(TimeRemaining);
+        TimeText->SetText(FText::FromString(TimeString));
+    }
 
-    // 즉시 첫 번째 카운트다운 표시
-    UpdateCountdown();
+    if (ConnectedManager)
+    {
+        float TotalTime = ConnectedManager->PuzzleTimeLimit;
+        HandleTimeWarnings(TimeRemaining, TotalTime);
 
-    // 1초마다 카운트다운 업데이트
-    GetWorld()->GetTimerManager().SetTimer(CountdownTimerHandle, [this]()
-        {
-            UpdateCountdown();
-        }, 1.0f, true);
+        FLinearColor TimeColor = GetTimeColor(TimeRemaining, TotalTime);
+        UpdateTextColors(TimeColor);
+        UpdateLightColor(TimeColor);
+    }
 
-    UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown started from %d"), CountdownDuration);
+    CustomUpdateDisplay(TimeRemaining, ConnectedManager ? ConnectedManager->GetCurrentState() : EPuzzleState::Ready);
 }
 
-void AMazeDisplay::StopCountdown()
+void AMazeDisplay::UpdateProgress(int32 Current, int32 Max)
 {
-    if (bIsCountingDown)
+    CurrentProgress = Current;
+    MaxProgress = Max;
+
+    if (bShowProgress && ProgressText)
     {
-        bIsCountingDown = false;
-        GetWorld()->GetTimerManager().ClearTimer(CountdownTimerHandle);
-        UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown stopped"));
+        FString ProgressString = FormatProgress(Current, Max);
+        ProgressText->SetText(FText::FromString(ProgressString));
+        ProgressText->SetTextRenderColor(ProgressColor.ToFColor(true));
     }
 }
 
-void AMazeDisplay::UpdateCountdown()
+void AMazeDisplay::ShowMessage(const FString& Message, FLinearColor Color)
 {
-    if (!bIsCountingDown) return;
-
-    if (CurrentCountdown > 0)
+    if (bShowStatus && StatusText)
     {
-        // 카운트다운 표시
-        FString CountdownText = FString::Printf(TEXT("00:0%d"), CurrentCountdown);
-        if (TimeText)
-        {
-            TimeText->SetText(FText::FromString(CountdownText));
-            TimeText->SetTextRenderColor(CountdownColor.ToFColor(true));
-        }
-
-        // 상태 메시지
-        ShowMessage(CountdownReadyMessage, CountdownColor);
-
-        // 블루프린트 이벤트
-        OnCountdownStep(CurrentCountdown);
-
-        CurrentCountdown--;
-
-        UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown %d"), CurrentCountdown + 1);
+        StatusText->SetText(FText::FromString(Message));
+        StatusText->SetTextRenderColor(Color.ToFColor(true));
     }
-    else
+
+    UpdateLightColor(Color);
+}
+
+void AMazeDisplay::ShowCustomMessage(const FString& Message)
+{
+    if (bShowStatus && StatusText)
     {
-        // 카운트다운 완료
-        StopCountdown();
-
-        // START 메시지 표시
-        ShowMessage(CountdownStartMessage, CountdownColor);
-        if (TimeText)
-        {
-            TimeText->SetText(FText::FromString(CountdownStartMessage));
-        }
-
-        // 블루프린트 이벤트
-        OnCountdownFinished();
-
-        // 실제 퍼즐 시작 (Manager에게 신호)
-        if (ConnectedManager)
-        {
-            // 잠시 후 실제 게임 시작
-            GetWorld()->GetTimerManager().SetTimer(MessageTimerHandle, [this]()
-                {
-                    SetDisplayState(EDisplayState::Playing);
-                    if (ConnectedManager)
-                    {
-                        ConnectedManager->StartPuzzle();  // 기존 함수 사용
-                    }
-                }, 1.0f, false);
-        }
-
-        UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown finished - START!"));
+        StatusText->SetText(FText::FromString(Message));
     }
 }
 
@@ -329,6 +241,88 @@ void AMazeDisplay::ClearDisplay()
     UpdateLightColor(FLinearColor::Black);
 }
 
+// ============ 카운트다운 제어 ============
+
+void AMazeDisplay::StartCountdown()
+{
+    if (!bEnableCountdown) return;
+
+    bIsCountingDown = true;
+    CurrentCountdown = CountdownDuration;
+
+    UpdateCountdown();
+
+    GetWorld()->GetTimerManager().SetTimer(CountdownTimerHandle, [this]()
+        {
+            UpdateCountdown();
+        }, 1.0f, true);
+
+    UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown started from %d"), CountdownDuration);
+}
+
+void AMazeDisplay::StopCountdown()
+{
+    if (bIsCountingDown)
+    {
+        bIsCountingDown = false;
+        GetWorld()->GetTimerManager().ClearTimer(CountdownTimerHandle);
+        UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown stopped"));
+    }
+}
+
+void AMazeDisplay::UpdateCountdown()
+{
+    if (!bIsCountingDown) return;
+
+    if (CurrentCountdown > 0)
+    {
+        FString CountdownText = FString::Printf(TEXT("00:0%d"), CurrentCountdown);
+        if (TimeText)
+        {
+            TimeText->SetText(FText::FromString(CountdownText));
+            TimeText->SetTextRenderColor(CountdownColor.ToFColor(true));
+        }
+
+        ShowMessage(CountdownReadyMessage, CountdownColor);
+
+        OnCountdownStep_Event.Broadcast(CurrentCountdown);
+        OnCountdownStep(CurrentCountdown);
+
+        CurrentCountdown--;
+
+        UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown %d"), CurrentCountdown + 1);
+    }
+    else
+    {
+        StopCountdown();
+
+        ShowMessage(CountdownStartMessage, CountdownColor);
+        if (TimeText)
+        {
+            TimeText->SetText(FText::FromString(CountdownStartMessage));
+        }
+
+        OnCountdownFinished_Event.Broadcast();
+        OnCountdownFinished();
+
+        if (ConnectedManager)
+        {
+            GetWorld()->GetTimerManager().SetTimer(MessageTimerHandle, [this]()
+                {
+                    SetDisplayState(EDisplayState::Playing);
+                    if (ConnectedManager)
+                    {
+                        ConnectedManager->StartPuzzle();
+                    }
+                }, 1.0f, false);
+        }
+
+        UE_LOG(LogTemp, Warning, TEXT("MazeDisplay: Countdown finished - START!"));
+    }
+}
+
+// ============ 애니메이션 제어 ============
+
 void AMazeDisplay::StartBlinking()
 {
     if (bBlinkOnWarning)
@@ -345,7 +339,6 @@ void AMazeDisplay::StopBlinking()
         bIsBlinking = false;
         BlinkTimer = 0.0f;
 
-        // Reset to normal intensity
         if (DisplayLight)
         {
             DisplayLight->SetIntensity(1000.0f);
@@ -353,7 +346,8 @@ void AMazeDisplay::StopBlinking()
     }
 }
 
-// ====== Connection Management ======
+// ============ 매니저 연결 ============
+
 void AMazeDisplay::ConnectToManager(AGridMazeManager* Manager)
 {
     if (ConnectedManager)
@@ -365,7 +359,6 @@ void AMazeDisplay::ConnectToManager(AGridMazeManager* Manager)
 
     if (ConnectedManager)
     {
-        // Bind to manager events
         ConnectedManager->OnPuzzleStateChanged.AddDynamic(this, &AMazeDisplay::OnPuzzleStateChanged);
         ConnectedManager->OnTimerUpdate.AddDynamic(this, &AMazeDisplay::OnTimerUpdate);
 
@@ -400,7 +393,8 @@ void AMazeDisplay::AutoConnectToManager()
     }
 }
 
-// ====== Settings Functions ======
+// ============ 설정 변경 함수들 ============
+
 void AMazeDisplay::SetTimeTextSize(float NewSize)
 {
     TimeTextSize = NewSize;
@@ -443,7 +437,8 @@ void AMazeDisplay::SetDisplayMessages(const FString& Ready, const FString& Succe
     FailedMessage = Failed;
 }
 
-// ====== Information Query ======
+// ============ 정보 조회 함수들 ============
+
 FString AMazeDisplay::FormatTime(float TimeInSeconds)
 {
     if (TimeInSeconds <= 0.0f)
@@ -468,7 +463,8 @@ FString AMazeDisplay::FormatProgress(int32 Current, int32 Max)
     return FString::Printf(TEXT("(%d/%d)"), Current, Max);
 }
 
-// ====== Event Callbacks ======
+// ============ 이벤트 콜백들 ============
+
 void AMazeDisplay::OnPuzzleStateChanged(EPuzzleState NewState)
 {
     switch (NewState)
@@ -490,17 +486,16 @@ void AMazeDisplay::OnPuzzleStateChanged(EPuzzleState NewState)
 
 void AMazeDisplay::OnTimerUpdate(float TimeRemaining)
 {
-    // 실패 상태에서도 시간은 계속 업데이트 (중요!)
     UpdateTime(TimeRemaining);
 
-    // 진행도도 함께 업데이트
     if (ConnectedManager)
     {
         UpdateProgress(ConnectedManager->GetCurrentPathIndex(), ConnectedManager->GetPathLength());
     }
 }
 
-// ====== Blueprint Native Events ======
+// ============ BP 커스터마이즈 가능 함수들 ============
+
 FString AMazeDisplay::CustomFormatTime_Implementation(float TimeInSeconds)
 {
     return FormatTime(TimeInSeconds);
@@ -522,10 +517,10 @@ FLinearColor AMazeDisplay::GetTimeColor_Implementation(float TimeRemaining, floa
     }
 }
 
-// ====== Internal Functions ======
+// ============ 내부 함수들 ============
+
 void AMazeDisplay::UpdateVisuals()
 {
-    // Update text sizes
     if (TimeText)
     {
         TimeText->SetWorldSize(TimeTextSize);
@@ -546,12 +541,10 @@ void AMazeDisplay::UpdateTextColors(FLinearColor Color)
 {
     FColor TextColor = Color.ToFColor(true);
 
-    if (TimeText && !bIsCountingDown)  // 카운트다운 중이 아닐 때만 색상 변경
+    if (TimeText && !bIsCountingDown)
     {
         TimeText->SetTextRenderColor(TextColor);
     }
-
-    // StatusText와 ProgressText는 개별 색상 유지
 }
 
 void AMazeDisplay::UpdateLightColor(FLinearColor Color)
@@ -564,14 +557,12 @@ void AMazeDisplay::UpdateLightColor(FLinearColor Color)
 
 void AMazeDisplay::HandleTimeWarnings(float TimeRemaining, float TotalTime)
 {
-    // Warning threshold
     if (TimeRemaining <= WarningTimeThreshold && !bWarningTriggered)
     {
         bWarningTriggered = true;
         OnTimeWarning(TimeRemaining);
     }
 
-    // Danger threshold
     if (TimeRemaining <= DangerTimeThreshold && !bDangerTriggered)
     {
         bDangerTriggered = true;
@@ -583,7 +574,6 @@ void AMazeDisplay::HandleTimeWarnings(float TimeRemaining, float TotalTime)
         }
     }
 
-    // Reset warnings when time resets
     if (TimeRemaining > WarningTimeThreshold)
     {
         bWarningTriggered = false;

@@ -199,7 +199,7 @@ protected:
 
 private:
 	AUniaWaitSpot* FindWaitSpot(const FString& SpotID);
-
+	
 	FString CurrentTargetSpotID;
 	FTimerHandle SpotCheckTimer;
 	FString CurrentLevelName;

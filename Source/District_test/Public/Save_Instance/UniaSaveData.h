@@ -43,6 +43,9 @@ struct DISTRICT_TEST_API FUniaSaveData
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unia State")
     bool bCanInteract = true;
 
+    UPROPERTY(BlueprintReadWrite, Category = "Unia")
+    FString TriggerDialogueID;
+        
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unia State")
     float FollowDistance = 200.0f;
 

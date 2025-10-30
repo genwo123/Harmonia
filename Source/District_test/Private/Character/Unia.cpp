@@ -118,6 +118,8 @@ EInteractionType AUnia::GetInteractionType_Implementation()
 
 void AUnia::StartDialogue(AActor* Interactor)
 {
+	static int32 StartCount = 0;
+	UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Called %d"), ++StartCount);
 	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(Interactor);
 	if (!Player)
 	{
@@ -190,10 +192,12 @@ void AUnia::SetDialogueState(bool bInDialogue)
 
 void AUnia::HandlePlayerInteraction()
 {
+	static int32 CallCount = 0;
+	UE_LOG(LogTemp, Error, TEXT("[HandlePlayerInteraction] Called %d, PlayerPawn: %s"),
+		++CallCount, PlayerPawn ? *PlayerPawn->GetName() : TEXT("NULL"));
+
 	if (PlayerPawn)
 	{
-		
-
 		StartDialogue(PlayerPawn);
 	}
 }

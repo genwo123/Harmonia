@@ -37,6 +37,12 @@ public:
     UFUNCTION(BlueprintPure, Category = "Story Progress")
     FString GetPendingTriggerDialogue() const;
 
+    UFUNCTION(BlueprintCallable, Category = "Save|Dialogue")
+    void SetTriggerDialogueID(const FString& DialogueID);
+
+    UFUNCTION(BlueprintCallable, Category = "Save|Dialogue")
+    FString GetTriggerDialogueID() const;
+
     // Save Info
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Save Info")
     FString SaveSlotName = TEXT("HarmoniaAutoSave");

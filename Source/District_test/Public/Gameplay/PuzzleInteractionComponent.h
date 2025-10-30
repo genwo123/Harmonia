@@ -4,6 +4,13 @@
 #include "Components/ActorComponent.h"
 #include "PuzzleInteractionComponent.generated.h"
 
+UENUM(BlueprintType)
+enum class EPuzzleObjectSoundType : uint8
+{
+    Type1 UMETA(DisplayName = "Type 1 Box"),
+    Type2 UMETA(DisplayName = "Type 2 Mirror")
+};
+
 UCLASS(ClassGroup = (Puzzle), meta = (BlueprintSpawnableComponent))
 class DISTRICT_TEST_API UPuzzleInteractionComponent : public UActorComponent
 {
@@ -42,6 +49,22 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     bool PickUp(AActor* Picker);
 
+    
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+    EPuzzleObjectSoundType SoundType;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+    USoundBase* PickupSound_Type1;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+    USoundBase* DropSound_Type1;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+    USoundBase* PickupSound_Type2;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+    USoundBase* DropSound_Type2;
 
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     bool PutDown(FVector Location, FRotator Rotation);

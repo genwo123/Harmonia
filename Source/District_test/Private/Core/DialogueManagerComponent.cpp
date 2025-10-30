@@ -23,24 +23,38 @@ void UDialogueManagerComponent::BeginPlay()
 
 bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
 {
+    UE_LOG(LogTemp, Error, TEXT("========================================"));
+    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Called"));
+    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] DialogueID: %s"), *DialogueID);
+    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] bIsInDialogue: %d"), bIsInDialogue);
+
     if (bIsInDialogue)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Already in dialogue - Cancel"));
         return false;
     }
 
     if (bIsLevelEnd)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Level end state - Cancel"));
         return false;
     }
 
     FDialogueData* DialogueData = GetDialogueData(DialogueID);
     if (!DialogueData)
     {
+        UE_LOG(LogTemp, Error, TEXT("[StartDialogue] DialogueData not found!"));
+
         return false;
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] DialogueData found"));
+    UE_LOG(LogTemp, Warning, TEXT("  - NextID: %s"), *DialogueData->NextDialogueID);
+    UE_LOG(LogTemp, Warning, TEXT("  - ChainBreak: %d"), DialogueData->bChainBreak);
+
     if (!CheckAllConditions(*DialogueData))
     {
+        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Conditions not met - Cancel"));
         return false;
     }
 
@@ -48,19 +62,30 @@ bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
     CurrentDialogueID = DialogueID;
     CurrentDialogue = *DialogueData;
 
+    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Dialogue started! CurrentDialogueID: %s"), *CurrentDialogueID);
+    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Calling ProcessDialogue"));
+
     ProcessDialogue(*DialogueData);
+
+    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] ProcessDialogue completed"));
 
     if (DialogueData->bIsLevelEnd)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Level end dialogue - Setting timer"));
+
         float Duration = DialogueData->DisplayDuration > 0 ? DialogueData->DisplayDuration : 5.0f;
 
         FTimerHandle LevelEndTimer;
         GetWorld()->GetTimerManager().SetTimer(LevelEndTimer, [this]()
             {
+                UE_LOG(LogTemp, Warning, TEXT("[LevelEndTimer] Level end"));
                 bIsLevelEnd = true;
                 EndDialogue();
             }, Duration, false);
     }
+
+    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Complete - return true"));
+    UE_LOG(LogTemp, Error, TEXT("========================================"));
 
     return true;
 }
@@ -102,13 +127,14 @@ void UDialogueManagerComponent::ProgressDialogue()
 
     if (NextDialogueData->bChainBreak)
     {
-        EndDialogue();
-        StartDialogue(NextID);
-
+        // 순서 변경: 먼저 다음 대사 저장
         if (!NextDialogueData->NextDialogueID.IsEmpty())
         {
             SaveLastDialogueID(NextDialogueData->NextDialogueID);
         }
+
+        EndDialogue();
+        StartDialogue(NextID);
 
         FTimerHandle ChainBreakTimer;
         GetWorld()->GetTimerManager().SetTimer(ChainBreakTimer, [this]()
@@ -146,7 +172,6 @@ void UDialogueManagerComponent::ProgressDialogue()
     EndDialogue();
     StartDialogue(NextID);
 }
-
 void UDialogueManagerComponent::SelectChoice(int32 ChoiceIndex)
 {
     if (!bIsInDialogue || !CurrentDialogue.bHasChoices)
@@ -377,12 +402,19 @@ FDialogueData* UDialogueManagerComponent::GetDialogueData(const FString& Dialogu
 
 void UDialogueManagerComponent::ProcessDialogue(const FDialogueData& DialogueData)
 {
+    UE_LOG(LogTemp, Error, TEXT(">>> [ProcessDialogue] Start"));
+    UE_LOG(LogTemp, Error, TEXT(">>> [ProcessDialogue] DialogueID: %s"), *DialogueData.DialogueID);
+    UE_LOG(LogTemp, Error, TEXT(">>> [ProcessDialogue] Broadcasting OnDialogueStarted"));
+
     OnDialogueStarted.Broadcast(
         DialogueData.Speaker,
         DialogueData.DialogueText,
         DialogueData.DialogueType,
         DialogueData.DisplayDuration
     );
+
+    UE_LOG(LogTemp, Error, TEXT(">>> [ProcessDialogue] Broadcast completed"));
+    UE_LOG(LogTemp, Error, TEXT(">>> [ProcessDialogue] End"));
 }
 
 ALevelQuestManager* UDialogueManagerComponent::FindLevelQuestManager()

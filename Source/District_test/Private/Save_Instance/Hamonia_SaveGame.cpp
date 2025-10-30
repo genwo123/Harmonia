@@ -427,6 +427,7 @@ FString UHamonia_SaveGame::GetPendingTriggerDialogue() const
 {
     return ProgressData.PendingTriggerDialogue;
 }
+
 void UHamonia_SaveGame::SetCurrentDialogueID(const FString& DialogueID)
 {
     UniaData.CurrentDialogueID = DialogueID;
@@ -524,6 +525,16 @@ float UHamonia_SaveGame::GetHintCooldownTime(int32 LevelNumber) const
     }
 
     return 0.0f;
+}
+
+void UHamonia_SaveGame::SetTriggerDialogueID(const FString& DialogueID)
+{
+    UniaData.TriggerDialogueID = DialogueID;
+}
+
+FString UHamonia_SaveGame::GetTriggerDialogueID() const
+{
+    return UniaData.TriggerDialogueID;
 }
 
 void UHamonia_SaveGame::ResetHintForLevel(int32 LevelNumber)

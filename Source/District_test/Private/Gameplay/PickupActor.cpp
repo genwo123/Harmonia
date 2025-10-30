@@ -118,16 +118,23 @@ void APickupActor::SetMeshYawRotation(float Yaw)
 
 void APickupActor::Interact_Implementation(AActor* Interactor)
 {
+    UE_LOG(LogTemp, Warning, TEXT("PickupActor: Interact called!"));
+
     UPuzzleInteractionComponent* PuzzleComp = FindComponentByClass<UPuzzleInteractionComponent>();
 
     if (PuzzleComp && PuzzleComp->bCanBePickedUp)
     {
+        UE_LOG(LogTemp, Warning, TEXT("PickupActor: Has PuzzleInteractionComponent"));
         PuzzleComp->PickUp(Interactor);
         return;
     }
 
+    UE_LOG(LogTemp, Warning, TEXT("PickupActor: Trying to pickup item..."));
+
     if (PickupItem(Interactor))
     {
+        UE_LOG(LogTemp, Warning, TEXT("PickupActor: Pickup SUCCESS!"));
+
         if (MeshComponent)
         {
             MeshComponent->SetVisibility(false);
@@ -141,6 +148,10 @@ void APickupActor::Interact_Implementation(AActor* Interactor)
 
         OnPickupSuccess(Interactor);
         SetLifeSpan(0.1f);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("PickupActor: Pickup FAILED!"));
     }
 }
 
@@ -198,6 +209,7 @@ bool APickupActor::PickupItem(AActor* Interactor)
     {
         NewItem->Description = CustomItemDescription;
     }
+
 
     return InventoryComponent->AddItem(NewItem);
 }

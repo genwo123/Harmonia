@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
 #include "InputActionValue.h"
+#include "Gameplay/PuzzleStarter.h"
 #include "Interaction/InteractableInterface.h"
 #include "Gameplay/PuzzleInteractionComponent.h" 
 #include "Gameplay/Pedestal.h"
@@ -30,6 +31,7 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Dialogue Events")
     FOnDialogueProgressRequested OnDialogueProgressRequested;
 
+    
 
     virtual void Tick(float DeltaTime) override;
     virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;

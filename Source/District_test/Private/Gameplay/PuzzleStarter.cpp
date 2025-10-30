@@ -1,30 +1,34 @@
-// PuzzleStarter.cpp - 사운드만 간단히 추가
+// PuzzleStarter.cpp
 #include "Gameplay/PuzzleStarter.h"
 #include "Gameplay/GridMazeManager.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
-#include "Kismet/GameplayStatics.h"  // 추가
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Kismet/GameplayStatics.h"
 
 APuzzleStarter::APuzzleStarter()
 {
     PrimaryActorTick.bCanEverTick = false;
 
-    // 루트 컴포넌트
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
 
-    // 메시 컴포넌트
     MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
     MeshComponent->SetupAttachment(RootComponent);
 
-    // 기본 큐브 메시 로드
     static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMeshAsset(TEXT("/Engine/BasicShapes/Cube"));
     if (CubeMeshAsset.Succeeded())
     {
         MeshComponent->SetStaticMesh(CubeMeshAsset.Object);
-        MeshComponent->SetWorldScale3D(FVector(1.0f, 1.0f, 0.5f)); // 버튼 같은 모양
+        MeshComponent->SetWorldScale3D(FVector(2.0f, 2.0f, 0.5f));
     }
 
-    // 상호작용 영역
+ 
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMeshAsset(TEXT("/Engine/BasicShapes/Sphere"));
+    if (SphereMeshAsset.Succeeded())
+    {
+        SlotMeshAsset = SphereMeshAsset.Object;
+    }
+
     InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
     InteractionSphere->SetupAttachment(RootComponent);
     InteractionSphere->SetSphereRadius(150.0f);
@@ -32,48 +36,302 @@ APuzzleStarter::APuzzleStarter()
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-    // 기본 설정
-    bSingleUse = true;
-    bUsed = false;
-    SoundVolume = 1.0f;  // 추가
+    // 기본 슬롯 3개 설정
+    CoreSlots.SetNum(3);
+    CoreSlots[0].RequiredCoreTag = FName("BP_RedCore");
+    CoreSlots[0].SlotOffset = FVector(-100.0f, 0.0f, 50.0f);
+
+    CoreSlots[1].RequiredCoreTag = FName("BP_BlueCore");
+    CoreSlots[1].SlotOffset = FVector(0.0f, 0.0f, 50.0f);
+
+    CoreSlots[2].RequiredCoreTag = FName("BP_GreenCore");
+    CoreSlots[2].SlotOffset = FVector(100.0f, 0.0f, 50.0f);
+
+    bAutoStartWhenComplete = true;
+    bAllCoresInserted = false;
+    bPuzzleStarted = false;
+    SoundVolume = 1.0f;
+}
+
+void APuzzleStarter::BeginPlay()
+{
+    Super::BeginPlay();
+    CreateSlotMeshes();
+
+    for (int32 i = 0; i < CoreSlots.Num(); i++)
+    {
+        if (CoreSlots[i].SlotMesh)
+        {
+            CoreSlots[i].SlotMesh->SetVisibility(false);
+        }
+    }
+}
+
+#if WITH_EDITOR
+void APuzzleStarter::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+
+    UWorld* World = GetWorld();
+    if (World && World->WorldType == EWorldType::Editor)
+    {
+        CreateSlotMeshes();
+    }
+}
+#endif
+
+void APuzzleStarter::CreateSlotMeshes()
+{
+    TArray<USceneComponent*> ChildComponents;
+    RootComponent->GetChildrenComponents(false, ChildComponents);
+
+    for (USceneComponent* Child : ChildComponents)
+    {
+        if (UStaticMeshComponent* SlotMesh = Cast<UStaticMeshComponent>(Child))
+        {
+            if (SlotMesh != MeshComponent && SlotMesh->GetName().Contains(TEXT("SlotMesh")))
+            {
+                SlotMesh->DestroyComponent();
+            }
+        }
+    }
+
+    for (int32 i = 0; i < CoreSlots.Num(); i++)
+    {
+        FString SlotName = FString::Printf(TEXT("SlotMesh_%d"), i);
+
+        UStaticMeshComponent* NewSlotMesh = NewObject<UStaticMeshComponent>(
+            this,
+            UStaticMeshComponent::StaticClass(),
+            *SlotName
+        );
+
+        if (NewSlotMesh)
+        {
+            UStaticMesh* MeshToUse = CoreSlots[i].CustomSlotMesh ? CoreSlots[i].CustomSlotMesh : SlotMeshAsset;
+
+            if (MeshToUse)
+            {
+                NewSlotMesh->SetStaticMesh(MeshToUse);
+            }
+            else
+            {
+                continue;
+            }
+
+            NewSlotMesh->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
+            NewSlotMesh->SetRelativeLocation(CoreSlots[i].SlotOffset);
+            NewSlotMesh->SetRelativeRotation(CoreSlots[i].SlotRotation);
+            NewSlotMesh->SetRelativeScale3D(CoreSlots[i].SlotScale);
+            NewSlotMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            NewSlotMesh->RegisterComponent();
+
+            CoreSlots[i].SlotMesh = NewSlotMesh;
+            UpdateSlotVisual(i, CoreSlots[i].bIsInserted);
+        }
+    }
+}
+
+bool APuzzleStarter::TryInsertCore(AActor* CoreActor)
+{
+    if (!CoreActor || bPuzzleStarted)
+    {
+        return false;
+    }
+
+    FName CoreTag = NAME_None;
+    if (CoreActor->Tags.Num() > 0)
+    {
+        for (const FName& Tag : CoreActor->Tags)
+        {
+            if (Tag == FName("RedCore") || Tag == FName("BlueCore") || Tag == FName("GreenCore"))
+            {
+                CoreTag = Tag;
+                break;
+            }
+        }
+    }
+
+    if (CoreTag == NAME_None)
+    {
+        return false;
+    }
+
+    int32 SlotIndex = FindEmptySlotForCore(CoreTag);
+
+    if (SlotIndex == -1)
+    {
+        PlaySound(WrongCoreSound);
+        OnWrongCoreInserted.Broadcast(CoreTag);
+        OnWrongCoreInsertedBP(CoreTag);
+        return false;
+    }
+
+    CoreSlots[SlotIndex].bIsInserted = true;
+    CoreSlots[SlotIndex].InsertedCoreActor = CoreActor;
+    UpdateSlotVisual(SlotIndex, true);
+
+    if (CoreSlots[SlotIndex].SlotMesh)
+    {
+        CoreActor->AttachToComponent(
+            CoreSlots[SlotIndex].SlotMesh,
+            FAttachmentTransformRules::SnapToTargetNotIncludingScale
+        );
+        CoreActor->SetActorRelativeLocation(FVector::ZeroVector);
+        CoreActor->SetActorRelativeRotation(FRotator::ZeroRotator);
+        CoreActor->SetActorEnableCollision(false);
+        CoreActor->SetActorHiddenInGame(false);
+    }
+
+    PlaySound(CoreInsertSound);
+    OnCoreInserted.Broadcast(CoreTag);
+    OnCoreInsertedBP(CoreTag, SlotIndex);
+
+    if (AreAllSlotsFilled())
+    {
+        bAllCoresInserted = true;
+        PlaySound(AllCoresCompleteSound);
+        OnAllCoresInserted.Broadcast();
+        OnAllCoresInsertedBP();
+
+        if (bAutoStartWhenComplete)
+        {
+            StartConnectedPuzzle();
+        }
+    }
+
+    return true;
+}
+
+int32 APuzzleStarter::FindEmptySlotForCore(FName CoreTag)
+{
+    for (int32 i = 0; i < CoreSlots.Num(); i++)
+    {
+        if (CoreSlots[i].RequiredCoreTag == CoreTag && !CoreSlots[i].bIsInserted)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool APuzzleStarter::AreAllSlotsFilled() const
+{
+    for (const FCoreSlot& Slot : CoreSlots)
+    {
+        if (!Slot.bIsInserted)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool APuzzleStarter::IsSlotEmpty(int32 SlotIndex) const
+{
+    if (CoreSlots.IsValidIndex(SlotIndex))
+    {
+        return !CoreSlots[SlotIndex].bIsInserted;
+    }
+    return false;
 }
 
 void APuzzleStarter::StartConnectedPuzzle()
 {
     if (!ConnectedMazeManager || !IsValid(ConnectedMazeManager))
     {
-        UE_LOG(LogTemp, Warning, TEXT("No connected maze manager found"));
         return;
     }
 
-    EPuzzleState CurrentState = ConnectedMazeManager->GetCurrentState();
-
-    UE_LOG(LogTemp, Warning, TEXT("PuzzleStarter activated - Current state: %d"), (int32)CurrentState);
-
-    // 성공 상태에서는 사용 불가 (bSingleUse가 true일 때만)
-    if (CurrentState == EPuzzleState::Success && bSingleUse)
+    if (!bAllCoresInserted)
     {
-        bUsed = true;
-        UE_LOG(LogTemp, Warning, TEXT("Puzzle already completed - PuzzleStarter disabled"));
         return;
     }
 
-    // 모든 상태에서 완전 초기화 후 카운트다운 시작
-    UE_LOG(LogTemp, Warning, TEXT("Complete reset and starting countdown"));
-    ConnectedMazeManager->CompleteReset();  // 완전 초기화
+    bPuzzleStarted = true;
 
-    // 다음 틱에 카운트다운 시작 (리셋 완료 후)
+    ConnectedMazeManager->CompleteReset();
+
     GetWorld()->GetTimerManager().SetTimerForNextTick([this]()
         {
             if (ConnectedMazeManager && IsValid(ConnectedMazeManager))
             {
-                ConnectedMazeManager->StartPuzzleWithCountdown();  // 카운트다운과 함께 시작
-                UE_LOG(LogTemp, Warning, TEXT("Countdown started via PuzzleStarter"));
+                ConnectedMazeManager->StartPuzzleWithCountdown();
             }
         });
 }
 
-// ====== InteractableInterface 구현 ======
+void APuzzleStarter::ResetAllSlots()
+{
+    for (int32 i = 0; i < CoreSlots.Num(); i++)
+    {
+        if (CoreSlots[i].InsertedCoreActor && IsValid(CoreSlots[i].InsertedCoreActor))
+        {
+            CoreSlots[i].InsertedCoreActor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+            CoreSlots[i].InsertedCoreActor->SetActorHiddenInGame(false);
+            CoreSlots[i].InsertedCoreActor->SetActorEnableCollision(true);
+        }
+
+        CoreSlots[i].bIsInserted = false;
+        CoreSlots[i].InsertedCoreActor = nullptr;
+        UpdateSlotVisual(i, false);
+    }
+
+    bAllCoresInserted = false;
+    bPuzzleStarted = false;
+}
+
+void APuzzleStarter::UpdateSlotVisual(int32 SlotIndex, bool bInserted)
+{
+    if (!CoreSlots.IsValidIndex(SlotIndex) || !CoreSlots[SlotIndex].SlotMesh)
+    {
+        return;
+    }
+
+    UStaticMeshComponent* SlotMesh = CoreSlots[SlotIndex].SlotMesh;
+
+    if (bInserted)
+    {
+        SlotMesh->SetVisibility(true);
+    }
+    else
+    {
+        SlotMesh->SetVisibility(false);
+        UMaterialInstanceDynamic* DynamicMaterial = SlotMesh->CreateAndSetMaterialInstanceDynamic(0);
+        if (DynamicMaterial)
+        {
+            FLinearColor Color = EmptySlotColor;
+            DynamicMaterial->SetVectorParameterValue(TEXT("Color"), Color);
+        }
+    }
+}
+
+FLinearColor APuzzleStarter::GetCoreColorByTag(FName CoreTag)
+{
+    if (CoreTag == FName("RedCore"))
+    {
+        return FLinearColor(1.0f, 0.2f, 0.2f, 1.0f);
+    }
+    else if (CoreTag == FName("BlueCore"))
+    {
+        return FLinearColor(0.2f, 0.5f, 1.0f, 1.0f);
+    }
+    else if (CoreTag == FName("GreenCore"))
+    {
+        return FLinearColor(0.2f, 1.0f, 0.2f, 1.0f);
+    }
+    return EmptySlotColor;
+}
+
+void APuzzleStarter::PlaySound(USoundBase* Sound)
+{
+    if (Sound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, Sound, GetActorLocation(), SoundVolume);
+    }
+}
+
+// InteractableInterface 구현
 void APuzzleStarter::Interact_Implementation(AActor* Interactor)
 {
     if (!CanInteract_Implementation(Interactor))
@@ -81,38 +339,104 @@ void APuzzleStarter::Interact_Implementation(AActor* Interactor)
         return;
     }
 
-    // ====== 사운드 재생 (추가된 부분) ======
-    if (ButtonSound)
+    // 상호작용 시 현재 상태 표시 또는 수동 시작
+    if (bAllCoresInserted && !bPuzzleStarted && !bAutoStartWhenComplete)
     {
-        UGameplayStatics::PlaySoundAtLocation(this, ButtonSound, GetActorLocation(), SoundVolume);
+        StartConnectedPuzzle();
     }
-
-    StartConnectedPuzzle();
 }
 
 bool APuzzleStarter::CanInteract_Implementation(AActor* Interactor)
 {
-    if (bSingleUse && bUsed)
+    if (bPuzzleStarted)
     {
         return false;
     }
+
     return ConnectedMazeManager != nullptr;
 }
 
 FString APuzzleStarter::GetInteractionText_Implementation()
 {
-    if (bSingleUse && bUsed)
+    if (bPuzzleStarted)
     {
-        return TEXT("Already Used");
+        return TEXT("Puzzle Running...");
     }
+
     if (!ConnectedMazeManager)
     {
         return TEXT("No Puzzle Connected");
     }
-    return TEXT("Start Puzzle");
+
+    int32 InsertedCount = 0;
+    for (const FCoreSlot& Slot : CoreSlots)
+    {
+        if (Slot.bIsInserted)
+        {
+            InsertedCount++;
+        }
+    }
+
+    if (bAllCoresInserted)
+    {
+        return bAutoStartWhenComplete ? TEXT("Starting...") : TEXT("Press F to Start");
+    }
+
+    return FString::Printf(TEXT("Insert Cores (%d/%d)"), InsertedCount, CoreSlots.Num());
 }
 
 EInteractionType APuzzleStarter::GetInteractionType_Implementation()
 {
     return EInteractionType::Activate;
+}
+
+bool APuzzleStarter::TryInsertCoreByTag(FName CoreTag)
+{
+    if (bPuzzleStarted)
+    {
+        return false;
+    }
+
+    if (CoreTag == NAME_None)
+    {
+        return false;
+    }
+
+    if (CoreTag != FName("BP_RedCore") && CoreTag != FName("BP_BlueCore") && CoreTag != FName("BP_GreenCore"))
+    {
+        return false;
+    }
+
+    int32 SlotIndex = FindEmptySlotForCore(CoreTag);
+
+    if (SlotIndex == -1)
+    {
+        PlaySound(WrongCoreSound);
+        OnWrongCoreInserted.Broadcast(CoreTag);
+        OnWrongCoreInsertedBP(CoreTag);
+        return false;
+    }
+
+    CoreSlots[SlotIndex].bIsInserted = true;
+    CoreSlots[SlotIndex].InsertedCoreActor = nullptr;
+    UpdateSlotVisual(SlotIndex, true);
+
+    PlaySound(CoreInsertSound);
+    OnCoreInserted.Broadcast(CoreTag);
+    OnCoreInsertedBP(CoreTag, SlotIndex);
+
+    if (AreAllSlotsFilled())
+    {
+        bAllCoresInserted = true;
+        PlaySound(AllCoresCompleteSound);
+        OnAllCoresInserted.Broadcast();
+        OnAllCoresInsertedBP();
+
+        if (bAutoStartWhenComplete)
+        {
+            StartConnectedPuzzle();
+        }
+    }
+
+    return true;
 }

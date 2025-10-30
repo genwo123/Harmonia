@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
+#include "Gameplay/Item.h"
 #include "Save_Instance/Hamonia_SaveGame.h"
 #include "Hamoina_GameInstance.generated.h"
 
@@ -103,6 +104,9 @@ public:
     UFUNCTION(BlueprintPure, Category = "Story Progress")
     FString GetCurrentDialogueID() const;
 
+    UFUNCTION(BlueprintCallable, Category = "Story Progress")
+    FString GetTriggerDialogueID() const;
+
     UFUNCTION(BlueprintCallable, Category = "Player Data")
     void UpdatePlayerLocation(const FString& LevelName, const FVector& Location, const FRotator& Rotation);
 
@@ -177,6 +181,12 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Note System")
     TArray<bool> UnlockedNotePages;
+
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+    void AddItemByName(const FString& ItemName, int32 Quantity = 1);
+
+    UFUNCTION(BlueprintCallable, Category = "Dialogue")
+    void SetCurrentDialogueID(const FString& DialogueID);
 
 protected:
     void InitializeNewSaveData();
