@@ -22,7 +22,6 @@ APuzzleStarter::APuzzleStarter()
         MeshComponent->SetWorldScale3D(FVector(2.0f, 2.0f, 0.5f));
     }
 
- 
     static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMeshAsset(TEXT("/Engine/BasicShapes/Sphere"));
     if (SphereMeshAsset.Succeeded())
     {
@@ -36,16 +35,33 @@ APuzzleStarter::APuzzleStarter()
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
+    SlotMesh1 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SlotMesh1"));
+    SlotMesh1->SetupAttachment(RootComponent);
+    SlotMesh1->SetRelativeLocation(FVector(-100.0f, 0.0f, 50.0f));
+    SlotMesh1->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+    SlotMesh2 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SlotMesh2"));
+    SlotMesh2->SetupAttachment(RootComponent);
+    SlotMesh2->SetRelativeLocation(FVector(0.0f, 0.0f, 50.0f));
+    SlotMesh2->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+    SlotMesh3 = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SlotMesh3"));
+    SlotMesh3->SetupAttachment(RootComponent);
+    SlotMesh3->SetRelativeLocation(FVector(100.0f, 0.0f, 50.0f));
+    SlotMesh3->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+    if (SphereMeshAsset.Succeeded())
+    {
+        SlotMesh1->SetStaticMesh(SphereMeshAsset.Object);
+        SlotMesh2->SetStaticMesh(SphereMeshAsset.Object);
+        SlotMesh3->SetStaticMesh(SphereMeshAsset.Object);
+    }
+
     // 기본 슬롯 3개 설정
     CoreSlots.SetNum(3);
     CoreSlots[0].RequiredCoreTag = FName("BP_RedCore");
-    CoreSlots[0].SlotOffset = FVector(-100.0f, 0.0f, 50.0f);
-
     CoreSlots[1].RequiredCoreTag = FName("BP_BlueCore");
-    CoreSlots[1].SlotOffset = FVector(0.0f, 0.0f, 50.0f);
-
     CoreSlots[2].RequiredCoreTag = FName("BP_GreenCore");
-    CoreSlots[2].SlotOffset = FVector(100.0f, 0.0f, 50.0f);
 
     bAutoStartWhenComplete = true;
     bAllCoresInserted = false;
@@ -56,7 +72,11 @@ APuzzleStarter::APuzzleStarter()
 void APuzzleStarter::BeginPlay()
 {
     Super::BeginPlay();
-    CreateSlotMeshes();
+
+
+    CoreSlots[0].SlotMesh = SlotMesh1;
+    CoreSlots[1].SlotMesh = SlotMesh2;
+    CoreSlots[2].SlotMesh = SlotMesh3;
 
     for (int32 i = 0; i < CoreSlots.Num(); i++)
     {
@@ -75,61 +95,17 @@ void APuzzleStarter::OnConstruction(const FTransform& Transform)
     UWorld* World = GetWorld();
     if (World && World->WorldType == EWorldType::Editor)
     {
-        CreateSlotMeshes();
+        if (SlotMesh1) SlotMesh1->SetVisibility(true);
+        if (SlotMesh2) SlotMesh2->SetVisibility(true);
+        if (SlotMesh3) SlotMesh3->SetVisibility(true);
     }
 }
 #endif
 
 void APuzzleStarter::CreateSlotMeshes()
 {
-    TArray<USceneComponent*> ChildComponents;
-    RootComponent->GetChildrenComponents(false, ChildComponents);
-
-    for (USceneComponent* Child : ChildComponents)
-    {
-        if (UStaticMeshComponent* SlotMesh = Cast<UStaticMeshComponent>(Child))
-        {
-            if (SlotMesh != MeshComponent && SlotMesh->GetName().Contains(TEXT("SlotMesh")))
-            {
-                SlotMesh->DestroyComponent();
-            }
-        }
-    }
-
-    for (int32 i = 0; i < CoreSlots.Num(); i++)
-    {
-        FString SlotName = FString::Printf(TEXT("SlotMesh_%d"), i);
-
-        UStaticMeshComponent* NewSlotMesh = NewObject<UStaticMeshComponent>(
-            this,
-            UStaticMeshComponent::StaticClass(),
-            *SlotName
-        );
-
-        if (NewSlotMesh)
-        {
-            UStaticMesh* MeshToUse = CoreSlots[i].CustomSlotMesh ? CoreSlots[i].CustomSlotMesh : SlotMeshAsset;
-
-            if (MeshToUse)
-            {
-                NewSlotMesh->SetStaticMesh(MeshToUse);
-            }
-            else
-            {
-                continue;
-            }
-
-            NewSlotMesh->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
-            NewSlotMesh->SetRelativeLocation(CoreSlots[i].SlotOffset);
-            NewSlotMesh->SetRelativeRotation(CoreSlots[i].SlotRotation);
-            NewSlotMesh->SetRelativeScale3D(CoreSlots[i].SlotScale);
-            NewSlotMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-            NewSlotMesh->RegisterComponent();
-
-            CoreSlots[i].SlotMesh = NewSlotMesh;
-            UpdateSlotVisual(i, CoreSlots[i].bIsInserted);
-        }
-    }
+    
+    
 }
 
 bool APuzzleStarter::TryInsertCore(AActor* CoreActor)

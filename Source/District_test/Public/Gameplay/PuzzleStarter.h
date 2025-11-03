@@ -20,9 +20,6 @@ struct FCoreSlot
     FName RequiredCoreTag = NAME_None;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Core Slot")
-    FVector SlotOffset = FVector::ZeroVector;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Core Slot")
     FRotator SlotRotation = FRotator::ZeroRotator;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Core Slot")
@@ -44,10 +41,6 @@ struct FCoreSlot
     {
         RequiredCoreTag = NAME_None;
         bIsInserted = false;
-        SlotOffset = FVector::ZeroVector;
-        SlotRotation = FRotator::ZeroRotator;
-        SlotScale = FVector(1.0f, 1.0f, 1.0f);
-        CustomSlotMesh = nullptr;
         SlotMesh = nullptr;
         InsertedCoreActor = nullptr;
     }
@@ -67,6 +60,15 @@ public:
 
 protected:
     virtual void BeginPlay() override;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Core Slots")
+    UStaticMeshComponent* SlotMesh1;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Core Slots")
+    UStaticMeshComponent* SlotMesh2;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Core Slots")
+    UStaticMeshComponent* SlotMesh3;
 
 #if WITH_EDITOR
     virtual void OnConstruction(const FTransform& Transform) override;

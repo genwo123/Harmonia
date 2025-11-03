@@ -56,16 +56,15 @@ AGridTile::AGridTile()
     TileLight->SetCastShadows(true);
 
     InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
-    InteractionSphere->SetupAttachment(PillarMesh);
-    InteractionSphere->SetSphereRadius(150.0f);
-    InteractionSphere->SetRelativeLocation(FVector(0.0f, 0.0f, 250.0f));
+    InteractionSphere->SetupAttachment(RootSceneComponent);
+    InteractionSphere->SetSphereRadius(200.0f);
+    InteractionSphere->SetRelativeLocation(FVector(0.0f, 0.0f, 150.0f));
     InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
     InteractionSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
     InteractionSphere->SetMobility(EComponentMobility::Movable);
     InteractionSphere->SetSimulatePhysics(false);
 }
-
 void AGridTile::BeginPlay()
 {
     Super::BeginPlay();
