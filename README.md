@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎭 Harmonia (하모니아)
+#  Harmonia (하모니아)
 > **1인칭 퍼즐 어드벤처 게임 - 숙명여자대학교 2025 졸업전시작**
 
 <br/>
@@ -8,9 +8,9 @@
 ### 🎬 프로모션 영상
 *이미지를 클릭시면 YouTube의 PV영상을 보실 수 있습니다*
 
-[![하모니아 프로모션](./Docs/Harmonia_PV.png)](https://youtu.be/rGCgl6xelgo?si=o7_9UaGb29jtHJu8)
+[![하모니아 프로모션](./Docs/Image/Harmonia_PV.png)](https://youtu.be/rGCgl6xelgo?si=o7_9UaGb29jtHJu8)
 
-<img src="./Docs/Harmonia_Intro.jpg" alt="하모니아 게임 소개" width="100%">
+<img src="./Docs/Image/Harmonia_Intro.jpg" alt="하모니아 게임 소개" width="100%">
 
 ---
 
@@ -46,8 +46,8 @@
 ### 💻 개발 문서
 | | | |
 |---|---|---|
-| [시스템 아키텍처](./docs/SYSTEM_ARCHITECTURE.md) | [캐릭터 시스템](./docs/CHARACTER_SYSTEM.md) | [상호작용 시스템](./docs/INTERACTION_SYSTEM.md) |
-| [퍼즐 시스템](./docs/PUZZLE_SYSTEM.md) | [UI 시스템](./docs/UI_SYSTEM.md) | [대화 시스템](./docs/DIALOGUE_SYSTEM.md) |
+| [시스템 아키텍처](./docs/development/System_architecture.md) | [캐릭터 시스템](./docs/development/Character_system.md) | [상호작용 시스템](./docs/development/Interaction_system.md) |
+| [퍼즐 시스템](./docs/development/Puzzle_system.md) | [UI 시스템](./docs/development/Ui_system.md) | [대화 시스템](./docs/development/Dialogue_system.md) |
 
 ### 🎮 게임 가이드
 | | | |
