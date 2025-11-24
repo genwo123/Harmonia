@@ -1,687 +1,397 @@
 #include "Character/HamoniaCharacter.h"
 #include "Gameplay/InventoryComponent.h"
+#include "Core/PlayerInteractionComponent.h"
+#include "Gameplay/HeldItemDisplayComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputComponent.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "EnhancedInputSubsystems.h"
-#include "Interaction/InteractableInterface.h"
-#include "DrawDebugHelpers.h"
-#include "EngineUtils.h"
-#include "Kismet/GameplayStatics.h" 
-#include "Gameplay/PuzzleInteractionComponent.h" 
-#include "Gameplay/Pedestal.h"
-#include "Interaction/InteractableMechanism.h"
+#include "Kismet/GameplayStatics.h"
 #include "Save_Instance/Hamoina_GameInstance.h"
-#include "Core/LevelQuestManager.h"  
-#include "EngineUtils.h"
-#include "Gameplay/PickupActor.h"
 #include "TimerManager.h"
-#include <Core/EnhancedQuestComponent.h>
 
 AHamoniaCharacter::AHamoniaCharacter()
 {
-	PrimaryActorTick.bCanEverTick = true;
+    PrimaryActorTick.bCanEverTick = true;
 
-	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
+    InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
+    InteractionComponent = CreateDefaultSubobject<UPlayerInteractionComponent>(TEXT("InteractionComponent"));
+    HeldItemDisplay = CreateDefaultSubobject<UHeldItemDisplayComponent>(TEXT("HeldItemDisplay"));
 
-	CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
-	CameraComponent->SetupAttachment(GetCapsuleComponent());
-	CameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
-	CameraComponent->bUsePawnControlRotation = true;
+    
+    CameraSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraSpringArm"));
+    CameraSpringArm->SetupAttachment(GetCapsuleComponent());
+    CameraSpringArm->TargetArmLength = 0.0f;
+    CameraSpringArm->bDoCollisionTest = true;
+    CameraSpringArm->bUsePawnControlRotation = true;
+    CameraSpringArm->ProbeSize = 12.0f;
+    CameraSpringArm->ProbeChannel = ECC_Camera;
 
-	HeldObjectAttachPoint = CreateDefaultSubobject<USceneComponent>(TEXT("HeldObjectAttachPoint"));
-	HeldObjectAttachPoint->SetupAttachment(CameraComponent);
-	HeldObjectAttachPoint->SetRelativeLocation(FVector(100.0f, 0.0f, -20.0f));
 
-	CurrentInteractableNPC = nullptr;
+    CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
+    CameraComponent->SetupAttachment(CameraSpringArm);  
+    CameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
+    CameraComponent->bUsePawnControlRotation = false; 
 
-	GetCapsuleComponent()->InitCapsuleSize(36.0f, 88.0f);
-	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
+    HeldItemMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeldItemMesh"));
+    HeldItemMeshComponent->SetupAttachment(CameraComponent);
+    HeldItemMeshComponent->SetRelativeLocation(FVector(50.0f, 20.0f, -10.0f));
+    HeldItemMeshComponent->SetVisibility(false);
+    HeldItemMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	bIsLookingAtInteractable = false;
-	CurrentInteractableActor = nullptr;
+    HeldObjectAttachPoint = CreateDefaultSubobject<USceneComponent>(TEXT("HeldObjectAttachPoint"));
+    HeldObjectAttachPoint->SetupAttachment(CameraComponent);
+    HeldObjectAttachPoint->SetRelativeLocation(FVector(100.0f, 0.0f, -20.0f));
 
-	HeldItemDisplay = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeldItemDisplay"));
-	HeldItemDisplay->SetupAttachment(CameraComponent);
-	HeldItemDisplay->SetRelativeLocation(FVector(50.0f, 20.0f, -10.0f));
-	HeldItemDisplay->SetVisibility(false);
+    GetCapsuleComponent()->InitCapsuleSize(36.0f, 88.0f);
+    GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 
-	CurrentDisplayedItem = nullptr;
+    bIsLookingAtInteractable = false;
+    CurrentInteractableActor = nullptr;
 
-	DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
-
-	bShowDebugLines = true;
+    DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
 }
 
-APedestal* AHamoniaCharacter::FindPedestalFromActor(AActor* Actor)
+
+void AHamoniaCharacter::BeginPlay()
 {
-	if (!Actor)
-	{
-		return nullptr;
-	}
+    Super::BeginPlay();
 
-	APedestal* Pedestal = Cast<APedestal>(Actor);
-	if (Pedestal)
-	{
-		return Pedestal;
-	}
+    UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+    if (MovementComponent)
+    {
+        MovementComponent->MaxWalkSpeed = WalkSpeed;
+        MovementComponent->MaxWalkSpeedCrouched = CrouchSpeed;
+        MovementComponent->JumpZVelocity = JumpHeight;
+        MovementComponent->AirControl = 0.2f;
+        MovementComponent->SetCrouchedHalfHeight(44.0f);
+    }
 
-	AActor* ParentActor = Actor->GetAttachParentActor();
-	while (ParentActor)
-	{
-		Pedestal = Cast<APedestal>(ParentActor);
-		if (Pedestal)
-		{
-			return Pedestal;
-		}
-		ParentActor = ParentActor->GetAttachParentActor();
-	}
+    if (InteractionComponent)
+    {
+        InteractionComponent->SetupReferences(CameraComponent, InventoryComponent, HeldObjectAttachPoint);
+    }
 
-	return nullptr;
+    if (HeldItemDisplay)
+    {
+        HeldItemDisplay->SetupMeshComponent(HeldItemMeshComponent);
+    }
+
+    FTimerHandle InputTimerHandle;
+    GetWorldTimerManager().SetTimer(InputTimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+
+    if (APlayerController* PC = Cast<APlayerController>(GetController()))
+    {
+        PC->SetInputMode(FInputModeGameOnly());
+    }
+
+    FTimerHandle ForceInputTimerHandle;
+    GetWorldTimerManager().SetTimer(ForceInputTimerHandle, [this]()
+        {
+            if (APlayerController* PC = Cast<APlayerController>(GetController()))
+            {
+                if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+                    ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+                {
+                    if (DefaultMappingContext)
+                    {
+                        Subsystem->RemoveMappingContext(DefaultMappingContext);
+                        Subsystem->AddMappingContext(DefaultMappingContext, 0);
+                    }
+                }
+            }
+        }, 1.0f, false);
+
+    if (DialogueManager)
+    {
+        DialogueManager->OnDialogueStarted.AddDynamic(this, &AHamoniaCharacter::OnDialogueStarted);
+        DialogueManager->OnDialogueEnded.AddDynamic(this, &AHamoniaCharacter::OnDialogueEnded);
+
+        FTimerHandle DialogueInitTimerHandle;
+        GetWorldTimerManager().SetTimer(DialogueInitTimerHandle, this, &AHamoniaCharacter::InitializeDialogueSystem, 0.1f, false);
+    }
+
+    if (bAutoStartDialogue && !DefaultDialogueID.IsEmpty())
+    {
+        FTimerHandle DialogueTimerHandle;
+        GetWorldTimerManager().SetTimer(DialogueTimerHandle, [this]()
+            {
+                if (DialogueManager && !DialogueManager->bIsInDialogue)
+                {
+                    DialogueManager->StartDialogue(DefaultDialogueID);
+                }
+            }, DelayBeforeDialogue, false);
+    }
 }
 
 void AHamoniaCharacter::SaveBeforeLevelTransition()
 {
-	if (InventoryComponent)
-	{
-		InventoryComponent->SaveInventoryToGameInstance();
-	}
+    if (InventoryComponent)
+    {
+        InventoryComponent->SaveInventoryToGameInstance();
+    }
 
-	UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
-	if (GameInstance)
-	{
-		GameInstance->SaveContinueGame();
-	}
+    UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
+    if (GameInstance)
+    {
+        GameInstance->SaveContinueGame();
+    }
 }
 
 void AHamoniaCharacter::SetupEnhancedInput()
 {
-	APlayerController* PlayerController = Cast<APlayerController>(GetController());
-	if (PlayerController && DefaultMappingContext)
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-		else
-		{
-			FTimerHandle TimerHandle;
-			GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
-		}
-	}
-	else
-	{
-		FTimerHandle TimerHandle;
-		GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
-	}
-}
-
-void AHamoniaCharacter::BeginPlay()
-{
-	Super::BeginPlay();
-
-	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
-	if (MovementComponent)
-	{
-		MovementComponent->MaxWalkSpeed = WalkSpeed;
-		MovementComponent->MaxWalkSpeedCrouched = CrouchSpeed;
-		MovementComponent->JumpZVelocity = JumpHeight;
-		MovementComponent->AirControl = 0.2f;
-		MovementComponent->SetCrouchedHalfHeight(44.0f);
-	}
-
-	FTimerHandle InputTimerHandle;
-	GetWorldTimerManager().SetTimer(InputTimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
-
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		PC->SetInputMode(FInputModeGameOnly());
-	}
-
-	FTimerHandle ForceInputTimerHandle;
-	GetWorldTimerManager().SetTimer(ForceInputTimerHandle, [this]()
-		{
-			if (APlayerController* PC = Cast<APlayerController>(GetController()))
-			{
-				if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-					ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
-				{
-					if (DefaultMappingContext)
-					{
-						Subsystem->RemoveMappingContext(DefaultMappingContext);
-						Subsystem->AddMappingContext(DefaultMappingContext, 0);
-					}
-				}
-			}
-		}, 1.0f, false);
-
-	if (DialogueManager)
-	{
-		DialogueManager->OnDialogueStarted.AddDynamic(this, &AHamoniaCharacter::OnDialogueStarted);
-		DialogueManager->OnDialogueEnded.AddDynamic(this, &AHamoniaCharacter::OnDialogueEnded);
-
-		FTimerHandle DialogueInitTimerHandle;
-		GetWorldTimerManager().SetTimer(DialogueInitTimerHandle, this, &AHamoniaCharacter::InitializeDialogueSystem, 0.1f, false);
-	}
-
-	if (bAutoStartDialogue && !DefaultDialogueID.IsEmpty())
-	{
-		FTimerHandle DialogueTimerHandle;
-		GetWorldTimerManager().SetTimer(DialogueTimerHandle, [this]()
-			{
-				if (DialogueManager && !DialogueManager->bIsInDialogue)
-				{
-					DialogueManager->StartDialogue(DefaultDialogueID);
-				}
-			}, DelayBeforeDialogue, false);
-	}
+    APlayerController* PlayerController = Cast<APlayerController>(GetController());
+    if (PlayerController && DefaultMappingContext)
+    {
+        if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+        {
+            Subsystem->AddMappingContext(DefaultMappingContext, 0);
+        }
+        else
+        {
+            FTimerHandle TimerHandle;
+            GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+        }
+    }
+    else
+    {
+        FTimerHandle TimerHandle;
+        GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+    }
 }
 
 void AHamoniaCharacter::InitializeDialogueSystem()
 {
-	if (DialogueManager && DefaultDialogueDataTable)
-	{
-		DialogueManager->DialogueDataTable = DefaultDialogueDataTable;
-	}
+    if (DialogueManager && DefaultDialogueDataTable)
+    {
+        DialogueManager->DialogueDataTable = DefaultDialogueDataTable;
+    }
 }
 
 bool AHamoniaCharacter::IsDialogueSystemReady()
 {
-	return DialogueManager && DialogueManager->DialogueDataTable != nullptr;
+    return DialogueManager && DialogueManager->DialogueDataTable != nullptr;
 }
 
 void AHamoniaCharacter::Tick(float DeltaTime)
 {
-	Super::Tick(DeltaTime);
+    Super::Tick(DeltaTime);
 
-	if (CurrentInteractableActor && !IsValid(CurrentInteractableActor))
-	{
-		bIsLookingAtInteractable = false;
-		CurrentInteractableActor = nullptr;
-		CurrentInteractionText.Empty();
-	}
-
-	CheckForInteractables();
-
-	if (bShowDebugLines)
-	{
-		DrawDebugInteractionLine();
-	}
-}
-
-void AHamoniaCharacter::DrawDebugInteractionLine()
-{
-	if (!bShowDebugLines) return;
-
-	FVector Start = CameraComponent->GetComponentLocation();
-	FVector End = Start + (CameraComponent->GetForwardVector() * InteractionDistance);
-
-	FColor LineColor = bIsLookingAtInteractable ? FColor::Green : FColor::Red;
-
-	DrawDebugLine(GetWorld(), Start, End, LineColor, false, -1.0f, 0, 1.0f);
-
-	if (bIsLookingAtInteractable && CurrentInteractableActor)
-	{
-		DrawDebugSphere(
-			GetWorld(),
-			CurrentInteractableActor->GetActorLocation(),
-			30.0f,
-			12,
-			FColor::Green,
-			false,
-			-1.0f,
-			0,
-			1.0f
-		);
-	}
+    if (InteractionComponent)
+    {
+        bIsLookingAtInteractable = InteractionComponent->IsLookingAtInteractable();
+        CurrentInteractableActor = InteractionComponent->GetCurrentInteractableActor();
+        CurrentInteractionText = InteractionComponent->GetCurrentInteractionText();
+        CurrentInteractionType = InteractionComponent->GetCurrentInteractionType();
+    }
 }
 
 void AHamoniaCharacter::Move(const FInputActionValue& Value)
 {
-	FVector2D MovementVector = Value.Get<FVector2D>();
+    FVector2D MovementVector = Value.Get<FVector2D>();
 
-	if (Controller != nullptr)
-	{
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
+    if (Controller != nullptr)
+    {
+        const FRotator Rotation = Controller->GetControlRotation();
+        const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+        const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+        const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-		AddMovementInput(ForwardDirection, MovementVector.Y);
-		AddMovementInput(RightDirection, MovementVector.X);
-	}
+        AddMovementInput(ForwardDirection, MovementVector.Y);
+        AddMovementInput(RightDirection, MovementVector.X);
+    }
 }
 
 void AHamoniaCharacter::Look(const FInputActionValue& Value)
 {
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
+    FVector2D LookAxisVector = Value.Get<FVector2D>();
 
-	if (Controller != nullptr)
-	{
-		AddControllerYawInput(LookAxisVector.X * LookSensitivity);
-		AddControllerPitchInput(LookAxisVector.Y * LookSensitivity);
-	}
+    if (Controller != nullptr)
+    {
+        AddControllerYawInput(LookAxisVector.X * LookSensitivity);
+        AddControllerPitchInput(LookAxisVector.Y * LookSensitivity);
+    }
 }
 
 void AHamoniaCharacter::StartSprint(const FInputActionValue& Value)
 {
-	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
-	if (MovementComponent)
-	{
-		MovementComponent->MaxWalkSpeed = SprintSpeed;
-		bIsSprinting = true;
-	}
+    UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+    if (MovementComponent)
+    {
+        MovementComponent->MaxWalkSpeed = SprintSpeed;
+        bIsSprinting = true;
+    }
 }
 
 void AHamoniaCharacter::StopSprint(const FInputActionValue& Value)
 {
-	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
-	if (MovementComponent)
-	{
-		MovementComponent->MaxWalkSpeed = WalkSpeed;
-		bIsSprinting = false;
-	}
+    UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+    if (MovementComponent)
+    {
+        MovementComponent->MaxWalkSpeed = WalkSpeed;
+        bIsSprinting = false;
+    }
 }
 
 void AHamoniaCharacter::ToggleCrouch(const FInputActionValue& Value)
 {
-	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
-	if (MovementComponent)
-	{
-		if (MovementComponent->IsCrouching())
-		{
-			UnCrouch();
-			MovementComponent->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
-		}
-		else
-		{
-			Crouch();
-			MovementComponent->MaxWalkSpeed = CrouchSpeed;
-		}
-	}
+    UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+    if (MovementComponent)
+    {
+        if (MovementComponent->IsCrouching())
+        {
+            UnCrouch();
+            MovementComponent->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+        }
+        else
+        {
+            Crouch();
+            MovementComponent->MaxWalkSpeed = CrouchSpeed;
+        }
+    }
 }
 
 void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
+    Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
+    UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
 
-	if (EnhancedInputComponent)
-	{
-		if (MoveAction)
-		{
-			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Move);
-		}
+    if (EnhancedInputComponent)
+    {
+        if (MoveAction)
+        {
+            EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Move);
+        }
 
-		if (LookAction)
-		{
-			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Look);
-		}
+        if (LookAction)
+        {
+            EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::Look);
+        }
 
-		if (JumpAction)
-		{
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-		}
+        if (JumpAction)
+        {
+            EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
+            EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+        }
 
-		if (SprintAction)
-		{
-			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::StartSprint);
-			EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHamoniaCharacter::StopSprint);
-		}
+        if (SprintAction)
+        {
+            EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::StartSprint);
+            EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHamoniaCharacter::StopSprint);
+        }
 
-		if (CrouchAction)
-		{
-			EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::ToggleCrouch);
-		}
+        if (CrouchAction)
+        {
+            EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Triggered, this, &AHamoniaCharacter::ToggleCrouch);
+        }
 
-		if (RotateAction)
-		{
-			EnhancedInputComponent->BindAction(RotateAction, ETriggerEvent::Started, this, &AHamoniaCharacter::RotateObject);
-		}
+        if (RotateAction)
+        {
+            EnhancedInputComponent->BindAction(RotateAction, ETriggerEvent::Started, this, &AHamoniaCharacter::RotateObject);
+        }
 
-		if (PushAction)
-		{
-			EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnEKeyPressed);
-		}
+        if (PushAction)
+        {
+            EnhancedInputComponent->BindAction(PushAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnEKeyPressed);
+        }
 
-		if (InteractAction)
-		{
-			EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHamoniaCharacter::Interact);
-		}
+        if (InteractAction)
+        {
+            EnhancedInputComponent->BindAction(InteractAction, ETriggerEvent::Started, this, &AHamoniaCharacter::Interact);
+        }
 
-		if (InventoryToggleAction)
-		{
-			EnhancedInputComponent->BindAction(InventoryToggleAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryToggle);
-		}
+        if (InventoryToggleAction)
+        {
+            EnhancedInputComponent->BindAction(InventoryToggleAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryToggle);
+        }
 
-		if (InventoryLeftAction)
-		{
-			EnhancedInputComponent->BindAction(InventoryLeftAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryMoveLeft);
-		}
+        if (InventoryLeftAction)
+        {
+            EnhancedInputComponent->BindAction(InventoryLeftAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryMoveLeft);
+        }
 
-		if (InventoryRightAction)
-		{
-			EnhancedInputComponent->BindAction(InventoryRightAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryMoveRight);
-		}
+        if (InventoryRightAction)
+        {
+            EnhancedInputComponent->BindAction(InventoryRightAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryMoveRight);
+        }
 
-		if (InventoryUseAction)
-		{
-			EnhancedInputComponent->BindAction(InventoryUseAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryUse);
-		}
-	}
+        if (InventoryUseAction)
+        {
+            EnhancedInputComponent->BindAction(InventoryUseAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryUse);
+        }
+    }
 }
 
 void AHamoniaCharacter::RotateObject()
 {
-	if (bIsLookingAtInteractable && CurrentInteractableActor)
-	{
-		APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
-		if (Pedestal)
-		{
-			Pedestal->Rotate();
-		}
-	}
+    if (InteractionComponent)
+    {
+        InteractionComponent->RotateObject();
+    }
 }
 
 void AHamoniaCharacter::PushObject()
 {
-	if (bIsLookingAtInteractable && CurrentInteractableActor)
-	{
-		APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
-		if (Pedestal)
-		{
-			FVector Direction = CameraComponent->GetForwardVector();
-			Direction.Z = 0;
-			Direction.Normalize();
-			Pedestal->Push(Direction);
-		}
-	}
+    if (InteractionComponent)
+    {
+        InteractionComponent->PushObject();
+    }
 }
 
 void AHamoniaCharacter::OnEKeyPressed()
 {
-	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
-	{
-		OnInventoryUse();
-	}
-	else
-	{
-		PushObject();
-	}
+    if (InteractionComponent)
+    {
+        InteractionComponent->OnEKeyPressed();
+    }
 }
 
 void AHamoniaCharacter::Interact()
 {
-
-
-	if (DialogueManager)
-	{
-
-		if (DialogueManager->bIsInDialogue)
-		{
-
-			OnDialogueProgressRequested.Broadcast();
-
-			return;  
-		}
-	}
-
-
-	if (CurrentInteractableNPC)
-	{
-		CurrentInteractableNPC->HandlePlayerInteraction();
-		return;
-	}
-
-	AActor* HeldObject = GetHeldObject();
-	if (HeldObject)
-	{
-		UPuzzleInteractionComponent* HeldItemComp = HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
-		if (HeldItemComp)
-		{
-			if (bIsLookingAtInteractable && CurrentInteractableActor)
-			{
-				APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
-				if (Pedestal)
-				{
-					if (Pedestal->GetPlacedObject() != nullptr)
-					{
-						return;
-					}
-					if (!Pedestal->CanPlaceObjectByFilter(HeldObject))
-					{
-						return;
-					}
-					HeldItemComp->PlaceOnPedestal(Pedestal);
-					if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-					{
-						IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-					}
-					return;
-				}
-			}
-			FVector DropLocation = HeldObjectAttachPoint->GetComponentLocation();
-			HeldItemComp->PutDown(DropLocation, GetActorRotation());
-			if (bIsLookingAtInteractable && CurrentInteractableActor &&
-				CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-			{
-				IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-			}
-			return;
-		}
-	}
-
-	if (bIsLookingAtInteractable && CurrentInteractableActor)
-	{
-		UItem* HeldInventoryItem = GetCurrentHeldInventoryItem();
-		if (HeldInventoryItem && HandleInventoryItemInteraction(HeldInventoryItem, CurrentInteractableActor))
-		{
-			return;
-		}
-
-		APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
-		if (Pedestal)
-		{
-			AActor* ObjectOnPedestal = Pedestal->GetPlacedObject();
-			if (ObjectOnPedestal)
-			{
-				UPuzzleInteractionComponent* InteractionComp = ObjectOnPedestal->FindComponentByClass<UPuzzleInteractionComponent>();
-				if (InteractionComp)
-				{
-					Pedestal->RemoveObject();
-					InteractionComp->PickUp(this);
-					if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-					{
-						IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-					}
-					return;
-				}
-			}
-			IInteractableInterface::Execute_Interact(Pedestal, this);
-			if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-			{
-				IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-			}
-			return;
-		}
-
-		UPuzzleInteractionComponent* InteractionComp = CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
-		if (InteractionComp && InteractionComp->bCanBePickedUp)
-		{
-			APedestal* ParentPedestal = FindPedestalFromActor(CurrentInteractableActor);
-			if (ParentPedestal && ParentPedestal->GetPlacedObject() == CurrentInteractableActor)
-			{
-				ParentPedestal->RemoveObject();
-			}
-			InteractionComp->PickUp(this);
-			if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-			{
-				IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-			}
-			return;
-		}
-
-		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
-		if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-		{
-			IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, this);
-		}
-	}
+    if (InteractionComponent)
+    {
+        InteractionComponent->PerformInteraction();
+    }
 }
-
 
 AActor* AHamoniaCharacter::GetHeldObject()
 {
-	TArray<AActor*> AllActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
-
-	for (AActor* Actor : AllActors)
-	{
-		UPuzzleInteractionComponent* InteractionComp =
-			Actor->FindComponentByClass<UPuzzleInteractionComponent>();
-
-		if (InteractionComp && InteractionComp->HoldingActor == this)
-		{
-			return Actor;
-		}
-	}
-
-	return nullptr;
+    if (InteractionComponent)
+    {
+        return InteractionComponent->GetHeldObject();
+    }
+    return nullptr;
 }
 
 void AHamoniaCharacter::CheckForInteractables()
 {
-	if (CurrentInteractableActor && IsValid(CurrentInteractableActor))
-	{
-		if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-		{
-			IInteractableInterface::Execute_HideInteractionWidget(CurrentInteractableActor);
-		}
-	}
+    if (InteractionComponent)
+    {
+        InteractionComponent->CheckForInteractables();
+    }
+}
 
-	FVector Start = CameraComponent->GetComponentLocation();
-	FVector End = Start + (CameraComponent->GetForwardVector() * InteractionDistance);
-	FHitResult HitResult;
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(this);
-	QueryParams.bTraceComplex = false;
-	QueryParams.bReturnPhysicalMaterial = false;
-
-	AActor* HeldObject = GetHeldObject();
-	if (HeldObject)
-	{
-		QueryParams.AddIgnoredActor(HeldObject);
-	}
-
-	ECollisionChannel TraceChannel = ECC_Visibility;
-
-	bIsLookingAtInteractable = false;
-	CurrentInteractableActor = nullptr;
-	CurrentInteractionText.Empty();
-	CurrentInteractionType = EInteractionType::Default;
-
-	bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, TraceChannel, QueryParams);
-
-	if (bHit)
-	{
-		AActor* HitActor = HitResult.GetActor();
-
-		if (HitActor && HitActor != HeldObject && HitActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-		{
-			bool bCanInteractResult = IInteractableInterface::Execute_CanInteract(HitActor, this);
-
-			if (bCanInteractResult)
-			{
-				bIsLookingAtInteractable = true;
-				CurrentInteractableActor = HitActor;
-				CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(HitActor);
-				CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(HitActor);
-			}
-		}
-	}
-
-	if (!bIsLookingAtInteractable)
-	{
-		float ClosestDistance = InteractionDistance;
-		AActor* ClosestActor = nullptr;
-
-		for (TActorIterator<AUnia> It(GetWorld()); It; ++It)
-		{
-			AUnia* Unia = *It;
-			if (IsValid(Unia))
-			{
-				float Distance = FVector::Distance(GetActorLocation(), Unia->GetActorLocation());
-				if (Distance < ClosestDistance && Unia->CanInteract_Implementation(this))
-				{
-					ClosestDistance = Distance;
-					ClosestActor = Unia;
-				}
-			}
-		}
-
-		for (TActorIterator<APedestal> It(GetWorld()); It; ++It)
-		{
-			APedestal* Pedestal = *It;
-			if (IsValid(Pedestal))
-			{
-				float Distance = FVector::Distance(GetActorLocation(), Pedestal->GetActorLocation());
-				if (Distance < ClosestDistance)
-				{
-					ClosestDistance = Distance;
-					ClosestActor = Pedestal;
-				}
-			}
-		}
-
-		for (TActorIterator<APickupActor> It(GetWorld()); It; ++It)
-		{
-			APickupActor* PickupActor = *It;
-			if (IsValid(PickupActor) && PickupActor != HeldObject)
-			{
-				float Distance = FVector::Distance(GetActorLocation(), PickupActor->GetActorLocation());
-				if (Distance < ClosestDistance)
-				{
-					ClosestDistance = Distance;
-					ClosestActor = PickupActor;
-				}
-			}
-		}
-
-		if (ClosestActor)
-		{
-			bIsLookingAtInteractable = true;
-			CurrentInteractableActor = ClosestActor;
-			CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(ClosestActor);
-			CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(ClosestActor);
-		}
-	}
-
-	if (bIsLookingAtInteractable && CurrentInteractableActor)
-	{
-		if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-		{
-			IInteractableInterface::Execute_ShowInteractionWidget(CurrentInteractableActor);
-		}
-	}
+void AHamoniaCharacter::DrawDebugInteractionLine()
+{
 }
 
 EInteractionType AHamoniaCharacter::GetCurrentInteractionType() const
 {
-	return CurrentInteractionType;
+    return InteractionComponent ? InteractionComponent->GetCurrentInteractionType() : EInteractionType::Default;
 }
 
 bool AHamoniaCharacter::IsLookingAtInteractable() const
 {
-	return bIsLookingAtInteractable;
+    return InteractionComponent ? InteractionComponent->IsLookingAtInteractable() : false;
 }
 
 FString AHamoniaCharacter::GetCurrentInteractionText() const
 {
-	return CurrentInteractionText;
+    return InteractionComponent ? InteractionComponent->GetCurrentInteractionText() : FString();
 }
 
 void AHamoniaCharacter::OnDialogueStarted(ESpeakerType Speaker, FText DialogueText, EDialogueType Type, float Duration)
@@ -694,178 +404,96 @@ void AHamoniaCharacter::OnDialogueEnded()
 
 UDialogueManagerComponent* AHamoniaCharacter::GetDialogueManager()
 {
-	return DialogueManager;
+    return DialogueManager;
 }
 
 void AHamoniaCharacter::OnInventoryToggle()
 {
-	if (InventoryComponent)
-	{
-		InventoryComponent->ToggleInventory();
+    if (InventoryComponent)
+    {
+        InventoryComponent->ToggleInventory();
 
-		if (InventoryComponent->bIsInventoryOpen)
-		{
-			UItem* SelectedItem = InventoryComponent->GetSelectedItem();
-			UpdateHeldItemDisplay(SelectedItem);
-		}
-		else
-		{
-			HideHeldItemMesh();
-		}
-	}
+        if (HeldItemDisplay)
+        {
+            UItem* SelectedItem = InventoryComponent->GetSelectedItem();
+            HeldItemDisplay->UpdateDisplay(SelectedItem, InventoryComponent->bIsInventoryOpen);
+        }
+    }
 }
 
 void AHamoniaCharacter::OnInventoryMoveLeft()
 {
-	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
-	{
-		InventoryComponent->MoveSelection(-1);
-		OnInventorySelectionChanged(InventoryComponent->CurrentSelectedSlot);
-	}
+    if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+    {
+        InventoryComponent->MoveSelection(-1);
+        OnInventorySelectionChanged(InventoryComponent->CurrentSelectedSlot);
+    }
 }
 
 void AHamoniaCharacter::OnInventoryMoveRight()
 {
-	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
-	{
-		InventoryComponent->MoveSelection(1);
-		OnInventorySelectionChanged(InventoryComponent->CurrentSelectedSlot);
-	}
+    if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+    {
+        InventoryComponent->MoveSelection(1);
+        OnInventorySelectionChanged(InventoryComponent->CurrentSelectedSlot);
+    }
 }
 
 void AHamoniaCharacter::OnInventoryUse()
 {
-	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
-	{
-		InventoryComponent->UseSelectedItem();
-	}
-}
-
-UItem* AHamoniaCharacter::GetCurrentHeldInventoryItem()
-{
-	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
-	{
-		return InventoryComponent->GetSelectedItem();
-	}
-	return nullptr;
-}
-
-bool AHamoniaCharacter::HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor)
-{
-	if (!Item || !TargetActor)
-	{
-		return false;
-	}
-
-	// PuzzleStarter와 상호작용 (새로 추가)
-	APuzzleStarter* PuzzleStarter = Cast<APuzzleStarter>(TargetActor);
-	if (PuzzleStarter)
-	{
-		FName ItemTag = FName(*Item->Name);
-
-		bool bInserted = PuzzleStarter->TryInsertCoreByTag(ItemTag);
-
-		if (bInserted)
-		{
-			if (InventoryComponent)
-			{
-				InventoryComponent->RemoveItem(Item);
-			}
-			return true;
-		}
-		return false;
-	}
-
-	// 기존 Key 로직
-	if (Item->Name.Contains("Key"))
-	{
-		AInteractableMechanism* Door = Cast<AInteractableMechanism>(TargetActor);
-		if (Door && Door->MechanismType == EMechanismType::Door)
-		{
-			if (Door->RequiredKeyName.Equals(Item->Name, ESearchCase::IgnoreCase))
-			{
-				IInteractableInterface::Execute_Interact(Door, this);
-				return true;
-			}
-		}
-	}
-
-	// 기존 Tool 로직
-	if (Item->Name.Contains("Tool"))
-	{
-		APedestal* Pedestal = Cast<APedestal>(TargetActor);
-		if (Pedestal)
-		{
-			Item->Use(this);
-			return true;
-		}
-	}
-
-	if (Item->bCanBeUsed)
-	{
-		Item->Use(this);
-		return true;
-	}
-
-	return false;
-}
-
-
-void AHamoniaCharacter::UpdateHeldItemDisplay(UItem* NewItem)
-{
-	CurrentDisplayedItem = NewItem;
-
-	if (NewItem && InventoryComponent && InventoryComponent->bIsInventoryOpen)
-	{
-		ShowHeldItemMesh(NewItem);
-	}
-	else
-	{
-		HideHeldItemMesh();
-	}
-}
-
-void AHamoniaCharacter::ShowHeldItemMesh(UItem* Item)
-{
-	if (Item && HeldItemDisplay)
-	{
-		ShowHeldItemMeshBP(Item);
-	}
-	else
-	{
-		HideHeldItemMeshBP();
-	}
-}
-
-void AHamoniaCharacter::HideHeldItemMesh()
-{
-	HideHeldItemMeshBP();
+    if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+    {
+        InventoryComponent->UseSelectedItem();
+    }
 }
 
 void AHamoniaCharacter::OnInventorySelectionChanged(int32 NewSlotIndex)
 {
-	if (InventoryComponent)
-	{
-		UItem* NewSelectedItem = InventoryComponent->GetItemAtSlot(NewSlotIndex);
-		UpdateHeldItemDisplay(NewSelectedItem);
-	}
+    if (InventoryComponent && HeldItemDisplay)
+    {
+        UItem* NewSelectedItem = InventoryComponent->GetItemAtSlot(NewSlotIndex);
+        HeldItemDisplay->UpdateDisplay(NewSelectedItem, InventoryComponent->bIsInventoryOpen);
+    }
 }
 
 void AHamoniaCharacter::SetCurrentInteractableNPC(AUnia* NPC)
 {
-	if (NPC && !InteractableNPCs.Contains(NPC))
-	{
-		InteractableNPCs.Add(NPC);
-	}
-	CurrentInteractableNPC = NPC;
+    if (InteractionComponent)
+    {
+        InteractionComponent->SetCurrentInteractableNPC(NPC);
+    }
 }
 
 void AHamoniaCharacter::RemoveInteractableNPC(AUnia* NPC)
 {
-	InteractableNPCs.Remove(NPC);
+    if (InteractionComponent)
+    {
+        InteractionComponent->RemoveInteractableNPC(NPC);
+    }
+}
 
-	if (CurrentInteractableNPC == NPC)
-	{
-		CurrentInteractableNPC = InteractableNPCs.Num() > 0 ? InteractableNPCs[0] : nullptr;
-	}
+AUnia* AHamoniaCharacter::GetCurrentInteractableNPC() const
+{
+    return InteractionComponent ? InteractionComponent->GetCurrentInteractableNPC() : nullptr;
+}
+
+bool AHamoniaCharacter::HasInteractableNPC() const
+{
+    return InteractionComponent ? InteractionComponent->HasInteractableNPC() : false;
+}
+
+void AHamoniaCharacter::ShowHeldItemMesh(UItem* Item)
+{
+    if (HeldItemDisplay)
+    {
+        HeldItemDisplay->ShowItemMesh(Item);
+    }
+}
+
+void AHamoniaCharacter::HideHeldItemMesh()
+{
+    if (HeldItemDisplay)
+    {
+        HeldItemDisplay->HideItemMesh();
+    }
 }
