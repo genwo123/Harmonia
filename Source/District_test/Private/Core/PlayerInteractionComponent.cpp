@@ -20,6 +20,8 @@ UPlayerInteractionComponent::UPlayerInteractionComponent()
     bIsLookingAtInteractable = false;
     CurrentInteractableActor = nullptr;
     CurrentInteractableNPC = nullptr;
+
+    bShowDebugLines = false;
 }
 
 void UPlayerInteractionComponent::BeginPlay()
@@ -250,6 +252,17 @@ void UPlayerInteractionComponent::CheckForInteractables()
 
     bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, TraceChannel, QueryParams);
 
+    if (bShowDebugLines)
+    {
+        FColor LineColor = bHit ? FColor::Green : FColor::Red;
+        DrawDebugLine(GetWorld(), Start, End, LineColor, false, -1.0f, 0, 1.0f);
+
+        if (bHit)
+        {
+            DrawDebugSphere(GetWorld(), HitResult.Location, 10.0f, 8, FColor::Yellow, false, -1.0f, 0, 2.0f);
+        }
+    }
+
     if (bHit)
     {
         AActor* HitActor = HitResult.GetActor();
@@ -322,6 +335,21 @@ void UPlayerInteractionComponent::CheckForInteractables()
             CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(ClosestActor);
             CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(ClosestActor);
         }
+    }
+
+    if (bShowDebugLines && bIsLookingAtInteractable && CurrentInteractableActor)
+    {
+        DrawDebugSphere(
+            GetWorld(),
+            CurrentInteractableActor->GetActorLocation(),
+            30.0f,
+            12,
+            FColor::Green,
+            false,
+            -1.0f,
+            0,
+            1.0f
+        );
     }
 
     if (bIsLookingAtInteractable && CurrentInteractableActor)
