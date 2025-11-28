@@ -1,44 +1,69 @@
 #include "Core/PlayerInteractionComponent.h"
-#include "Character/HamoniaCharacter.h"
-#include "Character/Unia.h"
-#include "Gameplay/InventoryComponent.h"
-#include "Gameplay/PuzzleInteractionComponent.h"
-#include "Gameplay/Pedestal.h"
-#include "Gameplay/PickupActor.h"
-#include "Gameplay/PuzzleStarter.h"
 #include "Interaction/InteractableInterface.h"
-#include "Interaction/InteractableMechanism.h"
+#include "Interaction/OutlineComponent.h"
+#include "Gameplay/InventoryComponent.h"
+#include "Gameplay/Pedestal.h"
+#include "Gameplay/Item.h"
+#include "Character/Unia.h"
 #include "Camera/CameraComponent.h"
 #include "DrawDebugHelpers.h"
-#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
-#include "Core/DialogueManagerComponent.h"
 
 UPlayerInteractionComponent::UPlayerInteractionComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
+
+    InteractionDistance = 400.0f;
+    bShowDebugLines = false;
+    bEnableOutline = true;
+
     bIsLookingAtInteractable = false;
     CurrentInteractableActor = nullptr;
     CurrentInteractableNPC = nullptr;
-
-    bShowDebugLines = false;
+    CameraRef = nullptr;
+    InventoryRef = nullptr;
+    HeldObjectAttachPoint = nullptr;
 }
 
 void UPlayerInteractionComponent::BeginPlay()
 {
     Super::BeginPlay();
+
+    if (AActor* Owner = GetOwner())
+    {
+        if (!CameraRef)
+        {
+            CameraRef = Owner->FindComponentByClass<UCameraComponent>();
+            UE_LOG(LogTemp, Warning, TEXT(" Auto-found CameraRef: %s"), CameraRef ? *CameraRef->GetName() : TEXT("NULL"));
+        }
+
+        if (!InventoryRef)
+        {
+            InventoryRef = Owner->FindComponentByClass<UInventoryComponent>();
+            UE_LOG(LogTemp, Warning, TEXT(" Auto-found InventoryRef: %s"), InventoryRef ? TEXT("OK") : TEXT("NULL"));
+        }
+
+        if (!HeldObjectAttachPoint)
+        {
+            HeldObjectAttachPoint = Cast<USceneComponent>(
+                Owner->GetDefaultSubobjectByName(TEXT("HeldObjectAttachPoint"))
+            );
+            UE_LOG(LogTemp, Warning, TEXT(" Auto-found HeldObjectAttachPoint: %s"), HeldObjectAttachPoint ? *HeldObjectAttachPoint->GetName() : TEXT("NULL"));
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("=== PlayerInteractionComponent BeginPlay ==="));
+    UE_LOG(LogTemp, Warning, TEXT("CameraRef: %s"), CameraRef ? *CameraRef->GetName() : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("InventoryRef: %s"), InventoryRef ? TEXT("OK") : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("HeldObjectAttachPoint: %s"), HeldObjectAttachPoint ? *HeldObjectAttachPoint->GetName() : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("bShowDebugLines: %s"), bShowDebugLines ? TEXT("TRUE") : TEXT("FALSE"));
+    UE_LOG(LogTemp, Warning, TEXT("bEnableOutline: %s"), bEnableOutline ? TEXT("TRUE") : TEXT("FALSE"));
 }
+
 
 void UPlayerInteractionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-    if (CurrentInteractableActor && !IsValid(CurrentInteractableActor))
-    {
-        bIsLookingAtInteractable = false;
-        CurrentInteractableActor = nullptr;
-        CurrentInteractionText.Empty();
-    }
 
     CheckForInteractables();
 
@@ -55,187 +80,21 @@ void UPlayerInteractionComponent::SetupReferences(UCameraComponent* Camera, UInv
     HeldObjectAttachPoint = HeldAttachPoint;
 }
 
-void UPlayerInteractionComponent::PerformInteraction()
-{
-    AHamoniaCharacter* OwnerCharacter = Cast<AHamoniaCharacter>(GetOwner());
-    if (!OwnerCharacter)
-        return;
-
-    UDialogueManagerComponent* DialogueManager = OwnerCharacter->GetDialogueManager();
-    if (DialogueManager && DialogueManager->bIsInDialogue)
-    {
-        OwnerCharacter->OnDialogueProgressRequested.Broadcast();
-        return;
-    }
-
-    if (CurrentInteractableNPC)
-    {
-        CurrentInteractableNPC->HandlePlayerInteraction();
-        return;
-    }
-
-    AActor* HeldObject = GetHeldObject();
-    if (HeldObject)
-    {
-        UPuzzleInteractionComponent* HeldItemComp = HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
-        if (HeldItemComp)
-        {
-            if (bIsLookingAtInteractable && CurrentInteractableActor)
-            {
-                APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
-                if (Pedestal)
-                {
-                    if (Pedestal->GetPlacedObject() != nullptr)
-                        return;
-
-                    if (!Pedestal->CanPlaceObjectByFilter(HeldObject))
-                        return;
-
-                    HeldItemComp->PlaceOnPedestal(Pedestal);
-
-                    if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-                    {
-                        IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, OwnerCharacter);
-                    }
-                    return;
-                }
-            }
-
-            FVector DropLocation = HeldObjectAttachPoint->GetComponentLocation();
-            HeldItemComp->PutDown(DropLocation, GetOwner()->GetActorRotation());
-
-            if (bIsLookingAtInteractable && CurrentInteractableActor &&
-                CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-            {
-                IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, OwnerCharacter);
-            }
-            return;
-        }
-    }
-
-    if (bIsLookingAtInteractable && CurrentInteractableActor)
-    {
-        UItem* HeldInventoryItem = GetCurrentHeldInventoryItem();
-        if (HeldInventoryItem && HandleInventoryItemInteraction(HeldInventoryItem, CurrentInteractableActor))
-        {
-            return;
-        }
-
-        APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
-        if (Pedestal)
-        {
-            AActor* ObjectOnPedestal = Pedestal->GetPlacedObject();
-            if (ObjectOnPedestal)
-            {
-                UPuzzleInteractionComponent* InteractionComp = ObjectOnPedestal->FindComponentByClass<UPuzzleInteractionComponent>();
-                if (InteractionComp)
-                {
-                    Pedestal->RemoveObject();
-                    InteractionComp->PickUp(OwnerCharacter);
-
-                    if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-                    {
-                        IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, OwnerCharacter);
-                    }
-                    return;
-                }
-            }
-
-            IInteractableInterface::Execute_Interact(Pedestal, OwnerCharacter);
-
-            if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-            {
-                IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, OwnerCharacter);
-            }
-            return;
-        }
-
-        UPuzzleInteractionComponent* InteractionComp = CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
-        if (InteractionComp && InteractionComp->bCanBePickedUp)
-        {
-            APedestal* ParentPedestal = FindPedestalFromActor(CurrentInteractableActor);
-            if (ParentPedestal && ParentPedestal->GetPlacedObject() == CurrentInteractableActor)
-            {
-                ParentPedestal->RemoveObject();
-            }
-
-            InteractionComp->PickUp(OwnerCharacter);
-
-            if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-            {
-                IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, OwnerCharacter);
-            }
-            return;
-        }
-
-        IInteractableInterface::Execute_Interact(CurrentInteractableActor, OwnerCharacter);
-
-        if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-        {
-            IInteractableInterface::Execute_OnQuestInteract(CurrentInteractableActor, OwnerCharacter);
-        }
-    }
-}
-
-void UPlayerInteractionComponent::RotateObject()
-{
-    if (bIsLookingAtInteractable && CurrentInteractableActor)
-    {
-        APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
-        if (Pedestal)
-        {
-            Pedestal->Rotate();
-        }
-    }
-}
-
-void UPlayerInteractionComponent::PushObject()
-{
-    if (bIsLookingAtInteractable && CurrentInteractableActor)
-    {
-        APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
-        if (Pedestal && CameraRef)
-        {
-            FVector Direction = CameraRef->GetForwardVector();
-            Direction.Z = 0;
-            Direction.Normalize();
-            Pedestal->Push(Direction);
-        }
-    }
-}
-
-void UPlayerInteractionComponent::OnEKeyPressed()
-{
-    if (InventoryRef && InventoryRef->bIsInventoryOpen)
-    {
-        InventoryRef->UseSelectedItem();
-    }
-    else
-    {
-        PushObject();
-    }
-}
-
 void UPlayerInteractionComponent::CheckForInteractables()
 {
     if (!CameraRef)
-        return;
-
-    if (CurrentInteractableActor && IsValid(CurrentInteractableActor))
     {
-        if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-        {
-            IInteractableInterface::Execute_HideInteractionWidget(CurrentInteractableActor);
-        }
+        UE_LOG(LogTemp, Error, TEXT("CheckForInteractables: CameraRef is NULL!"));
+        return;
     }
 
-    FVector Start = CameraRef->GetComponentLocation();
-    FVector End = Start + (CameraRef->GetForwardVector() * InteractionDistance);
+    FVector StartLocation = CameraRef->GetComponentLocation();
+    FVector ForwardVector = CameraRef->GetForwardVector();
+    FVector EndLocation = StartLocation + (ForwardVector * InteractionDistance);
+
     FHitResult HitResult;
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(GetOwner());
-    QueryParams.bTraceComplex = false;
-    QueryParams.bReturnPhysicalMaterial = false;
 
     AActor* HeldObject = GetHeldObject();
     if (HeldObject)
@@ -243,33 +102,39 @@ void UPlayerInteractionComponent::CheckForInteractables()
         QueryParams.AddIgnoredActor(HeldObject);
     }
 
-    ECollisionChannel TraceChannel = ECC_Visibility;
+    bool bHit = GetWorld()->LineTraceSingleByChannel(
+        HitResult,
+        StartLocation,
+        EndLocation,
+        ECC_Visibility,
+        QueryParams
+    );
+
+    if (bHit)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Hit Actor: %s"), *HitResult.GetActor()->GetName());
+    }
+
+    AActor* PreviousInteractableActor = CurrentInteractableActor;
+    bool bPreviousInteractableState = bIsLookingAtInteractable;
 
     bIsLookingAtInteractable = false;
     CurrentInteractableActor = nullptr;
-    CurrentInteractionText.Empty();
+    CurrentInteractionText = FString();
     CurrentInteractionType = EInteractionType::Default;
-
-    bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, TraceChannel, QueryParams);
-
-    if (bShowDebugLines)
-    {
-        FColor LineColor = bHit ? FColor::Green : FColor::Red;
-        DrawDebugLine(GetWorld(), Start, End, LineColor, false, -1.0f, 0, 1.0f);
-
-        if (bHit)
-        {
-            DrawDebugSphere(GetWorld(), HitResult.Location, 10.0f, 8, FColor::Yellow, false, -1.0f, 0, 2.0f);
-        }
-    }
 
     if (bHit)
     {
         AActor* HitActor = HitResult.GetActor();
 
-        if (HitActor && HitActor != HeldObject && HitActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+        if (HitActor && HitActor != HeldObject &&
+            HitActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
         {
+            UE_LOG(LogTemp, Warning, TEXT("HitActor has InteractableInterface!"));
+
             bool bCanInteractResult = IInteractableInterface::Execute_CanInteract(HitActor, GetOwner());
+
+            UE_LOG(LogTemp, Warning, TEXT("CanInteract: %s"), bCanInteractResult ? TEXT("TRUE") : TEXT("FALSE"));
 
             if (bCanInteractResult)
             {
@@ -277,155 +142,129 @@ void UPlayerInteractionComponent::CheckForInteractables()
                 CurrentInteractableActor = HitActor;
                 CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(HitActor);
                 CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(HitActor);
+
+                UE_LOG(LogTemp, Warning, TEXT("Interactable found: %s"), *CurrentInteractionText);
             }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("HitActor does NOT have InteractableInterface!"));
         }
     }
 
-    if (!bIsLookingAtInteractable)
+    if (PreviousInteractableActor != CurrentInteractableActor)
     {
-        float ClosestDistance = InteractionDistance;
-        AActor* ClosestActor = nullptr;
-
-        for (TActorIterator<AUnia> It(GetWorld()); It; ++It)
+        if (PreviousInteractableActor)
         {
-            AUnia* Unia = *It;
-            if (IsValid(Unia))
-            {
-                float Distance = FVector::Distance(GetOwner()->GetActorLocation(), Unia->GetActorLocation());
-                if (Distance < ClosestDistance && Unia->CanInteract_Implementation(GetOwner()))
-                {
-                    ClosestDistance = Distance;
-                    ClosestActor = Unia;
-                }
-            }
+            UE_LOG(LogTemp, Warning, TEXT("Disabling outline on: %s"), *PreviousInteractableActor->GetName());
+            DisableOutline(PreviousInteractableActor);
         }
 
-        for (TActorIterator<APedestal> It(GetWorld()); It; ++It)
+        if (CurrentInteractableActor && bEnableOutline)
         {
-            APedestal* Pedestal = *It;
-            if (IsValid(Pedestal))
-            {
-                float Distance = FVector::Distance(GetOwner()->GetActorLocation(), Pedestal->GetActorLocation());
-                if (Distance < ClosestDistance)
-                {
-                    ClosestDistance = Distance;
-                    ClosestActor = Pedestal;
-                }
-            }
-        }
-
-        for (TActorIterator<APickupActor> It(GetWorld()); It; ++It)
-        {
-            APickupActor* PickupActor = *It;
-            if (IsValid(PickupActor) && PickupActor != HeldObject)
-            {
-                float Distance = FVector::Distance(GetOwner()->GetActorLocation(), PickupActor->GetActorLocation());
-                if (Distance < ClosestDistance)
-                {
-                    ClosestDistance = Distance;
-                    ClosestActor = PickupActor;
-                }
-            }
-        }
-
-        if (ClosestActor)
-        {
-            bIsLookingAtInteractable = true;
-            CurrentInteractableActor = ClosestActor;
-            CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(ClosestActor);
-            CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(ClosestActor);
+            UE_LOG(LogTemp, Warning, TEXT("Enabling outline on: %s"), *CurrentInteractableActor->GetName());
+            EnableOutline(CurrentInteractableActor);
         }
     }
 
-    if (bShowDebugLines && bIsLookingAtInteractable && CurrentInteractableActor)
+    if (bPreviousInteractableState != bIsLookingAtInteractable)
     {
-        DrawDebugSphere(
-            GetWorld(),
-            CurrentInteractableActor->GetActorLocation(),
-            30.0f,
-            12,
-            FColor::Green,
-            false,
-            -1.0f,
-            0,
-            1.0f
+        OnInteractionChanged.Broadcast(
+            bIsLookingAtInteractable,
+            CurrentInteractionText,
+            CurrentInteractionType
         );
     }
-
-    if (bIsLookingAtInteractable && CurrentInteractableActor)
-    {
-        if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-        {
-            IInteractableInterface::Execute_ShowInteractionWidget(CurrentInteractableActor);
-        }
-    }
-
-    OnInteractionChanged.Broadcast(bIsLookingAtInteractable, CurrentInteractionText, CurrentInteractionType);
 }
 
-void UPlayerInteractionComponent::DrawDebugInteractionLine()
+void UPlayerInteractionComponent::PerformInteraction()
 {
-    if (!bShowDebugLines || !CameraRef)
+    if (CurrentInteractableNPC)
+    {
+        CurrentInteractableNPC->HandlePlayerInteraction();
+        return;
+    }
+
+    if (!bIsLookingAtInteractable || !CurrentInteractableActor)
         return;
 
-    FVector Start = CameraRef->GetComponentLocation();
-    FVector End = Start + (CameraRef->GetForwardVector() * InteractionDistance);
+    if (!CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+        return;
 
-    FColor LineColor = bIsLookingAtInteractable ? FColor::Green : FColor::Red;
+    bool bCanInteract = IInteractableInterface::Execute_CanInteract(CurrentInteractableActor, GetOwner());
+    if (!bCanInteract)
+        return;
 
-    DrawDebugLine(GetWorld(), Start, End, LineColor, false, -1.0f, 0, 1.0f);
-
-    if (bIsLookingAtInteractable && CurrentInteractableActor)
+    UItem* HeldItem = GetCurrentHeldInventoryItem();
+    if (HeldItem)
     {
-        DrawDebugSphere(
-            GetWorld(),
-            CurrentInteractableActor->GetActorLocation(),
-            30.0f,
-            12,
-            FColor::Green,
-            false,
-            -1.0f,
-            0,
-            1.0f
-        );
+        bool bHandled = HandleInventoryItemInteraction(HeldItem, CurrentInteractableActor);
+        if (bHandled)
+            return;
+    }
+
+    IInteractableInterface::Execute_Interact(CurrentInteractableActor, GetOwner());
+}
+
+void UPlayerInteractionComponent::OnEKeyPressed()
+{
+    RotateObject();
+}
+
+void UPlayerInteractionComponent::RotateObject()
+{
+    if (!CurrentInteractableActor)
+        return;
+
+    APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
+    if (Pedestal && Pedestal->bCanRotate)
+    {
+        Pedestal->Rotate(45.0f);
+    }
+}
+
+void UPlayerInteractionComponent::PushObject()
+{
+    if (!CameraRef || !CurrentInteractableActor)
+        return;
+
+    FVector PushDirection = CameraRef->GetForwardVector();
+    PushDirection.Z = 0;
+    PushDirection.Normalize();
+
+    APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
+    if (Pedestal)
+    {
+        Pedestal->Push(PushDirection);
     }
 }
 
 void UPlayerInteractionComponent::SetCurrentInteractableNPC(AUnia* NPC)
 {
+    CurrentInteractableNPC = NPC;
+
     if (NPC && !InteractableNPCs.Contains(NPC))
     {
         InteractableNPCs.Add(NPC);
     }
-    CurrentInteractableNPC = NPC;
 }
 
 void UPlayerInteractionComponent::RemoveInteractableNPC(AUnia* NPC)
 {
-    InteractableNPCs.Remove(NPC);
-
     if (CurrentInteractableNPC == NPC)
     {
-        CurrentInteractableNPC = InteractableNPCs.Num() > 0 ? InteractableNPCs[0] : nullptr;
+        CurrentInteractableNPC = nullptr;
     }
+
+    InteractableNPCs.Remove(NPC);
 }
 
-AActor* UPlayerInteractionComponent::GetHeldObject() const
+bool UPlayerInteractionComponent::HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor)
 {
-    TArray<AActor*> AllActors;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
+    if (!Item || !TargetActor || !InventoryRef)
+        return false;
 
-    for (AActor* Actor : AllActors)
-    {
-        UPuzzleInteractionComponent* InteractionComp = Actor->FindComponentByClass<UPuzzleInteractionComponent>();
-
-        if (InteractionComp && InteractionComp->HoldingActor == GetOwner())
-        {
-            return Actor;
-        }
-    }
-
-    return nullptr;
+    return false;
 }
 
 APedestal* UPlayerInteractionComponent::FindPedestalFromActor(AActor* Actor) const
@@ -438,13 +277,11 @@ APedestal* UPlayerInteractionComponent::FindPedestalFromActor(AActor* Actor) con
         return Pedestal;
 
     AActor* ParentActor = Actor->GetAttachParentActor();
-    while (ParentActor)
+    if (ParentActor)
     {
         Pedestal = Cast<APedestal>(ParentActor);
         if (Pedestal)
             return Pedestal;
-
-        ParentActor = ParentActor->GetAttachParentActor();
     }
 
     return nullptr;
@@ -452,59 +289,91 @@ APedestal* UPlayerInteractionComponent::FindPedestalFromActor(AActor* Actor) con
 
 UItem* UPlayerInteractionComponent::GetCurrentHeldInventoryItem() const
 {
-    if (InventoryRef && InventoryRef->bIsInventoryOpen)
-    {
-        return InventoryRef->GetSelectedItem();
-    }
+    if (!InventoryRef)
+        return nullptr;
+
+    // TODO: InventoryComponent에 실제 함수 확인 후 수정
     return nullptr;
 }
 
-bool UPlayerInteractionComponent::HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor)
+AActor* UPlayerInteractionComponent::GetHeldObject() const
 {
-    if (!Item || !TargetActor)
-        return false;
+    if (!HeldObjectAttachPoint)
+        return nullptr;
 
-    APuzzleStarter* PuzzleStarter = Cast<APuzzleStarter>(TargetActor);
-    if (PuzzleStarter)
+    TArray<USceneComponent*> ChildComponents;
+    HeldObjectAttachPoint->GetChildrenComponents(false, ChildComponents);
+
+    if (ChildComponents.Num() > 0 && ChildComponents[0])
     {
-        FName ItemTag = FName(*Item->Name);
-        bool bInserted = PuzzleStarter->TryInsertCoreByTag(ItemTag);
-
-        if (bInserted && InventoryRef)
-        {
-            InventoryRef->RemoveItem(Item);
-        }
-        return bInserted;
+        return ChildComponents[0]->GetOwner();
     }
 
-    if (Item->Name.Contains("Key"))
+    return nullptr;
+}
+
+void UPlayerInteractionComponent::EnableOutline(AActor* Actor)
+{
+    if (!Actor || !bEnableOutline)
     {
-        AInteractableMechanism* Door = Cast<AInteractableMechanism>(TargetActor);
-        if (Door && Door->MechanismType == EMechanismType::Door)
-        {
-            if (Door->RequiredKeyName.Equals(Item->Name, ESearchCase::IgnoreCase))
-            {
-                IInteractableInterface::Execute_Interact(Door, GetOwner());
-                return true;
-            }
-        }
+        UE_LOG(LogTemp, Warning, TEXT("EnableOutline: Actor NULL or Outline disabled"));
+        return;
     }
 
-    if (Item->Name.Contains("Tool"))
+    UE_LOG(LogTemp, Warning, TEXT("EnableOutline: %s"), *Actor->GetName());
+
+    UOutlineComponent* OutlineComp = Actor->FindComponentByClass<UOutlineComponent>();
+    if (OutlineComp)
     {
-        APedestal* Pedestal = Cast<APedestal>(TargetActor);
-        if (Pedestal)
-        {
-            Item->Use(Cast<AHamoniaCharacter>(GetOwner()));
-            return true;
-        }
+        UE_LOG(LogTemp, Warning, TEXT("Found OutlineComponent!"));
+        OutlineComp->ShowOutline();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("OutlineComponent NOT FOUND on %s!"), *Actor->GetName());
+    }
+}
+void UPlayerInteractionComponent::DisableOutline(AActor* Actor)
+{
+    if (!Actor)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DisableOutline: Actor NULL"));
+        return;
     }
 
-    if (Item->bCanBeUsed)
-    {
-        Item->Use(Cast<AHamoniaCharacter>(GetOwner()));
-        return true;
-    }
+    UE_LOG(LogTemp, Warning, TEXT("DisableOutline: %s"), *Actor->GetName());
 
-    return false;
+    UOutlineComponent* OutlineComp = Actor->FindComponentByClass<UOutlineComponent>();
+    if (OutlineComp)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Found OutlineComponent for disable!"));
+        OutlineComp->HideOutline();
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("OutlineComponent NOT FOUND on %s for disable!"), *Actor->GetName());
+    }
+}
+
+void UPlayerInteractionComponent::DrawDebugInteractionLine()
+{
+    if (!CameraRef)
+        return;
+
+    FVector StartLocation = CameraRef->GetComponentLocation();
+    FVector ForwardVector = CameraRef->GetForwardVector();
+    FVector EndLocation = StartLocation + (ForwardVector * InteractionDistance);
+
+    FColor LineColor = bIsLookingAtInteractable ? FColor::Green : FColor::Red;
+
+    DrawDebugLine(
+        GetWorld(),
+        StartLocation,
+        EndLocation,
+        LineColor,
+        false,
+        -1.0f,
+        0,
+        2.0f
+    );
 }

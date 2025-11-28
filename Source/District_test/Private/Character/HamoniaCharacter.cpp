@@ -54,10 +54,15 @@ AHamoniaCharacter::AHamoniaCharacter()
     DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
 }
 
-
 void AHamoniaCharacter::BeginPlay()
 {
     Super::BeginPlay();
+
+    UE_LOG(LogTemp, Warning, TEXT("=== AHamoniaCharacter BeginPlay ==="));
+    UE_LOG(LogTemp, Warning, TEXT("CameraComponent: %s"), CameraComponent ? *CameraComponent->GetName() : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("InventoryComponent: %s"), InventoryComponent ? TEXT("OK") : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("HeldObjectAttachPoint: %s"), HeldObjectAttachPoint ? *HeldObjectAttachPoint->GetName() : TEXT("NULL"));
+    UE_LOG(LogTemp, Warning, TEXT("InteractionComponent: %s"), InteractionComponent ? TEXT("OK") : TEXT("NULL"));
 
     UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
     if (MovementComponent)
@@ -71,7 +76,13 @@ void AHamoniaCharacter::BeginPlay()
 
     if (InteractionComponent)
     {
+        UE_LOG(LogTemp, Warning, TEXT(" Calling SetupReferences..."));
         InteractionComponent->SetupReferences(CameraComponent, InventoryComponent, HeldObjectAttachPoint);
+        UE_LOG(LogTemp, Warning, TEXT(" SetupReferences called!"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("InteractionComponent is NULL!"));
     }
 
     if (HeldItemDisplay)
@@ -125,7 +136,6 @@ void AHamoniaCharacter::BeginPlay()
             }, DelayBeforeDialogue, false);
     }
 }
-
 void AHamoniaCharacter::SaveBeforeLevelTransition()
 {
     if (InventoryComponent)

@@ -1,5 +1,4 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Interaction/InteractionEnums.h"
@@ -39,6 +38,15 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     void OnEKeyPressed();
 
+    UFUNCTION(BlueprintCallable, Category = "Interaction")
+    void CheckForInteractables();
+
+    UFUNCTION(BlueprintCallable, Category = "Interaction")
+    AActor* GetHeldObject() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Interaction")
+    void SetupReferences(UCameraComponent* Camera, UInventoryComponent* Inventory, USceneComponent* HeldAttachPoint);
+
     UFUNCTION(BlueprintPure, Category = "Interaction")
     bool IsLookingAtInteractable() const { return bIsLookingAtInteractable; }
 
@@ -63,34 +71,28 @@ public:
     UFUNCTION(BlueprintPure, Category = "Interaction")
     bool HasInteractableNPC() const { return CurrentInteractableNPC != nullptr; }
 
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void SetupReferences(UCameraComponent* Camera, UInventoryComponent* Inventory, USceneComponent* HeldAttachPoint);
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction Settings")
     float InteractionDistance = 400.0f;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction Settings")
     bool bShowDebugLines = false;
 
-    UPROPERTY(BlueprintAssignable, Category = "Interaction")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction Settings")
+    bool bEnableOutline = true;
+
+    UPROPERTY(BlueprintAssignable, Category = "Interaction Events")
     FOnInteractionChanged OnInteractionChanged;
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void CheckForInteractables();
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    AActor* GetHeldObject() const;
 
 protected:
     virtual void BeginPlay() override;
 
 private:
     void DrawDebugInteractionLine();
-
     bool HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor);
-    
     APedestal* FindPedestalFromActor(AActor* Actor) const;
     UItem* GetCurrentHeldInventoryItem() const;
+    void EnableOutline(AActor* Actor);
+    void DisableOutline(AActor* Actor);
 
     UPROPERTY()
     UCameraComponent* CameraRef;
