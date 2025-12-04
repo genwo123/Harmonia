@@ -3,6 +3,7 @@
 #include "Interaction/OutlineComponent.h"
 #include "Gameplay/InventoryComponent.h"
 #include "Gameplay/Pedestal.h"
+#include "Gameplay/PuzzleInteractionComponent.h"
 #include "Gameplay/Item.h"
 #include "Character/Unia.h"
 #include "Camera/CameraComponent.h"
@@ -16,6 +17,7 @@ UPlayerInteractionComponent::UPlayerInteractionComponent()
     InteractionDistance = 400.0f;
     bShowDebugLines = false;
     bEnableOutline = true;
+    DropDistance = 150.0f;
 
     bIsLookingAtInteractable = false;
     CurrentInteractableActor = nullptr;
@@ -23,24 +25,25 @@ UPlayerInteractionComponent::UPlayerInteractionComponent()
     CameraRef = nullptr;
     InventoryRef = nullptr;
     HeldObjectAttachPoint = nullptr;
+    bIgnoreInteractionCheck = false;
 }
 
 void UPlayerInteractionComponent::BeginPlay()
 {
     Super::BeginPlay();
 
+    CurrentHeldObject = nullptr;
+
     if (AActor* Owner = GetOwner())
     {
         if (!CameraRef)
         {
             CameraRef = Owner->FindComponentByClass<UCameraComponent>();
-            UE_LOG(LogTemp, Warning, TEXT(" Auto-found CameraRef: %s"), CameraRef ? *CameraRef->GetName() : TEXT("NULL"));
         }
 
         if (!InventoryRef)
         {
             InventoryRef = Owner->FindComponentByClass<UInventoryComponent>();
-            UE_LOG(LogTemp, Warning, TEXT(" Auto-found InventoryRef: %s"), InventoryRef ? TEXT("OK") : TEXT("NULL"));
         }
 
         if (!HeldObjectAttachPoint)
@@ -48,18 +51,9 @@ void UPlayerInteractionComponent::BeginPlay()
             HeldObjectAttachPoint = Cast<USceneComponent>(
                 Owner->GetDefaultSubobjectByName(TEXT("HeldObjectAttachPoint"))
             );
-            UE_LOG(LogTemp, Warning, TEXT(" Auto-found HeldObjectAttachPoint: %s"), HeldObjectAttachPoint ? *HeldObjectAttachPoint->GetName() : TEXT("NULL"));
         }
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("=== PlayerInteractionComponent BeginPlay ==="));
-    UE_LOG(LogTemp, Warning, TEXT("CameraRef: %s"), CameraRef ? *CameraRef->GetName() : TEXT("NULL"));
-    UE_LOG(LogTemp, Warning, TEXT("InventoryRef: %s"), InventoryRef ? TEXT("OK") : TEXT("NULL"));
-    UE_LOG(LogTemp, Warning, TEXT("HeldObjectAttachPoint: %s"), HeldObjectAttachPoint ? *HeldObjectAttachPoint->GetName() : TEXT("NULL"));
-    UE_LOG(LogTemp, Warning, TEXT("bShowDebugLines: %s"), bShowDebugLines ? TEXT("TRUE") : TEXT("FALSE"));
-    UE_LOG(LogTemp, Warning, TEXT("bEnableOutline: %s"), bEnableOutline ? TEXT("TRUE") : TEXT("FALSE"));
 }
-
 
 void UPlayerInteractionComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
@@ -82,139 +76,279 @@ void UPlayerInteractionComponent::SetupReferences(UCameraComponent* Camera, UInv
 
 void UPlayerInteractionComponent::CheckForInteractables()
 {
-    if (!CameraRef)
+    if (bIgnoreInteractionCheck)
     {
-        UE_LOG(LogTemp, Error, TEXT("CheckForInteractables: CameraRef is NULL!"));
+        UE_LOG(LogTemp, Error, TEXT("Interaction check is BLOCKED"));
         return;
     }
 
-    FVector StartLocation = CameraRef->GetComponentLocation();
-    FVector ForwardVector = CameraRef->GetForwardVector();
-    FVector EndLocation = StartLocation + (ForwardVector * InteractionDistance);
+    if (!CameraRef)
+    {
+        UE_LOG(LogTemp, Error, TEXT("CameraRef is NULL"));
+        return;
+    }
+
+    FVector Start = CameraRef->GetComponentLocation();
+    FVector End = Start + (CameraRef->GetForwardVector() * InteractionDistance);
 
     FHitResult HitResult;
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(GetOwner());
 
-    AActor* HeldObject = GetHeldObject();
-    if (HeldObject)
-    {
-        QueryParams.AddIgnoredActor(HeldObject);
-    }
-
+    // LineTrace 자체가 작동하는지 확인
     bool bHit = GetWorld()->LineTraceSingleByChannel(
         HitResult,
-        StartLocation,
-        EndLocation,
+        Start,
+        End,
         ECC_Visibility,
         QueryParams
     );
 
+    UE_LOG(LogTemp, Warning, TEXT("LineTrace Hit: %s"), bHit ? TEXT("YES") : TEXT("NO"));
     if (bHit)
     {
         UE_LOG(LogTemp, Warning, TEXT("Hit Actor: %s"), *HitResult.GetActor()->GetName());
     }
 
-    AActor* PreviousInteractableActor = CurrentInteractableActor;
-    bool bPreviousInteractableState = bIsLookingAtInteractable;
+    AActor* HitActor = bHit ? HitResult.GetActor() : nullptr;
 
-    bIsLookingAtInteractable = false;
-    CurrentInteractableActor = nullptr;
-    CurrentInteractionText = FString();
-    CurrentInteractionType = EInteractionType::Default;
-
-    if (bHit)
+    if (HitActor && HitActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
     {
-        AActor* HitActor = HitResult.GetActor();
-
-        if (HitActor && HitActor != HeldObject &&
-            HitActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+        if (HitActor != CurrentInteractableActor)
         {
-            UE_LOG(LogTemp, Warning, TEXT("HitActor has InteractableInterface!"));
-
-            bool bCanInteractResult = IInteractableInterface::Execute_CanInteract(HitActor, GetOwner());
-
-            UE_LOG(LogTemp, Warning, TEXT("CanInteract: %s"), bCanInteractResult ? TEXT("TRUE") : TEXT("FALSE"));
-
-            if (bCanInteractResult)
+            if (CurrentInteractableActor)
             {
-                bIsLookingAtInteractable = true;
-                CurrentInteractableActor = HitActor;
-                CurrentInteractionText = IInteractableInterface::Execute_GetInteractionText(HitActor);
-                CurrentInteractionType = IInteractableInterface::Execute_GetInteractionType(HitActor);
+                UOutlineComponent* OldOutline = CurrentInteractableActor->FindComponentByClass<UOutlineComponent>();
+                if (OldOutline)
+                {
+                    OldOutline->HideOutline();
+                }
+            }
 
-                UE_LOG(LogTemp, Warning, TEXT("Interactable found: %s"), *CurrentInteractionText);
+            CurrentInteractableActor = HitActor;
+
+            UOutlineComponent* NewOutline = CurrentInteractableActor->FindComponentByClass<UOutlineComponent>();
+            if (NewOutline)
+            {
+                NewOutline->ShowOutline();
+            }
+
+            bool bCanInteract = IInteractableInterface::Execute_CanInteract(CurrentInteractableActor, GetOwner());
+            FString InteractionText = IInteractableInterface::Execute_GetInteractionText(CurrentInteractableActor);
+            EInteractionType InteractionType = IInteractableInterface::Execute_GetInteractionType(CurrentInteractableActor);
+
+            bIsLookingAtInteractable = bCanInteract;
+            CurrentInteractionText = InteractionText;
+            CurrentInteractionType = InteractionType;
+
+            OnInteractionChanged.Broadcast(bCanInteract, InteractionText, InteractionType);
+        }
+    }
+    else
+    {
+        if (CurrentInteractableActor)
+        {
+            UOutlineComponent* OldOutline = CurrentInteractableActor->FindComponentByClass<UOutlineComponent>();
+            if (OldOutline)
+            {
+                OldOutline->HideOutline();
+            }
+            CurrentInteractableActor = nullptr;
+        }
+
+        if (bIsLookingAtInteractable)
+        {
+            bIsLookingAtInteractable = false;
+            CurrentInteractionText = TEXT("");
+            CurrentInteractionType = EInteractionType::Default;
+            OnInteractionChanged.Broadcast(false, TEXT(""), EInteractionType::Default);
+        }
+    }
+}
+
+
+void UPlayerInteractionComponent::PerformInteraction()
+{
+    if (!GetOwner())
+    {
+        return;
+    }
+
+    AActor* HeldObject = GetHeldObject();
+
+    if (HeldObject)
+    {
+        if (CurrentInteractableActor)
+        {
+            APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
+            if (Pedestal)
+            {
+                bool bPlaced = PlaceOnPedestal(Pedestal, HeldObject);
+                if (bPlaced)
+                {
+                    OnInteractionChanged.Broadcast(false, TEXT(""), EInteractionType::Default);
+                }
+                return;
             }
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("HitActor does NOT have InteractableInterface!"));
+            OnShowWarningMessage.Broadcast(TEXT("Use G to drop object"));
         }
     }
-
-    if (PreviousInteractableActor != CurrentInteractableActor)
+    else
     {
-        if (PreviousInteractableActor)
+        if (CurrentInteractableActor)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Disabling outline on: %s"), *PreviousInteractableActor->GetName());
-            DisableOutline(PreviousInteractableActor);
-        }
+            if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
+            {
+                APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
+                if (Pedestal)
+                {
+                    bool bPickedUp = PickUpFromPedestal(Pedestal);
+                    if (bPickedUp)
+                    {
+                        OnInteractionChanged.Broadcast(false, TEXT(""), EInteractionType::Default);
+                    }
+                    return;
+                }
 
-        if (CurrentInteractableActor && bEnableOutline)
+                bool bPickedUp = PickUpObject(CurrentInteractableActor);
+                if (bPickedUp)
+                {
+                    OnInteractionChanged.Broadcast(false, TEXT(""), EInteractionType::Default);
+                }
+                else
+                {
+                    IInteractableInterface::Execute_Interact(CurrentInteractableActor, GetOwner());
+                }
+            }
+        }
+    }
+}
+
+bool UPlayerInteractionComponent::PlaceOnPedestal(APedestal* Pedestal, AActor* ObjectToPlace)
+{
+    if (!Pedestal || !ObjectToPlace)
+    {
+        return false;
+    }
+
+    UPuzzleInteractionComponent* PuzzleComp = ObjectToPlace->FindComponentByClass<UPuzzleInteractionComponent>();
+    if (!PuzzleComp)
+    {
+        return false;
+    }
+
+    bool bResult = PuzzleComp->PlaceOnPedestal(Pedestal);
+
+    if (bResult)
+    {
+        if (CurrentHeldObject == ObjectToPlace)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Enabling outline on: %s"), *CurrentInteractableActor->GetName());
-            EnableOutline(CurrentInteractableActor);
+            CurrentHeldObject = nullptr;
         }
+
+        OnInteractionChanged.Broadcast(false, TEXT(""), EInteractionType::Default);
     }
 
-    if (bPreviousInteractableState != bIsLookingAtInteractable)
-    {
-        OnInteractionChanged.Broadcast(
-            bIsLookingAtInteractable,
-            CurrentInteractionText,
-            CurrentInteractionType
-        );
-    }
+    return bResult;
 }
 
-void UPlayerInteractionComponent::PerformInteraction()
+bool UPlayerInteractionComponent::PickUpFromPedestal(APedestal* Pedestal)
 {
-    if (CurrentInteractableNPC)
+    if (!Pedestal)
     {
-        CurrentInteractableNPC->HandlePlayerInteraction();
-        return;
+        return false;
     }
 
-    if (!bIsLookingAtInteractable || !CurrentInteractableActor)
-        return;
-
-    if (!CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
-        return;
-
-    bool bCanInteract = IInteractableInterface::Execute_CanInteract(CurrentInteractableActor, GetOwner());
-    if (!bCanInteract)
-        return;
-
-    UItem* HeldItem = GetCurrentHeldInventoryItem();
-    if (HeldItem)
+    AActor* RemovedObject = Pedestal->RemoveObject();
+    if (!RemovedObject)
     {
-        bool bHandled = HandleInventoryItemInteraction(HeldItem, CurrentInteractableActor);
-        if (bHandled)
-            return;
+        return false;
     }
 
-    IInteractableInterface::Execute_Interact(CurrentInteractableActor, GetOwner());
+    UPuzzleInteractionComponent* PuzzleComp = RemovedObject->FindComponentByClass<UPuzzleInteractionComponent>();
+    if (!PuzzleComp)
+    {
+        return false;
+    }
+
+    bool bResult = PuzzleComp->PickUp(GetOwner());
+
+    if (bResult)
+    {
+        CurrentHeldObject = RemovedObject;
+    }
+
+    return bResult;
 }
 
-void UPlayerInteractionComponent::OnEKeyPressed()
+bool UPlayerInteractionComponent::PickUpObject(AActor* ObjectToPickUp)
 {
-    RotateObject();
+    if (!ObjectToPickUp)
+    {
+        return false;
+    }
+
+    if (CurrentHeldObject)
+    {
+        OnShowWarningMessage.Broadcast(TEXT("Already holding an object!"));
+        return false;
+    }
+
+    AActor* HeldViaAttach = GetHeldObject();
+    if (HeldViaAttach)
+    {
+        OnShowWarningMessage.Broadcast(TEXT("Already holding an object!"));
+        return false;
+    }
+
+    UPuzzleInteractionComponent* PuzzleComp = ObjectToPickUp->FindComponentByClass<UPuzzleInteractionComponent>();
+    if (!PuzzleComp)
+    {
+        return false;
+    }
+
+    bool bResult = PuzzleComp->PickUp(GetOwner());
+
+    if (bResult)
+    {
+        CurrentHeldObject = ObjectToPickUp;
+    }
+
+    return bResult;
 }
 
-void UPlayerInteractionComponent::RotateObject()
+void UPlayerInteractionComponent::DropHeldObject()
+{
+    AActor* HeldObject = GetHeldObject();
+
+    if (!HeldObject)
+    {
+        return;
+    }
+
+    UPuzzleInteractionComponent* PuzzleComp = HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
+    if (!PuzzleComp || !CameraRef)
+    {
+        return;
+    }
+
+    FVector DropLocation = CameraRef->GetComponentLocation() + (CameraRef->GetForwardVector() * DropDistance);
+    FRotator DropRotation = HeldObject->GetActorRotation();
+
+    PuzzleComp->PutDown(DropLocation, DropRotation);
+
+    CurrentHeldObject = nullptr;
+}
+
+void UPlayerInteractionComponent::RotatePedestal()
 {
     if (!CurrentInteractableActor)
+    {
         return;
+    }
 
     APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
     if (Pedestal && Pedestal->bCanRotate)
@@ -223,10 +357,12 @@ void UPlayerInteractionComponent::RotateObject()
     }
 }
 
-void UPlayerInteractionComponent::PushObject()
+void UPlayerInteractionComponent::PushPedestal()
 {
     if (!CameraRef || !CurrentInteractableActor)
+    {
         return;
+    }
 
     FVector PushDirection = CameraRef->GetForwardVector();
     PushDirection.Z = 0;
@@ -262,7 +398,9 @@ void UPlayerInteractionComponent::RemoveInteractableNPC(AUnia* NPC)
 bool UPlayerInteractionComponent::HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor)
 {
     if (!Item || !TargetActor || !InventoryRef)
+    {
         return false;
+    }
 
     return false;
 }
@@ -270,18 +408,24 @@ bool UPlayerInteractionComponent::HandleInventoryItemInteraction(UItem* Item, AA
 APedestal* UPlayerInteractionComponent::FindPedestalFromActor(AActor* Actor) const
 {
     if (!Actor)
+    {
         return nullptr;
+    }
 
     APedestal* Pedestal = Cast<APedestal>(Actor);
     if (Pedestal)
+    {
         return Pedestal;
+    }
 
     AActor* ParentActor = Actor->GetAttachParentActor();
     if (ParentActor)
     {
         Pedestal = Cast<APedestal>(ParentActor);
         if (Pedestal)
+        {
             return Pedestal;
+        }
     }
 
     return nullptr;
@@ -290,23 +434,42 @@ APedestal* UPlayerInteractionComponent::FindPedestalFromActor(AActor* Actor) con
 UItem* UPlayerInteractionComponent::GetCurrentHeldInventoryItem() const
 {
     if (!InventoryRef)
+    {
         return nullptr;
+    }
 
-    // TODO: InventoryComponent에 실제 함수 확인 후 수정
     return nullptr;
 }
 
 AActor* UPlayerInteractionComponent::GetHeldObject() const
 {
+    if (CurrentHeldObject && IsValid(CurrentHeldObject))
+    {
+        return CurrentHeldObject;
+    }
+
     if (!HeldObjectAttachPoint)
+    {
         return nullptr;
+    }
 
     TArray<USceneComponent*> ChildComponents;
     HeldObjectAttachPoint->GetChildrenComponents(false, ChildComponents);
 
-    if (ChildComponents.Num() > 0 && ChildComponents[0])
+    for (USceneComponent* ChildComp : ChildComponents)
     {
-        return ChildComponents[0]->GetOwner();
+        if (ChildComp)
+        {
+            AActor* Owner = ChildComp->GetOwner();
+            if (Owner && IsValid(Owner))
+            {
+                USceneComponent* RootComp = Owner->GetRootComponent();
+                if (RootComp && RootComp->GetAttachParent() == HeldObjectAttachPoint)
+                {
+                    return Owner;
+                }
+            }
+        }
     }
 
     return nullptr;
@@ -316,49 +479,48 @@ void UPlayerInteractionComponent::EnableOutline(AActor* Actor)
 {
     if (!Actor || !bEnableOutline)
     {
-        UE_LOG(LogTemp, Warning, TEXT("EnableOutline: Actor NULL or Outline disabled"));
         return;
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("EnableOutline: %s"), *Actor->GetName());
 
     UOutlineComponent* OutlineComp = Actor->FindComponentByClass<UOutlineComponent>();
     if (OutlineComp)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Found OutlineComponent!"));
         OutlineComp->ShowOutline();
     }
-    else
+
+    APedestal* Pedestal = Cast<APedestal>(Actor);
+    if (Pedestal)
     {
-        UE_LOG(LogTemp, Error, TEXT("OutlineComponent NOT FOUND on %s!"), *Actor->GetName());
+        Pedestal->UpdateOutlineForPlacedObject(true);
     }
 }
+
 void UPlayerInteractionComponent::DisableOutline(AActor* Actor)
 {
     if (!Actor)
     {
-        UE_LOG(LogTemp, Warning, TEXT("DisableOutline: Actor NULL"));
         return;
     }
-
-    UE_LOG(LogTemp, Warning, TEXT("DisableOutline: %s"), *Actor->GetName());
 
     UOutlineComponent* OutlineComp = Actor->FindComponentByClass<UOutlineComponent>();
     if (OutlineComp)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Found OutlineComponent for disable!"));
         OutlineComp->HideOutline();
     }
-    else
+
+    APedestal* Pedestal = Cast<APedestal>(Actor);
+    if (Pedestal)
     {
-        UE_LOG(LogTemp, Warning, TEXT("OutlineComponent NOT FOUND on %s for disable!"), *Actor->GetName());
+        Pedestal->UpdateOutlineForPlacedObject(false);
     }
 }
 
 void UPlayerInteractionComponent::DrawDebugInteractionLine()
 {
     if (!CameraRef)
+    {
         return;
+    }
 
     FVector StartLocation = CameraRef->GetComponentLocation();
     FVector ForwardVector = CameraRef->GetForwardVector();
@@ -374,6 +536,11 @@ void UPlayerInteractionComponent::DrawDebugInteractionLine()
         false,
         -1.0f,
         0,
-        2.0f
+        DebugLineThickness
     );
+}
+
+void UPlayerInteractionComponent::ReEnableInteractionCheck()
+{
+    bIgnoreInteractionCheck = false;
 }

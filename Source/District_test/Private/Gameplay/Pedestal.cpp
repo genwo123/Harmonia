@@ -1,7 +1,7 @@
 #include "Gameplay/Pedestal.h"
 #include "Kismet/GameplayStatics.h"
 #include "Gameplay/PickupActor.h"
-#include "Character/HamoniaCharacter.h"
+#include "Interaction/OutlineComponent.h"
 
 APedestal::APedestal()
 {
@@ -37,9 +37,6 @@ APedestal::APedestal()
 #if WITH_EDITORONLY_DATA
     AttachmentPoint->bVisualizeComponent = true;
 #endif
-
-    InteractionSphere->OnComponentBeginOverlap.AddDynamic(this, &APedestal::OnInteractionSphereBeginOverlap);
-    InteractionSphere->OnComponentEndOverlap.AddDynamic(this, &APedestal::OnInteractionSphereEndOverlap);
 
     InteractionText = "Interact with Pedestal";
     InteractionType = EInteractionType::Default;
@@ -144,7 +141,6 @@ void APedestal::OnConstruction(const FTransform& Transform)
         FindOwnerPuzzleArea();
     }
 }
-
 
 bool APedestal::MoveToGridPosition(int32 NewRow, int32 NewColumn)
 {
@@ -265,10 +261,8 @@ void APedestal::FindOwnerPuzzleArea()
     }
 }
 
-
 void APedestal::Interact_Implementation(AActor* Interactor)
 {
-    
 }
 
 bool APedestal::Push(FVector Direction)
@@ -327,10 +321,9 @@ bool APedestal::Push(FVector Direction)
 
     ClearPreviousCell();
 
-    // 수정: Z 높이 유지
-    float CurrentZ = GetActorLocation().Z;  // 현재 Z 높이 저장
+    float CurrentZ = GetActorLocation().Z;
     FVector NewLocation = OwnerPuzzleArea->GetWorldLocationFromGridIndex(TargetRow, TargetColumn);
-    NewLocation.Z = CurrentZ;  // 원래 Z 높이로 복원
+    NewLocation.Z = CurrentZ;
 
     SetActorLocation(NewLocation);
 
@@ -340,11 +333,11 @@ bool APedestal::Push(FVector Direction)
     TargetGridColumn = TargetColumn;
 
     OwnerPuzzleArea->RegisterPedestal(this, TargetRow, TargetColumn);
+
     if (PushSound)
     {
         UGameplayStatics::PlaySoundAtLocation(this, PushSound, GetActorLocation());
     }
-
 
     return true;
 }
@@ -411,71 +404,80 @@ UActorComponent* APedestal::GetAttachedActorComponent(TSubclassOf<UActorComponen
 
 bool APedestal::PlaceObject(AActor* Object)
 {
-    if (CurrentState == EPedestalState::Occupied && PlacedObject != Object)
-        return false;
+    UE_LOG(LogTemp, Error, TEXT("========== Pedestal::PlaceObject Start =========="));
+    UE_LOG(LogTemp, Warning, TEXT("Pedestal: %s at %s"), *GetName(), *GetActorLocation().ToString());
+    UE_LOG(LogTemp, Warning, TEXT("Object: %s"), Object ? *Object->GetName() : TEXT("NULL"));
 
-    if (!CanPlaceObjectByFilter(Object))
-        return false;
-
-    if (Object)
+    if (!Object)
     {
-        if (!AttachmentPoint)
-        {
-            AttachmentPoint = NewObject<USceneComponent>(this, TEXT("AttachmentPoint"));
-            AttachmentPoint->RegisterComponent();
-            AttachmentPoint->SetupAttachment(RootComponent);
-
-            UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(RootComponent);
-            if (MeshComp)
-            {
-                FVector MeshExtent = MeshComp->Bounds.BoxExtent;
-                AttachmentPoint->SetRelativeLocation(FVector(0, 0, MeshExtent.Z));
-            }
-            else
-            {
-                AttachmentPoint->SetRelativeLocation(FVector(0, 0, 80.0f));
-            }
-        }
-
-        Object->AttachToComponent(AttachmentPoint, FAttachmentTransformRules::SnapToTargetIncludingScale);
-
-        if (!bObjectFollowsRotation)
-        {
-            Object->SetActorRelativeRotation(FRotator::ZeroRotator);
-        }
-
-        PlacedObject = Object;
-        CurrentState = EPedestalState::Occupied;
-
-        UPuzzleInteractionComponent* PuzzleComp = Object->FindComponentByClass<UPuzzleInteractionComponent>();
-        if (PuzzleComp)
-        {
-            PuzzleComp->CurrentPedestal = this;
-        }
-
-        if (PlaceObjectSound)
-        {
-            UGameplayStatics::PlaySoundAtLocation(this, PlaceObjectSound, GetActorLocation());
-        }
-
-        return true;
+        UE_LOG(LogTemp, Error, TEXT("Object is NULL"));
+        return false;
     }
 
-    return false;
+    if (CurrentState == EPedestalState::Occupied)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Pedestal already occupied"));
+        return false;
+    }
+
+    if (!AttachmentPoint)
+    {
+        UE_LOG(LogTemp, Error, TEXT("AttachmentPoint is NULL"));
+        return false;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("AttachmentPoint: %s"), *AttachmentPoint->GetName());
+    UE_LOG(LogTemp, Warning, TEXT("AttachmentPoint World Loc: %s"), *AttachmentPoint->GetComponentLocation().ToString());
+    UE_LOG(LogTemp, Warning, TEXT("AttachmentPoint Relative Loc: %s"), *AttachmentPoint->GetRelativeLocation().ToString());
+
+    FVector OldLocation = Object->GetActorLocation();
+    UE_LOG(LogTemp, Warning, TEXT("Object Old Location: %s"), *OldLocation.ToString());
+
+    FAttachmentTransformRules AttachRules(
+        EAttachmentRule::SnapToTarget,
+        EAttachmentRule::KeepWorld,
+        EAttachmentRule::KeepWorld,
+        true
+    );
+
+    Object->AttachToComponent(AttachmentPoint, AttachRules);
+
+    if (bCenterAlignPlacedObject)
+    {
+        Object->SetActorRelativeLocation(FVector::ZeroVector);
+        UE_LOG(LogTemp, Warning, TEXT("Center aligned - RelativeLocation = (0,0,0)"));
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Object New World Loc: %s"), *Object->GetActorLocation().ToString());
+
+    FTransform RelativeTransform = Object->GetActorTransform().GetRelativeTransform(AttachmentPoint->GetComponentTransform());
+    UE_LOG(LogTemp, Warning, TEXT("Object Relative to AttachmentPoint: %s"), *RelativeTransform.GetLocation().ToString());
+
+    float HeightDiff = Object->GetActorLocation().Z - AttachmentPoint->GetComponentLocation().Z;
+    UE_LOG(LogTemp, Warning, TEXT("Height difference: %.2f"), HeightDiff);
+
+    PlacedObject = Object;
+    CurrentState = EPedestalState::Occupied;
+
+    if (PlaceObjectSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, PlaceObjectSound, GetActorLocation());
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("==> PlaceObject SUCCESS"));
+    UE_LOG(LogTemp, Error, TEXT("========== Pedestal::PlaceObject End =========="));
+    return true;
 }
 
 AActor* APedestal::RemoveObject()
 {
     if (CurrentState != EPedestalState::Occupied || !PlacedObject)
+    {
         return nullptr;
+    }
 
     AActor* RemovedObject = PlacedObject;
     RemovedObject->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-
-    if (RemovedObject == SpawnedChildActor)
-    {
-        SpawnedChildActor = nullptr;
-    }
 
     PlacedObject = nullptr;
     CurrentState = EPedestalState::Empty;
@@ -505,33 +507,6 @@ void APedestal::GetGridPosition(int32& OutRow, int32& OutColumn) const
     OutColumn = GridColumn;
 }
 
-void APedestal::OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-    UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-    bool bFromSweep, const FHitResult& SweepResult)
-{
-    AHamoniaCharacter* Character = Cast<AHamoniaCharacter>(OtherActor);
-    if (Character)
-    {
-        Character->bIsLookingAtInteractable = true;
-        Character->CurrentInteractableActor = this;
-        Character->CurrentInteractionText = InteractionText;
-        Character->CurrentInteractionType = InteractionType;
-    }
-}
-
-void APedestal::OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-    UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
-{
-    AHamoniaCharacter* Character = Cast<AHamoniaCharacter>(OtherActor);
-    if (Character && Character->CurrentInteractableActor == this)
-    {
-        Character->bIsLookingAtInteractable = false;
-        Character->CurrentInteractableActor = nullptr;
-        Character->CurrentInteractionText = FString();
-    }
-}
-
-
 bool APedestal::CanPlaceObjectByFilter(AActor* Object) const
 {
     if (!Object)
@@ -560,4 +535,32 @@ bool APedestal::CanPlaceObjectByFilter(AActor* Object) const
     }
 
     return false;
+}
+
+void APedestal::UpdateOutlineForPlacedObject(bool bEnable)
+{
+    if (!PlacedObject)
+    {
+        return;
+    }
+
+    UOutlineComponent* PlacedObjectOutline = PlacedObject->FindComponentByClass<UOutlineComponent>();
+
+    if (!PlacedObjectOutline)
+    {
+        PlacedObjectOutline = NewObject<UOutlineComponent>(PlacedObject, UOutlineComponent::StaticClass());
+        PlacedObjectOutline->RegisterComponent();
+    }
+
+    if (PlacedObjectOutline)
+    {
+        if (bEnable)
+        {
+            PlacedObjectOutline->ShowOutline();
+        }
+        else
+        {
+            PlacedObjectOutline->HideOutline();
+        }
+    }
 }

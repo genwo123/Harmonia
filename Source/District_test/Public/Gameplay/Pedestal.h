@@ -4,6 +4,7 @@
 #include "Interaction/InteractableInterface.h"
 #include "Interaction/InteractionEnums.h"
 #include "Components/SphereComponent.h"
+#include "Gameplay/PuzzleInteractionComponent.h"
 #include "Sound/SoundBase.h"
 #include "Gameplay/PuzzleArea.h"
 #include "Components/ChildActorComponent.h"
@@ -28,6 +29,8 @@ protected:
     virtual void BeginPlay() override;
 
 public:
+    UFUNCTION(BlueprintCallable, Category = "Outline")
+    void UpdateOutlineForPlacedObject(bool bEnable);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Placement")
     bool bCenterAlignPlacedObject = false;
@@ -122,7 +125,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid")
     void SetGridPosition(int32 Row, int32 Column);
 
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
     USoundBase* RotateSound;
 
@@ -143,7 +145,6 @@ public:
     virtual FString GetInteractionText_Implementation() override { return InteractionText; }
     virtual EInteractionType GetInteractionType_Implementation() override { return InteractionType; }
 
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pedestal|Filter")
     bool bUseObjectFilter = false;
 
@@ -161,14 +162,6 @@ public:
 protected:
     void FindOwnerPuzzleArea();
     void ClearPreviousCell();
-
-    UFUNCTION()
-    void OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-        UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
-
-    UFUNCTION()
-    void OnInteractionSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-        UPrimitiveComponent* OtherComponent, int32 OtherBodyIndex);
 
     virtual void OnConstruction(const FTransform& Transform) override;
 

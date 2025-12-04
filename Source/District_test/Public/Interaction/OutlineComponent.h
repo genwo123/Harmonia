@@ -3,7 +3,7 @@
 #include "Components/ActorComponent.h"
 #include "OutlineComponent.generated.h"
 
-UCLASS(ClassGroup = (Interaction), meta = (BlueprintSpawnableComponent))
+UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class DISTRICT_TEST_API UOutlineComponent : public UActorComponent
 {
     GENERATED_BODY()
@@ -17,18 +17,18 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Outline")
     void HideOutline();
 
-    // BP에서 M_OutlineOverlay 할당
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Outline")
-    UMaterialInterface* OutlineMaterial;
-
-    // 나중에 색상 커스터마이징 가능하게
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Outline")
-    FLinearColor OutlineColor = FLinearColor::Yellow;
-
 protected:
     virtual void BeginPlay() override;
 
-private:
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Outline")
+    UMaterialInterface* OutlineMaterial;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Outline")
+    float OutlineThickness = 1.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Outline")
+    FLinearColor OutlineColor = FLinearColor::White;
+
     UPROPERTY()
-    TArray<UPrimitiveComponent*> CachedPrimitiveComponents;
+    UStaticMeshComponent* TargetMesh;
 };

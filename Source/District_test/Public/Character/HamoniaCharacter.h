@@ -1,29 +1,26 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Character/BaseCharacter.h"
+#include "GameFramework/Character.h"
 #include "InputActionValue.h"
-#include "Gameplay/PuzzleStarter.h"
-#include "Interaction/InteractableInterface.h"
-#include "Gameplay/PuzzleInteractionComponent.h" 
-#include "Gameplay/Pedestal.h"
 #include "Interaction/InteractionEnums.h"
-#include "Character/Unia.h"
-#include "Core/DialogueManagerComponent.h" 
 #include "HamoniaCharacter.generated.h"
 
-class AUnia;
-class UInventoryComponent;
-class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
-class UPlayerInteractionComponent;
+class UCameraComponent;
 class USpringArmComponent;
+class UInventoryComponent;
+class UPlayerInteractionComponent;
+class USceneComponent;
 class UHeldItemDisplayComponent;
+class UStaticMeshComponent;
+class UDialogueManagerComponent;
+class UDataTable;
+class AInteractableMechanism;
+class AUnia;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueProgressRequested);
-
-UCLASS(Blueprintable)
+UCLASS()
 class DISTRICT_TEST_API AHamoniaCharacter : public ACharacter
 {
     GENERATED_BODY()
@@ -31,54 +28,35 @@ class DISTRICT_TEST_API AHamoniaCharacter : public ACharacter
 public:
     AHamoniaCharacter();
 
-    UPROPERTY(BlueprintAssignable, Category = "Dialogue Events")
-    FOnDialogueProgressRequested OnDialogueProgressRequested;
+protected:
+    virtual void BeginPlay() override;
 
-    virtual void Tick(float DeltaTime) override;
+public:
     virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
     UCameraComponent* CameraComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    UInventoryComponent* InventoryComponent;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
     USpringArmComponent* CameraSpringArm;
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+    UInventoryComponent* InventoryComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
     UPlayerInteractionComponent* InteractionComponent;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeldObject")
+    USceneComponent* HeldObjectAttachPoint;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeldObject")
     UHeldItemDisplayComponent* HeldItemDisplay;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "HeldObject")
     UStaticMeshComponent* HeldItemMeshComponent;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Dialogue")
-    class UDialogueManagerComponent* DialogueManager;
-
-    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
-    USceneComponent* HeldObjectAttachPoint;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
-    UDataTable* DefaultDialogueDataTable;
-
-    UFUNCTION(BlueprintCallable, Category = "Dialogue")
-    UDialogueManagerComponent* GetDialogueManager();
-
-    UFUNCTION()
-    void OnDialogueStarted(ESpeakerType Speaker, FText DialogueText, EDialogueType Type, float Duration);
-
-    UFUNCTION()
-    void OnDialogueEnded();
-
-    UFUNCTION(BlueprintImplementableEvent, Category = "Dialogue")
-    void OnDialogueStartedBP(ESpeakerType Speaker, const FText& DialogueText, EDialogueType Type);
-
-    UFUNCTION(BlueprintImplementableEvent, Category = "Dialogue")
-    void OnDialogueEndedBP();
+    UDialogueManagerComponent* DialogueManager;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;
@@ -93,13 +71,13 @@ public:
     UInputAction* JumpAction;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
-    UInputAction* InteractAction;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* SprintAction;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* CrouchAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+    UInputAction* InteractAction;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* RotateAction;
@@ -107,161 +85,108 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* PushAction;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float WalkSpeed = 400.0f;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+    UInputAction* DropAction;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float SprintSpeed = 600.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float CrouchSpeed = 200.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float JumpHeight = 420.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
-    float LookSensitivity = 0.5f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* InventoryToggleAction;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* InventoryLeftAction;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* InventoryRightAction;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputAction* InventoryUseAction;
 
-    UFUNCTION(BlueprintCallable, Category = "Input")
-    void OnEKeyPressed();
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+    float WalkSpeed = 400.0f;
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void OnInventoryToggle();
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+    float SprintSpeed = 600.0f;
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void OnInventoryMoveLeft();
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+    float CrouchSpeed = 200.0f;
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void OnInventoryMoveRight();
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+    float JumpHeight = 600.0f;
 
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void OnInventoryUse();
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+    float LookSensitivity = 1.0f;
 
-    UFUNCTION(BlueprintCallable, Category = "Dialogue")
-    class UDialogueManagerComponent* GetDialogueManagerComponent() const { return DialogueManager; }
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
+    UDataTable* DefaultDialogueDataTable;
 
-    UFUNCTION(BlueprintCallable, Category = "Dialogue")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
+    FString DefaultDialogueID;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
+    bool bAutoStartDialogue = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
+    float DelayBeforeDialogue = 1.0f;
+
+    UFUNCTION(BlueprintPure, Category = "Dialogue")
+    UDialogueManagerComponent* GetDialogueManagerComponent() const { return DialogueManager; }
+
+    UFUNCTION(BlueprintPure, Category = "Dialogue")
     FString GetDefaultDialogueID() const { return DefaultDialogueID; }
 
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
-    void SetDefaultDialogueID(const FString& NewDialogueID) { DefaultDialogueID = NewDialogueID; }
+    void InitializeDialogueSystem();
 
-    UFUNCTION(BlueprintImplementableEvent, Category = "Quest")
-    void OnInteractComplete(AActor* InteractedActor);
+    UFUNCTION(BlueprintPure, Category = "Dialogue")
+    bool IsDialogueSystemReady() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Level Transition")
+    void SaveBeforeLevelTransition();
+
+    UFUNCTION(BlueprintCallable, Category = "NPC Interaction")
+    void SetCurrentInteractableNPC(AUnia* NPC);
+
+    UFUNCTION(BlueprintCallable, Category = "NPC Interaction")
+    void RemoveInteractableNPC(AUnia* NPC);
+
+    UFUNCTION(BlueprintCallable, Category = "HeldItem")
+    void ShowHeldItemMesh();
+
+    UFUNCTION(BlueprintCallable, Category = "HeldItem")
+    void HideHeldItemMesh();
+
+protected:
+    void Move(const FInputActionValue& Value);
+    void Look(const FInputActionValue& Value);
+    void StartSprint();
+    void StopSprint();
+    void ToggleCrouch();
+    void Interact();
+    void RotateObject();
+    void PushObject();
+    void DropHeldObject();
+    void OnInventoryToggle();
+    void OnInventoryMoveLeft();
+    void OnInventoryMoveRight();
+    void OnInventoryUse();
+
 
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     bool bIsLookingAtInteractable;
 
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
-    FString CurrentInteractionText;
+    AActor* CurrentInteractableActor;
 
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
-    AActor* CurrentInteractableActor;
+    FString CurrentInteractionText;
 
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     EInteractionType CurrentInteractionType;
 
-    void Move(const FInputActionValue& Value);
-    void Look(const FInputActionValue& Value);
-    void StartSprint(const FInputActionValue& Value);
-    void StopSprint(const FInputActionValue& Value);
-    void ToggleCrouch(const FInputActionValue& Value);
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void Interact();
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void CheckForInteractables();
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void RotateObject();
-
-    UFUNCTION(BlueprintImplementableEvent, Category = "Interaction")
-    void OnRotateObject();
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void PushObject();
-
-    UFUNCTION(BlueprintImplementableEvent, Category = "Interaction")
-    void OnPushObject();
-
-    UFUNCTION(BlueprintCallable, Category = "Debug")
-    void DrawDebugInteractionLine();
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    EInteractionType GetCurrentInteractionType() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    bool IsLookingAtInteractable() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    FString GetCurrentInteractionText() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    AActor* GetHeldObject();
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
-    FString DefaultDialogueID = "";
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
-    bool bAutoStartDialogue = false;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
-    float DelayBeforeDialogue = 0.0f;
-
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void OnInventorySelectionChanged(int32 NewSlotIndex);
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void SetCurrentInteractableNPC(AUnia* NPC);
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void RemoveInteractableNPC(AUnia* NPC);
-
-    UFUNCTION(BlueprintPure, Category = "Interaction")
-    AUnia* GetCurrentInteractableNPC() const;
-
-    UFUNCTION(BlueprintPure, Category = "Interaction")
-    bool HasInteractableNPC() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Save System")
-    void SaveBeforeLevelTransition();
-
-    UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
-    void ShowHeldItemMeshBP(UItem* Item);
-
-    UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
-    void HideHeldItemMeshBP();
-    
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void ShowHeldItemMesh(UItem* Item);
-
-    UFUNCTION(BlueprintCallable, Category = "Inventory")
-    void HideHeldItemMesh();
-
-protected:
-    virtual void BeginPlay() override;
-
-    UFUNCTION(BlueprintCallable, Category = "Dialogue")
-    void InitializeDialogueSystem();
-
-    UFUNCTION(BlueprintCallable, Category = "Dialogue")
-    bool IsDialogueSystemReady();
-
 private:
     bool bIsSprinting = false;
 
-    void SetupEnhancedInput();
+    
+
+    FTimerHandle DialogueInitTimerHandle;
+    FTimerHandle LegacySyncTimer;
 };

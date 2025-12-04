@@ -1,4 +1,5 @@
 #pragma once
+
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Interaction/InteractionEnums.h"
@@ -6,14 +7,12 @@
 
 class UCameraComponent;
 class UInventoryComponent;
-class APedestal;
-class AUnia;
 class UItem;
+class AUnia;
+class APedestal;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnInteractionChanged,
-    bool, bIsInteractable,
-    FString, InteractionText,
-    EInteractionType, InteractionType);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnInteractionChanged, bool, bCanInteract, FString, InteractionText, EInteractionType, InteractionType);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnShowWarningMessage, FString, Message);
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class DISTRICT_TEST_API UPlayerInteractionComponent : public UActorComponent
@@ -23,77 +22,100 @@ class DISTRICT_TEST_API UPlayerInteractionComponent : public UActorComponent
 public:
     UPlayerInteractionComponent();
 
-    virtual void TickComponent(float DeltaTime, ELevelTick TickType,
-        FActorComponentTickFunction* ThisTickFunction) override;
+protected:
+    virtual void BeginPlay() override;
+
+public:
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    float InteractionDistance;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    bool bShowDebugLines;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    bool bEnableOutline;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
+    float DropDistance;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+    float DebugLineThickness = 2.0f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+    bool bIsLookingAtInteractable;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+    AActor* CurrentInteractableActor;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+    FString CurrentInteractionText;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+    EInteractionType CurrentInteractionType;
+
+    UPROPERTY(BlueprintAssignable, Category = "Interaction Events")
+    FOnInteractionChanged OnInteractionChanged;
+
+    UPROPERTY(BlueprintAssignable, Category = "Interaction Events")
+    FOnShowWarningMessage OnShowWarningMessage;
+
+    UFUNCTION(BlueprintCallable, Category = "Interaction")
+    void SetupReferences(UCameraComponent* Camera, UInventoryComponent* Inventory, USceneComponent* HeldAttachPoint);
 
     UFUNCTION(BlueprintCallable, Category = "Interaction")
     void PerformInteraction();
 
     UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void RotateObject();
+    void DropHeldObject();
 
     UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void PushObject();
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void OnEKeyPressed();
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void CheckForInteractables();
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    AActor* GetHeldObject() const;
-
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
-    void SetupReferences(UCameraComponent* Camera, UInventoryComponent* Inventory, USceneComponent* HeldAttachPoint);
-
-    UFUNCTION(BlueprintPure, Category = "Interaction")
-    bool IsLookingAtInteractable() const { return bIsLookingAtInteractable; }
-
-    UFUNCTION(BlueprintPure, Category = "Interaction")
-    FString GetCurrentInteractionText() const { return CurrentInteractionText; }
-
-    UFUNCTION(BlueprintPure, Category = "Interaction")
-    EInteractionType GetCurrentInteractionType() const { return CurrentInteractionType; }
+    void RotatePedestal();
 
     UFUNCTION(BlueprintPure, Category = "Interaction")
     AActor* GetCurrentInteractableActor() const { return CurrentInteractableActor; }
 
     UFUNCTION(BlueprintCallable, Category = "Interaction")
+    void PushPedestal();
+
+    UFUNCTION(BlueprintCallable, Category = "NPC")
     void SetCurrentInteractableNPC(AUnia* NPC);
 
-    UFUNCTION(BlueprintCallable, Category = "Interaction")
+    UFUNCTION(BlueprintCallable, Category = "NPC")
     void RemoveInteractableNPC(AUnia* NPC);
 
-    UFUNCTION(BlueprintPure, Category = "Interaction")
-    AUnia* GetCurrentInteractableNPC() const { return CurrentInteractableNPC; }
-
-    UFUNCTION(BlueprintPure, Category = "Interaction")
-    bool HasInteractableNPC() const { return CurrentInteractableNPC != nullptr; }
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction Settings")
-    float InteractionDistance = 400.0f;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction Settings")
-    bool bShowDebugLines = false;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction Settings")
-    bool bEnableOutline = true;
-
-    UPROPERTY(BlueprintAssignable, Category = "Interaction Events")
-    FOnInteractionChanged OnInteractionChanged;
-
-protected:
-    virtual void BeginPlay() override;
-
-private:
-    void DrawDebugInteractionLine();
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor);
-    APedestal* FindPedestalFromActor(AActor* Actor) const;
+
+    UFUNCTION(BlueprintPure, Category = "Inventory")
     UItem* GetCurrentHeldInventoryItem() const;
+
+    UFUNCTION(BlueprintPure, Category = "Interaction")
+    AActor* GetHeldObject() const;
+
+    UFUNCTION(BlueprintCallable, Category = "Outline")
     void EnableOutline(AActor* Actor);
+
+    UFUNCTION(BlueprintCallable, Category = "Outline")
     void DisableOutline(AActor* Actor);
 
+    UPROPERTY()
+    AActor* CurrentHeldObject;
+
+protected:
+    void CheckForInteractables();
+    void DrawDebugInteractionLine();
+
+    bool PlaceOnPedestal(APedestal* Pedestal, AActor* ObjectToPlace);
+    bool PickUpFromPedestal(APedestal* Pedestal);
+    bool PickUpObject(AActor* ObjectToPickUp);
+
+    APedestal* FindPedestalFromActor(AActor* Actor) const;
+
+    void ReEnableInteractionCheck();
+
+private:
     UPROPERTY()
     UCameraComponent* CameraRef;
 
@@ -103,17 +125,12 @@ private:
     UPROPERTY()
     USceneComponent* HeldObjectAttachPoint;
 
-    bool bIsLookingAtInteractable;
-
-    UPROPERTY()
-    AActor* CurrentInteractableActor;
-
-    FString CurrentInteractionText;
-    EInteractionType CurrentInteractionType;
-
     UPROPERTY()
     AUnia* CurrentInteractableNPC;
 
     UPROPERTY()
     TArray<AUnia*> InteractableNPCs;
+
+    bool bIgnoreInteractionCheck;
+    FTimerHandle IgnoreCheckTimerHandle;
 };

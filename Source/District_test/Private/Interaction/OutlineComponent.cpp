@@ -1,11 +1,11 @@
 #include "Interaction/OutlineComponent.h"
-#include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/SkeletalMeshComponent.h"
 
 UOutlineComponent::UOutlineComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
+    OutlineThickness = 1.0f;
+    OutlineColor = FLinearColor::White;
 }
 
 void UOutlineComponent::BeginPlay()
@@ -13,65 +13,38 @@ void UOutlineComponent::BeginPlay()
     Super::BeginPlay();
 
     AActor* Owner = GetOwner();
-    if (Owner)
+    if (!Owner)
     {
-        Owner->GetComponents<UPrimitiveComponent>(CachedPrimitiveComponents);
-        UE_LOG(LogTemp, Warning, TEXT("OutlineComponent on %s: Found %d primitive components"),
-            *Owner->GetName(), CachedPrimitiveComponents.Num());
-    }
-}
-void UOutlineComponent::ShowOutline()
-{
-    UE_LOG(LogTemp, Warning, TEXT("ShowOutline called!"));
-
-    if (!OutlineMaterial)
-    {
-        UE_LOG(LogTemp, Error, TEXT("OutlineMaterial is NULL!"));
         return;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("OutlineMaterial: %s"), *OutlineMaterial->GetName());
+    TargetMesh = Owner->FindComponentByClass<UStaticMeshComponent>();
 
-    for (UPrimitiveComponent* Component : CachedPrimitiveComponents)
+    if (!TargetMesh)
     {
-        if (Component)
-        {
-            if (UStaticMeshComponent* StaticMesh = Cast<UStaticMeshComponent>(Component))
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Setting overlay on StaticMesh: %s"), *StaticMesh->GetName());
-                StaticMesh->OverlayMaterial = OutlineMaterial;
-                StaticMesh->MarkRenderStateDirty();
-            }
-            else if (USkeletalMeshComponent* SkeletalMesh = Cast<USkeletalMeshComponent>(Component))
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Setting overlay on SkeletalMesh: %s"), *SkeletalMesh->GetName());
-                SkeletalMesh->OverlayMaterial = OutlineMaterial;
-                SkeletalMesh->MarkRenderStateDirty();
-            }
-        }
+        return;
     }
+
+    TargetMesh->SetRenderCustomDepth(false);
+    TargetMesh->SetCustomDepthStencilValue(1);
+}
+
+void UOutlineComponent::ShowOutline()
+{
+    if (!TargetMesh)
+    {
+        return;
+    }
+
+    TargetMesh->SetRenderCustomDepth(true);
 }
 
 void UOutlineComponent::HideOutline()
 {
-    UE_LOG(LogTemp, Warning, TEXT("HideOutline called!"));
-
-    for (UPrimitiveComponent* Component : CachedPrimitiveComponents)
+    if (!TargetMesh)
     {
-        if (Component)
-        {
-            if (UStaticMeshComponent* StaticMesh = Cast<UStaticMeshComponent>(Component))
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Clearing overlay on StaticMesh: %s"), *StaticMesh->GetName());
-                StaticMesh->OverlayMaterial = nullptr;
-                StaticMesh->MarkRenderStateDirty();
-            }
-            else if (USkeletalMeshComponent* SkeletalMesh = Cast<USkeletalMeshComponent>(Component))
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Clearing overlay on SkeletalMesh: %s"), *SkeletalMesh->GetName());
-                SkeletalMesh->OverlayMaterial = nullptr;
-                SkeletalMesh->MarkRenderStateDirty();
-            }
-        }
+        return;
     }
+
+    TargetMesh->SetRenderCustomDepth(false);
 }
