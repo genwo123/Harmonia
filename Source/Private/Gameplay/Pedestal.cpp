@@ -1,0 +1,529 @@
+#include "Gameplay/Pedestal.h"
+#include "Kismet/GameplayStatics.h"
+#include "Gameplay/PickupActor.h"
+#include "Character/HamoniaCharacter.h"
+
+APedestal::APedestal()
+{
+    PrimaryActorTick.bCanEverTick = false;
+
+    CurrentState = EPedestalState::Empty;
+    PlacedObject = nullptr;
+    OwnerPuzzleArea = nullptr;
+    GridRow = -1;
+    GridColumn = -1;
+    TargetGridRow = 0;
+    TargetGridColumn = 0;
+    TargetPuzzleArea = nullptr;
+
+    MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
+    RootComponent = MeshComponent;
+    MeshComponent->SetCollisionProfileName(TEXT("BlockAll"));
+    MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    MeshComponent->SetGenerateOverlapEvents(true);
+
+    InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
+    InteractionSphere->SetupAttachment(RootComponent);
+    InteractionSphere->SetSphereRadius(150.0f);
+    InteractionSphere->SetCollisionProfileName(TEXT("OverlapAll"));
+    InteractionSphere->SetGenerateOverlapEvents(true);
+    InteractionSphere->SetRelativeLocation(FVector(0, 0, 50.0f));
+
+    AttachmentPoint = CreateDefaultSubobject<USceneComponent>(TEXT("AttachmentPoint"));
+    AttachmentPoint->SetupAttachment(RootComponent);
+    AttachmentPoint->SetRelativeLocation(FVector(0, 0, 100.0f));
+    AttachmentPoint->SetMobility(EComponentMobility::Movable);
+
+#if WITH_EDITORONLY_DATA
+    AttachmentPoint->bVisualizeComponent = true;
+#endif
+
+    InteractionText = "Interact with Pedestal";
+    InteractionType = EInteractionType::Default;
+    bAutoSnapToGrid = true;
+    SpawnedChildActor = nullptr;
+}
+
+void APedestal::BeginPlay()
+{
+    Super::BeginPlay();
+
+    if (SpawnedChildActor)
+    {
+        PlacedObject = SpawnedChildActor;
+        CurrentState = EPedestalState::Occupied;
+
+        UPuzzleInteractionComponent* PuzzleComp = SpawnedChildActor->FindComponentByClass<UPuzzleInteractionComponent>();
+        if (PuzzleComp)
+        {
+            PuzzleComp->CurrentPedestal = this;
+            PuzzleComp->bCanBePickedUp = true;
+        }
+    }
+
+    if (bUseGridSystem)
+    {
+        if (TargetPuzzleArea)
+        {
+            OwnerPuzzleArea = TargetPuzzleArea;
+            MoveToGridPosition(TargetGridRow, TargetGridColumn);
+        }
+        else
+        {
+            FindOwnerPuzzleArea();
+        }
+    }
+}
+
+void APedestal::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+
+    if (PreAttachedActorClass && !SpawnedChildActor)
+    {
+        FActorSpawnParameters Params;
+        Params.Owner = this;
+        SpawnedChildActor = GetWorld()->SpawnActor<AActor>(PreAttachedActorClass, AttachmentPoint->GetComponentTransform(), Params);
+
+        if (SpawnedChildActor)
+        {
+            UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(SpawnedChildActor->GetRootComponent());
+            if (!PrimComp)
+            {
+                PrimComp = SpawnedChildActor->FindComponentByClass<UStaticMeshComponent>();
+            }
+
+            if (PrimComp)
+            {
+                PrimComp->SetSimulatePhysics(false);
+                PrimComp->SetEnableGravity(false);
+                PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+                PrimComp->SetVisibility(true, true);
+            }
+
+            SpawnedChildActor->SetActorHiddenInGame(false);
+            SpawnedChildActor->AttachToComponent(AttachmentPoint, FAttachmentTransformRules::SnapToTargetIncludingScale);
+
+            if (bCenterAlignPlacedObject && PrimComp)
+            {
+                FVector MeshRelativeLocation = PrimComp->GetRelativeLocation();
+                SpawnedChildActor->SetActorRelativeLocation(-MeshRelativeLocation);
+            }
+
+            PlacedObject = SpawnedChildActor;
+            CurrentState = EPedestalState::Occupied;
+
+            UPuzzleInteractionComponent* PuzzleComp = SpawnedChildActor->FindComponentByClass<UPuzzleInteractionComponent>();
+            if (PuzzleComp)
+            {
+                PuzzleComp->CurrentPedestal = this;
+                PuzzleComp->bCanBePickedUp = true;
+            }
+
+            APickupActor* PickupActor = Cast<APickupActor>(SpawnedChildActor);
+            if (PickupActor)
+            {
+                PickupActor->OnConstruction(SpawnedChildActor->GetTransform());
+            }
+        }
+    }
+
+    if (!bAutoSnapToGrid || !bUseGridSystem)
+        return;
+
+    if (TargetPuzzleArea)
+    {
+        OwnerPuzzleArea = TargetPuzzleArea;
+        MoveToGridPosition(TargetGridRow, TargetGridColumn);
+    }
+    else
+    {
+        FindOwnerPuzzleArea();
+    }
+}
+
+bool APedestal::MoveToGridPosition(int32 NewRow, int32 NewColumn)
+{
+    if (!bUseGridSystem)
+        return false;
+
+    if (!OwnerPuzzleArea)
+        return false;
+
+    if (!OwnerPuzzleArea->IsValidIndex(NewRow, NewColumn))
+        return false;
+
+    ClearPreviousCell();
+
+    FVector NewLocation = OwnerPuzzleArea->GetWorldLocationFromGridIndex(NewRow, NewColumn);
+    NewLocation.Z = GetActorLocation().Z;
+    SetActorLocation(NewLocation);
+
+    GridRow = NewRow;
+    GridColumn = NewColumn;
+    TargetGridRow = NewRow;
+    TargetGridColumn = NewColumn;
+
+    bool bRegistered = OwnerPuzzleArea->RegisterPedestal(this, NewRow, NewColumn);
+    return bRegistered;
+}
+
+void APedestal::ClearPreviousCell()
+{
+    if (OwnerPuzzleArea && GridRow >= 0 && GridColumn >= 0)
+    {
+        int32 Index = OwnerPuzzleArea->GetIndexFrom2DCoord(GridRow, GridColumn);
+        if (Index >= 0 && Index < OwnerPuzzleArea->Grid.Num())
+        {
+            if (OwnerPuzzleArea->Grid[Index].PlacedActor == this)
+            {
+                OwnerPuzzleArea->Grid[Index].PlacedActor = nullptr;
+                OwnerPuzzleArea->Grid[Index].State = ECellState::Walkable;
+            }
+        }
+    }
+}
+
+#if WITH_EDITOR
+void APedestal::PostEditMove(bool bFinished)
+{
+    Super::PostEditMove(bFinished);
+
+    if (bFinished)
+    {
+        if (TargetPuzzleArea)
+        {
+            OwnerPuzzleArea = TargetPuzzleArea;
+        }
+
+        if (!OwnerPuzzleArea)
+        {
+            FindOwnerPuzzleArea();
+        }
+
+        if (OwnerPuzzleArea)
+        {
+            int32 NewRow, NewColumn;
+            if (OwnerPuzzleArea->GetGridIndexFromWorldLocation(GetActorLocation(), NewRow, NewColumn))
+            {
+                if (NewRow != GridRow || NewColumn != GridColumn)
+                {
+                    ClearPreviousCell();
+
+                    FVector CellCenter = OwnerPuzzleArea->GetWorldLocationFromGridIndex(NewRow, NewColumn);
+                    CellCenter.Z = GetActorLocation().Z;
+                    SetActorLocation(CellCenter);
+
+                    GridRow = NewRow;
+                    GridColumn = NewColumn;
+                    TargetGridRow = NewRow;
+                    TargetGridColumn = NewColumn;
+
+                    OwnerPuzzleArea->RegisterPedestal(this, NewRow, NewColumn);
+                }
+            }
+        }
+    }
+}
+#endif
+
+void APedestal::FindOwnerPuzzleArea()
+{
+    TArray<AActor*> FoundAreas;
+    UGameplayStatics::GetAllActorsOfClass(GetWorld(), APuzzleArea::StaticClass(), FoundAreas);
+
+    if (!bAutoSnapToGrid)
+        return;
+
+    for (AActor* Area : FoundAreas)
+    {
+        APuzzleArea* PuzzleArea = Cast<APuzzleArea>(Area);
+        if (PuzzleArea)
+        {
+            int32 Row, Column;
+            if (PuzzleArea->GetGridIndexFromWorldLocation(GetActorLocation(), Row, Column))
+            {
+                OwnerPuzzleArea = PuzzleArea;
+                GridRow = Row;
+                GridColumn = Column;
+
+                if (GetWorld() && GetWorld()->IsEditorWorld())
+                {
+                    FVector CellCenter = OwnerPuzzleArea->GetWorldLocationFromGridIndex(Row, Column);
+                    CellCenter.Z = GetActorLocation().Z;
+                    SetActorLocation(CellCenter);
+                }
+
+                OwnerPuzzleArea->RegisterPedestal(this, Row, Column);
+                return;
+            }
+        }
+    }
+}
+
+void APedestal::Interact_Implementation(AActor* Interactor)
+{
+}
+
+bool APedestal::Push(FVector Direction)
+{
+    if (!bUseGridSystem)
+        return false;
+
+    Direction = -Direction;
+    FVector AdjustedDirection(-Direction.Y, -Direction.X, Direction.Z);
+    Direction = AdjustedDirection;
+
+    if (!OwnerPuzzleArea)
+    {
+        FindOwnerPuzzleArea();
+        if (!OwnerPuzzleArea)
+            return false;
+    }
+
+    EGridDirection GridDirection;
+    if (FMath::Abs(Direction.X) > FMath::Abs(Direction.Y))
+    {
+        GridDirection = Direction.X > 0 ? EGridDirection::East : EGridDirection::West;
+    }
+    else
+    {
+        GridDirection = Direction.Y > 0 ? EGridDirection::South : EGridDirection::North;
+    }
+
+    int32 CurrentRow = GridRow;
+    int32 CurrentColumn = GridColumn;
+    int32 TargetRow = CurrentRow;
+    int32 TargetColumn = CurrentColumn;
+
+    switch (GridDirection)
+    {
+    case EGridDirection::North:
+        TargetRow--;
+        break;
+    case EGridDirection::East:
+        TargetColumn++;
+        break;
+    case EGridDirection::South:
+        TargetRow++;
+        break;
+    case EGridDirection::West:
+        TargetColumn--;
+        break;
+    }
+
+    if (!OwnerPuzzleArea->IsValidIndex(TargetRow, TargetColumn))
+        return false;
+
+    ECellState TargetState = OwnerPuzzleArea->GetCellState(TargetRow, TargetColumn);
+    if (TargetState == ECellState::Unwalkable || TargetState == ECellState::Occupied)
+        return false;
+
+    ClearPreviousCell();
+
+    float CurrentZ = GetActorLocation().Z;
+    FVector NewLocation = OwnerPuzzleArea->GetWorldLocationFromGridIndex(TargetRow, TargetColumn);
+    NewLocation.Z = CurrentZ;
+
+    SetActorLocation(NewLocation);
+
+    GridRow = TargetRow;
+    GridColumn = TargetColumn;
+    TargetGridRow = TargetRow;
+    TargetGridColumn = TargetColumn;
+
+    OwnerPuzzleArea->RegisterPedestal(this, TargetRow, TargetColumn);
+
+    if (PushSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, PushSound, GetActorLocation());
+    }
+
+    return true;
+}
+
+void APedestal::SnapToGridCenter()
+{
+    if (!bUseGridSystem)
+        return;
+
+    if (!OwnerPuzzleArea)
+    {
+        FindOwnerPuzzleArea();
+        if (!OwnerPuzzleArea)
+            return;
+    }
+
+    int32 NearestRow, NearestColumn;
+    if (OwnerPuzzleArea->GetGridIndexFromWorldLocation(GetActorLocation(), NearestRow, NearestColumn))
+    {
+        FVector CellCenter = OwnerPuzzleArea->GetWorldLocationFromGridIndex(NearestRow, NearestColumn);
+        CellCenter.Z = GetActorLocation().Z;
+        SetActorLocation(CellCenter);
+
+        GridRow = NearestRow;
+        GridColumn = NearestColumn;
+
+        OwnerPuzzleArea->RegisterPedestal(this, NearestRow, NearestColumn);
+    }
+}
+
+void APedestal::Rotate(float Degrees)
+{
+    if (!bCanRotate)
+        return;
+
+    FRotator NewRotation = GetActorRotation();
+    NewRotation.Yaw += Degrees;
+    SetActorRotation(NewRotation);
+
+    if (PlacedObject && bObjectFollowsRotation)
+    {
+        PlacedObject->SetActorRotation(NewRotation);
+    }
+
+    if (RotateSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, RotateSound, GetActorLocation());
+    }
+}
+
+AActor* APedestal::GetAttachedChildActor() const
+{
+    return SpawnedChildActor;
+}
+
+UActorComponent* APedestal::GetAttachedActorComponent(TSubclassOf<UActorComponent> ComponentClass)
+{
+    AActor* ChildActor = GetAttachedChildActor();
+    if (!ChildActor || !ComponentClass)
+        return nullptr;
+
+    return ChildActor->GetComponentByClass(ComponentClass);
+}
+
+bool APedestal::PlaceObject(AActor* Object)
+{
+    if (CurrentState == EPedestalState::Occupied && PlacedObject != Object)
+        return false;
+
+    if (!CanPlaceObjectByFilter(Object))
+        return false;
+
+    if (Object)
+    {
+        if (!AttachmentPoint)
+        {
+            AttachmentPoint = NewObject<USceneComponent>(this, TEXT("AttachmentPoint"));
+            AttachmentPoint->RegisterComponent();
+            AttachmentPoint->SetupAttachment(RootComponent);
+
+            UStaticMeshComponent* MeshComp = Cast<UStaticMeshComponent>(RootComponent);
+            if (MeshComp)
+            {
+                FVector MeshExtent = MeshComp->Bounds.BoxExtent;
+                AttachmentPoint->SetRelativeLocation(FVector(0, 0, MeshExtent.Z));
+            }
+            else
+            {
+                AttachmentPoint->SetRelativeLocation(FVector(0, 0, 80.0f));
+            }
+        }
+
+        Object->AttachToComponent(AttachmentPoint, FAttachmentTransformRules::SnapToTargetIncludingScale);
+
+        if (!bObjectFollowsRotation)
+        {
+            Object->SetActorRelativeRotation(FRotator::ZeroRotator);
+        }
+
+        PlacedObject = Object;
+        CurrentState = EPedestalState::Occupied;
+
+        UPuzzleInteractionComponent* PuzzleComp = Object->FindComponentByClass<UPuzzleInteractionComponent>();
+        if (PuzzleComp)
+        {
+            PuzzleComp->CurrentPedestal = this;
+        }
+
+        if (PlaceObjectSound)
+        {
+            UGameplayStatics::PlaySoundAtLocation(this, PlaceObjectSound, GetActorLocation());
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+AActor* APedestal::RemoveObject()
+{
+    if (CurrentState != EPedestalState::Occupied || !PlacedObject)
+        return nullptr;
+
+    AActor* RemovedObject = PlacedObject;
+    RemovedObject->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+    if (RemovedObject == SpawnedChildActor)
+    {
+        SpawnedChildActor = nullptr;
+    }
+
+    PlacedObject = nullptr;
+    CurrentState = EPedestalState::Empty;
+
+    if (RemoveObjectSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, RemoveObjectSound, GetActorLocation());
+    }
+
+    return RemovedObject;
+}
+
+void APedestal::SetPuzzleArea(APuzzleArea* PuzzleArea)
+{
+    OwnerPuzzleArea = PuzzleArea;
+}
+
+void APedestal::SetGridPosition(int32 Row, int32 Column)
+{
+    GridRow = Row;
+    GridColumn = Column;
+}
+
+void APedestal::GetGridPosition(int32& OutRow, int32& OutColumn) const
+{
+    OutRow = GridRow;
+    OutColumn = GridColumn;
+}
+
+bool APedestal::CanPlaceObjectByFilter(AActor* Object) const
+{
+    if (!Object)
+        return false;
+
+    if (!bUseObjectFilter)
+        return true;
+
+    for (const FName& BlockedTag : BlockedObjectTags)
+    {
+        if (Object->ActorHasTag(BlockedTag))
+        {
+            return false;
+        }
+    }
+
+    if (AllowedObjectTags.Num() == 0)
+        return true;
+
+    for (const FName& AllowedTag : AllowedObjectTags)
+    {
+        if (Object->ActorHasTag(AllowedTag))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
