@@ -43,48 +43,42 @@ void UOutlineComponent::HideOutline()
 void UOutlineComponent::CreateOutlineMeshes()
 {
     AActor* Owner = GetOwner();
-    if (!Owner)
-    {
-        return;
-    }
+    if (!Owner) return;
 
     TArray<UStaticMeshComponent*> OriginalMeshes;
     Owner->GetComponents<UStaticMeshComponent>(OriginalMeshes);
 
     for (UStaticMeshComponent* OriginalMesh : OriginalMeshes)
     {
-        if (!OriginalMesh || !OriginalMesh->GetStaticMesh())
-        {
-            continue;
-        }
+        if (!OriginalMesh || !OriginalMesh->GetStaticMesh()) continue;
 
         UStaticMeshComponent* OutlineMesh = NewObject<UStaticMeshComponent>(Owner);
         OutlineMesh->SetStaticMesh(OriginalMesh->GetStaticMesh());
-        OutlineMesh->AttachToComponent(OriginalMesh, FAttachmentTransformRules::SnapToTargetIncludingScale);
+        OutlineMesh->AttachToComponent(OriginalMesh,
+            FAttachmentTransformRules::SnapToTargetIncludingScale);
+
         OutlineMesh->SetRelativeLocation(FVector::ZeroVector);
         OutlineMesh->SetRelativeRotation(FRotator::ZeroRotator);
         OutlineMesh->SetRelativeScale3D(FVector(OutlineThickness));
+
         OutlineMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         OutlineMesh->SetCastShadow(false);
         OutlineMesh->bRenderInMainPass = true;
         OutlineMesh->bRenderInDepthPass = false;
+
         OutlineMesh->RegisterComponent();
 
-        UMaterialInterface* MatToUse = OutlineMaterial;
-        if (!MatToUse)
+        if (OutlineMaterial)
         {
-            MatToUse = LoadObject<UMaterialInterface>(
-                nullptr,
-                TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")
-            );
-        }
+            UMaterialInstanceDynamic* DynMat =
+                UMaterialInstanceDynamic::Create(OutlineMaterial, this);
 
-        if (MatToUse)
-        {
-            UMaterialInstanceDynamic* DynMat = UMaterialInstanceDynamic::Create(MatToUse, this);
             if (DynMat)
             {
-                DynMat->SetVectorParameterValue(TEXT("Color"), OutlineColor);
+                FLinearColor WhiteColor = FLinearColor::White;
+                DynMat->SetVectorParameterValue(TEXT("OutlineColor"), WhiteColor);
+                DynMat->SetScalarParameterValue(TEXT("BloomIntensity"), 0.1f);
+
                 for (int32 i = 0; i < OutlineMesh->GetNumMaterials(); i++)
                 {
                     OutlineMesh->SetMaterial(i, DynMat);

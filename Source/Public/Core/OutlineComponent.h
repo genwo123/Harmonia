@@ -12,10 +12,13 @@ public:
     UOutlineComponent();
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Outline")
-    FLinearColor OutlineColor = FLinearColor(1.0f, 1.0f, 0.0f, 1.0f);
+    FLinearColor OutlineColor = FLinearColor::White;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Outline")
     float OutlineThickness = 1.02f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Outline")
+    float BloomIntensity = 0.1f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Outline")
     UMaterialInterface* OutlineMaterial;

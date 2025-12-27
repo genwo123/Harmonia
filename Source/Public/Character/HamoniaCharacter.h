@@ -8,6 +8,8 @@
 #include "Core/OutlineComponent.h"
 #include "Gameplay/PuzzleInteractionComponent.h" 
 #include "Gameplay/Pedestal.h"
+#include "Gameplay/WarningMessageComponent.h"
+#include "Save_Instance/WarningMessageData.h"
 #include "Interaction/InteractionEnums.h"
 #include "Character/Unia.h"
 #include "Core/DialogueManagerComponent.h" 
@@ -126,6 +128,11 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input|Inventory")
     UInputAction* InventoryUseAction;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    UWarningMessageComponent* WarningMessageComponent;
+
+
 
     UFUNCTION(BlueprintCallable, Category = "Input")
     void OnEKeyPressed();
@@ -262,6 +269,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Save System")
     void SaveBeforeLevelTransition();
 
+    UFUNCTION(BlueprintImplementableEvent, Category = "UI|Warning")
+    void ShowWarningMessage(EWarningMessageType MessageType);
+
 protected:
     virtual void BeginPlay() override;
 
@@ -277,11 +287,7 @@ protected:
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     AUnia* CurrentInteractableNPC;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction|Messages")
-    FText AlreadyHoldingItemMessage = FText::FromString(TEXT("Stop"));
 
-    UFUNCTION(BlueprintImplementableEvent, Category = "Interaction")
-    void ShowWarningMessage(const FText& Message);
 
     UFUNCTION(BlueprintPure, Category = "Interaction")
     bool IsHoldingObject() const;

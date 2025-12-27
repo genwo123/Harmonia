@@ -26,6 +26,8 @@ AHamoniaCharacter::AHamoniaCharacter()
 
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
 
+	WarningMessageComponent = CreateDefaultSubobject<UWarningMessageComponent>(TEXT("WarningMessageComponent"));
+
 	CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	CameraComponent->SetupAttachment(GetCapsuleComponent());
 	CameraComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 64.0f));
@@ -52,7 +54,7 @@ AHamoniaCharacter::AHamoniaCharacter()
 
 	DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
 
-	bShowDebugLines = true;
+	bShowDebugLines = false;
 }
 
 APedestal* AHamoniaCharacter::FindPedestalFromActor(AActor* Actor)
@@ -462,8 +464,7 @@ void AHamoniaCharacter::Interact()
 		{
 			if (IsHoldingObject())
 			{
-				UE_LOG(LogTemp, Warning, TEXT("[Interact] Already holding an item!"));
-				ShowWarningMessage(AlreadyHoldingItemMessage);
+				ShowWarningMessage(EWarningMessageType::AlreadyHoldingObject);
 				return;
 			}
 		}
@@ -558,7 +559,6 @@ void AHamoniaCharacter::Interact()
 		}
 	}
 }
-
 
 AActor* AHamoniaCharacter::GetHeldObject()
 {
@@ -870,6 +870,7 @@ bool AHamoniaCharacter::HandleInventoryItemInteraction(UItem* Item, AActor* Targ
 
 	return false;
 }
+
 
 void AHamoniaCharacter::UpdateHeldItemDisplay(UItem* NewItem)
 {
