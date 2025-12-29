@@ -446,14 +446,28 @@ void AHamoniaCharacter::Interact()
 	{
 		if (DialogueManager->bIsInDialogue)
 		{
-			OnDialogueProgressRequested.Broadcast();
+			DialogueManager->OnDialogueProgressRequested.Broadcast();
 			return;
 		}
 	}
 
 	if (CurrentInteractableNPC)
 	{
-		CurrentInteractableNPC->HandlePlayerInteraction();
+		if (DialogueManager)
+		{
+			AUnia* Unia = Cast<AUnia>(CurrentInteractableNPC);
+			if (Unia)
+			{
+				if (DialogueManager->CanStartDialogue(Unia->DialogueSceneID))
+				{
+					DialogueManager->StartDialogue(Unia->DialogueSceneID);
+				}
+				else
+				{
+					DialogueManager->PlayRandomDialogue();
+				}
+			}
+		}
 		return;
 	}
 

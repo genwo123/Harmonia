@@ -42,6 +42,10 @@ public:
 	FString GetInteractionText();
 	virtual FString GetInteractionText_Implementation() override;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
+	FString DialogueSceneID = TEXT("Level_Main_0_001");
+
+
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
 	EInteractionType GetInteractionType();
 	virtual EInteractionType GetInteractionType_Implementation() override;
@@ -152,8 +156,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
 	UDataTable* UniaRandomDialogueTable;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
-	FString DialogueSceneID = TEXT("Level_Main_0_001");
+	
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
 	FString UniaRandomDialogueID = TEXT("Unia_Random_001");

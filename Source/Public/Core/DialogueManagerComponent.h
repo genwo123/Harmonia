@@ -116,6 +116,7 @@ struct DISTRICT_TEST_API FDialogueData : public FTableRowBase
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnDialogueStarted, ESpeakerType, Speaker, FText, DialogueText, EDialogueType, Type, float, Duration);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueEnded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnDialogueProgressed, ESpeakerType, Speaker, FText, DialogueText, EDialogueType, Type, float, Duration);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueProgressRequested);
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class DISTRICT_TEST_API UDialogueManagerComponent : public UActorComponent
@@ -129,6 +130,12 @@ protected:
     virtual void BeginPlay() override;
 
 public:
+    UFUNCTION(BlueprintCallable, Category = "Dialogue")
+    FString PlayRandomDialogue();
+
+    UFUNCTION(BlueprintCallable, Category = "Dialogue")
+    bool CanStartDialogue(const FString& DialogueID);
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Settings")
     UDataTable* DialogueDataTable;
 
@@ -146,6 +153,9 @@ public:
 
     UPROPERTY(BlueprintAssignable, Category = "Dialogue Events")
     FOnDialogueProgressed OnDialogueProgressed;
+
+    UPROPERTY(BlueprintAssignable, Category = "Dialogue Events")
+    FOnDialogueProgressRequested OnDialogueProgressRequested;
 
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     bool StartDialogue(const FString& DialogueID);
@@ -204,8 +214,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Dialogue Lock")
     FString GetLockedDialogueReplacement(const FString& DialogueID);
 
-     
-
     UFUNCTION(BlueprintPure, Category = "Dialogue")
     bool IsCurrentDialogueLevelEnd() const;
 
@@ -219,6 +227,7 @@ protected:
     bool ValidateSubStepRequirement(const FDialogueData& DialogueData);
 
     FDialogueData* GetCurrentDialogueData();
+
 private:
     FDialogueData CurrentDialogue;
 

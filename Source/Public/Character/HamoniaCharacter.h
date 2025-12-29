@@ -1,4 +1,3 @@
-// HamoniaCharacter.h
 #pragma once
 #include "CoreMinimal.h"
 #include "Character/BaseCharacter.h"
@@ -21,17 +20,12 @@ class UCameraComponent;
 class UInputMappingContext;
 class UInputAction;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueProgressRequested);
-
 UCLASS(Blueprintable)
 class DISTRICT_TEST_API AHamoniaCharacter : public ACharacter
 {
     GENERATED_BODY()
 public:
     AHamoniaCharacter();
-
-    UPROPERTY(BlueprintAssignable, Category = "Dialogue Events")
-    FOnDialogueProgressRequested OnDialogueProgressRequested;
 
     virtual void Tick(float DeltaTime) override;
     virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -131,8 +125,6 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UWarningMessageComponent* WarningMessageComponent;
-
-
 
     UFUNCTION(BlueprintCallable, Category = "Input")
     void OnEKeyPressed();
@@ -286,8 +278,6 @@ protected:
 
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     AUnia* CurrentInteractableNPC;
-
-
 
     UFUNCTION(BlueprintPure, Category = "Interaction")
     bool IsHoldingObject() const;

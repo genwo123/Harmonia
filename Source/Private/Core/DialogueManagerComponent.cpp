@@ -90,6 +90,45 @@ bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
     return true;
 }
 
+
+FString UDialogueManagerComponent::PlayRandomDialogue()
+{
+    FString RandomID = GetRandomFromFallbackTable("DT_Unia_Random");
+
+    if (!RandomID.IsEmpty())
+    {
+        StartDialogue(RandomID);
+    }
+
+    return RandomID;
+}
+
+bool UDialogueManagerComponent::CanStartDialogue(const FString& DialogueID)
+{
+    FDialogueData* DialogueData = GetDialogueData(DialogueID);
+    if (!DialogueData)
+    {
+        return false;
+    }
+
+    UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance());
+    if (GameInstance && GameInstance->GetCurrentSaveData())
+    {
+        UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData();
+        if (SaveData->UniaData.CompletedDialogues.Contains(DialogueID))
+        {
+            return false;
+        }
+    }
+
+    if (DialogueData->bIsLevelEnd)
+    {
+        return false;
+    }
+
+    return CheckAllConditions(*DialogueData);
+}
+
 void UDialogueManagerComponent::EndDialogue()
 {
     if (!bIsInDialogue)
