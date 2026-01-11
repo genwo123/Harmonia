@@ -4,12 +4,16 @@
 #include "Kismet/GameplayStatics.h"
 #include "Save_Instance/Hamoina_GameInstance.h"
 #include "TimerManager.h"
+#include "Blueprint/UserWidget.h"
+#include "GameFramework/PlayerController.h"
 
 UDialogueManagerComponent::UDialogueManagerComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
     CachedQuestManager = nullptr;
     bIsLevelEnd = false;
+    DialogueWidget = nullptr;
+    bIsProgressingDialogue = false;
 }
 
 void UDialogueManagerComponent::BeginPlay()
@@ -18,88 +22,126 @@ void UDialogueManagerComponent::BeginPlay()
     CachedQuestManager = FindLevelQuestManager();
     bIsInDialogue = false;
     bIsLevelEnd = false;
+    bIsRandomDialogue = false;
+    bIsChainBreaking = false;
     CurrentDialogueID = "";
+}
+
+void UDialogueManagerComponent::InitializeDialogueWidget()
+{
+    if (!DialogueWidgetClass)
+    {
+        return;
+    }
+
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    APlayerController* PC = World->GetFirstPlayerController();
+    if (!PC)
+    {
+        return;
+    }
+
+    DialogueWidget = CreateWidget<UUserWidget>(PC, DialogueWidgetClass);
+    if (DialogueWidget)
+    {
+        DialogueWidget->AddToViewport(10);
+        DialogueWidget->SetVisibility(ESlateVisibility::Hidden);
+    }
+}
+
+void UDialogueManagerComponent::ShowDialogueWidget()
+{
+    if (!DialogueWidget)
+    {
+        return;
+    }
+
+    DialogueWidget->SetVisibility(ESlateVisibility::Visible);
+}
+
+void UDialogueManagerComponent::HideDialogueWidget()
+{
+    if (!DialogueWidget)
+    {
+        return;
+    }
+
+    DialogueWidget->SetVisibility(ESlateVisibility::Hidden);
 }
 
 bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
 {
-    UE_LOG(LogTemp, Error, TEXT("========================================"));
-    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Called"));
-    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] DialogueID: %s"), *DialogueID);
-    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] bIsInDialogue: %d"), bIsInDialogue);
-
-    if (bIsInDialogue)
+    if (!DialogueDataTable)
     {
-        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Already in dialogue - Cancel"));
-        return false;
-    }
-
-    if (bIsLevelEnd)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Level end state - Cancel"));
         return false;
     }
 
     FDialogueData* DialogueData = GetDialogueData(DialogueID);
     if (!DialogueData)
     {
-        UE_LOG(LogTemp, Error, TEXT("[StartDialogue] DialogueData not found!"));
-
         return false;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] DialogueData found"));
-    UE_LOG(LogTemp, Warning, TEXT("  - NextID: %s"), *DialogueData->NextDialogueID);
-    UE_LOG(LogTemp, Warning, TEXT("  - ChainBreak: %d"), DialogueData->bChainBreak);
-
-    if (!CheckAllConditions(*DialogueData))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Conditions not met - Cancel"));
-        return false;
-    }
-
-    bIsInDialogue = true;
-    CurrentDialogueID = DialogueID;
     CurrentDialogue = *DialogueData;
+    CurrentDialogueID = DialogueID;
+    bIsLevelEnd = DialogueData->bIsLevelEnd;
 
-    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Dialogue started! CurrentDialogueID: %s"), *CurrentDialogueID);
-    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Calling ProcessDialogue"));
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC)
+    {
+        PC->bShowMouseCursor = true;
+
+        FInputModeGameAndUI InputMode;
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        PC->SetInputMode(InputMode);
+
+        PC->SetIgnoreMoveInput(true);
+    }
 
     ProcessDialogue(*DialogueData);
-
-    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] ProcessDialogue completed"));
-
-    if (DialogueData->bIsLevelEnd)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[StartDialogue] Level end dialogue - Setting timer"));
-
-        float Duration = DialogueData->DisplayDuration > 0 ? DialogueData->DisplayDuration : 5.0f;
-
-        FTimerHandle LevelEndTimer;
-        GetWorld()->GetTimerManager().SetTimer(LevelEndTimer, [this]()
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[LevelEndTimer] Level end"));
-                bIsLevelEnd = true;
-                EndDialogue();
-            }, Duration, false);
-    }
-
-    UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Complete - return true"));
-    UE_LOG(LogTemp, Error, TEXT("========================================"));
-
     return true;
 }
 
+void UDialogueManagerComponent::EndDialogue()
+{
+    if (!bIsInDialogue)
+    {
+        return;
+    }
+
+    bIsInDialogue = false;
+
+    if (bIsLevelEnd || bIsRandomDialogue)
+    {
+        CurrentDialogueID = "";
+    }
+
+    CurrentDialogue = FDialogueData();
+
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC)
+    {
+        PC->SetInputMode(FInputModeGameOnly());
+        PC->bShowMouseCursor = false;
+        PC->SetIgnoreMoveInput(false);
+    }
+
+    HideDialogueWidget();
+    OnDialogueEnded.Broadcast();
+}
 
 FString UDialogueManagerComponent::PlayRandomDialogue()
 {
     FString RandomID = GetRandomFromFallbackTable("DT_Unia_Random");
-
     if (!RandomID.IsEmpty())
     {
         StartDialogue(RandomID);
     }
-
     return RandomID;
 }
 
@@ -129,88 +171,105 @@ bool UDialogueManagerComponent::CanStartDialogue(const FString& DialogueID)
     return CheckAllConditions(*DialogueData);
 }
 
-void UDialogueManagerComponent::EndDialogue()
-{
-    if (!bIsInDialogue)
-    {
-        return;
-    }
 
-    bIsInDialogue = false;
-    CurrentDialogueID = "";
-
-    OnDialogueEnded.Broadcast();
-}
 
 void UDialogueManagerComponent::ProgressDialogue()
 {
+    if (bIsProgressingDialogue)
+    {
+        return;
+    }
+
     if (!bIsInDialogue)
     {
+        bIsProgressingDialogue = false;
         return;
     }
 
-    if (CurrentDialogue.NextDialogueID.IsEmpty())
+    if (bIsChainBreaking)
     {
         EndDialogue();
+        bIsChainBreaking = false;
+        OnDialogueChainBreak.Broadcast();
         return;
     }
 
-    FString NextID = CurrentDialogue.NextDialogueID;
-    FDialogueData* NextDialogueData = GetDialogueData(NextID);
+    bIsProgressingDialogue = true;
 
+    FString NextID = CurrentDialogue.NextDialogueID;
+    if (NextID.IsEmpty())
+    {
+        EndDialogue();
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    FDialogueData* NextDialogueData = GetDialogueData(NextID);
     if (!NextDialogueData)
     {
         EndDialogue();
+        bIsProgressingDialogue = false;
         return;
     }
 
     if (NextDialogueData->bChainBreak)
     {
-        // 순서 변경: 먼저 다음 대사 저장
-        if (!NextDialogueData->NextDialogueID.IsEmpty())
-        {
-            SaveLastDialogueID(NextDialogueData->NextDialogueID);
-        }
-
-        EndDialogue();
-        StartDialogue(NextID);
-
-        FTimerHandle ChainBreakTimer;
-        GetWorld()->GetTimerManager().SetTimer(ChainBreakTimer, [this]()
-            {
-                EndDialogue();
-            }, NextDialogueData->DisplayDuration, false);
-
+        HandleChainBreak(NextID, *NextDialogueData);
+        bIsProgressingDialogue = false;
         return;
     }
 
-    if (NextDialogueData->bIsLocked)
+    if (NextDialogueData->bIsLocked && !ValidateSubStepRequirement(*NextDialogueData))
     {
-        if (!ValidateSubStepRequirement(*NextDialogueData))
-        {
-            EndDialogue();
-
-            FString RandomID = GetRandomFromFallbackTable("DT_Unia_Random");
-            if (!RandomID.IsEmpty())
-            {
-                StartDialogue(RandomID);
-            }
-
-            SaveLastDialogueID(NextID);
-
-            FTimerHandle LockTimer;
-            GetWorld()->GetTimerManager().SetTimer(LockTimer, [this]()
-                {
-                    EndDialogue();
-                }, 3.0f, false);
-
-            return;
-        }
+        HandleLockedDialogue(NextID, *NextDialogueData);
+        bIsProgressingDialogue = false;
+        return;
     }
 
     EndDialogue();
     StartDialogue(NextID);
+    bIsProgressingDialogue = false;
 }
+
+void UDialogueManagerComponent::HandleChainBreak(const FString& DialogueID, const FDialogueData& DialogueData)
+{
+    bIsChainBreaking = true;
+
+    if (!DialogueData.NextDialogueID.IsEmpty())
+    {
+        SaveLastDialogueID(DialogueData.NextDialogueID);
+
+        UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance());
+        if (GameInstance)
+        {
+            GameInstance->SetCurrentDialogueID(DialogueData.NextDialogueID);
+        }
+    }
+
+    EndDialogue();
+    StartDialogue(DialogueID);
+}
+
+void UDialogueManagerComponent::HandleLockedDialogue(const FString& DialogueID, const FDialogueData& DialogueData)
+{
+    bIsChainBreaking = true;
+
+    FString FallbackTable = DialogueData.FallbackTableName.IsEmpty() ?
+        TEXT("DT_Unia_Random") : DialogueData.FallbackTableName;
+    FString RandomDialogueID = GetRandomFromFallbackTable(FallbackTable);
+
+    SaveLastDialogueID(DialogueID);
+
+    UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance());
+    if (GameInstance)
+    {
+        GameInstance->SetCurrentDialogueID(RandomDialogueID);
+    }
+
+    EndDialogue();
+    StartDialogue(DialogueID);
+}
+
 void UDialogueManagerComponent::SelectChoice(int32 ChoiceIndex)
 {
     if (!bIsInDialogue || !CurrentDialogue.bHasChoices)
@@ -240,7 +299,6 @@ TArray<FString> UDialogueManagerComponent::GetCurrentChoices()
     {
         return CurrentDialogue.ChoiceTexts;
     }
-
     return TArray<FString>();
 }
 
@@ -251,7 +309,6 @@ bool UDialogueManagerComponent::CanProgressToDialogue(const FString& DialogueID)
     {
         return false;
     }
-
     return ValidateSubStepRequirement(*DialogueData);
 }
 
@@ -285,7 +342,6 @@ FString UDialogueManagerComponent::FindDialogueForCurrentLevel()
             }
         }
     }
-
     return "";
 }
 
@@ -297,7 +353,6 @@ FString UDialogueManagerComponent::GetMacroDialogue(const FString& LevelName, in
     }
 
     FString MacroID = FString::Printf(TEXT("%s_Macro_Step%d"), *LevelName, CurrentSubStep);
-
     FDialogueData* MacroData = GetDialogueData(MacroID);
     if (MacroData)
     {
@@ -310,14 +365,12 @@ FString UDialogueManagerComponent::GetMacroDialogue(const FString& LevelName, in
         int32 Index = CurrentSubStep % MacroDialogues.Num();
         return MacroDialogues[Index];
     }
-
     return "Unia_Random_001";
 }
 
 TArray<FString> UDialogueManagerComponent::GetDialoguesForLevel(const FString& LevelName, EDialogueCategory Category)
 {
     TArray<FString> Result;
-
     if (!DialogueDataTable)
     {
         return Result;
@@ -335,7 +388,6 @@ TArray<FString> UDialogueManagerComponent::GetDialoguesForLevel(const FString& L
             Result.Add(DialogueData->DialogueID);
         }
     }
-
     return Result;
 }
 
@@ -350,7 +402,6 @@ bool UDialogueManagerComponent::IsSubStepCompleted(int32 SubStepIndex)
     {
         return CachedQuestManager->IsSubStepCompleted(SubStepIndex);
     }
-
     return false;
 }
 
@@ -365,7 +416,6 @@ int32 UDialogueManagerComponent::GetCurrentSubStep()
     {
         return CachedQuestManager->GetCurrentSubStep();
     }
-
     return 0;
 }
 
@@ -388,7 +438,6 @@ FString UDialogueManagerComponent::GetCurrentLevelName()
         LevelName.RemoveFromStart(World->StreamingLevelsPrefix);
         return LevelName;
     }
-
     return "";
 }
 
@@ -404,7 +453,6 @@ void UDialogueManagerComponent::PlayMonologue(const FString& MonologueID)
     {
         return;
     }
-
     ProcessDialogue(*MonologueData);
 }
 
@@ -414,7 +462,6 @@ bool UDialogueManagerComponent::CheckAllConditions(const FDialogueData& Dialogue
     {
         return false;
     }
-
     return true;
 }
 
@@ -435,25 +482,26 @@ FDialogueData* UDialogueManagerComponent::GetDialogueData(const FString& Dialogu
             return DialogueData;
         }
     }
-
     return nullptr;
 }
 
 void UDialogueManagerComponent::ProcessDialogue(const FDialogueData& DialogueData)
 {
-    UE_LOG(LogTemp, Error, TEXT(">>> [ProcessDialogue] Start"));
-    UE_LOG(LogTemp, Error, TEXT(">>> [ProcessDialogue] DialogueID: %s"), *DialogueData.DialogueID);
-    UE_LOG(LogTemp, Error, TEXT(">>> [ProcessDialogue] Broadcasting OnDialogueStarted"));
+    CurrentDialogue = DialogueData;
+    CurrentDialogueID = DialogueData.DialogueID;
+    bIsInDialogue = true;
+
+    ShowDialogueWidget();
+
+    bool bIsLastDialogue = DialogueData.NextDialogueID.IsEmpty() || bIsChainBreaking;
 
     OnDialogueStarted.Broadcast(
         DialogueData.Speaker,
         DialogueData.DialogueText,
         DialogueData.DialogueType,
-        DialogueData.DisplayDuration
+        DialogueData.DisplayDuration,
+        bIsLastDialogue
     );
-
-    UE_LOG(LogTemp, Error, TEXT(">>> [ProcessDialogue] Broadcast completed"));
-    UE_LOG(LogTemp, Error, TEXT(">>> [ProcessDialogue] End"));
 }
 
 ALevelQuestManager* UDialogueManagerComponent::FindLevelQuestManager()
@@ -469,10 +517,8 @@ ALevelQuestManager* UDialogueManagerComponent::FindLevelQuestManager()
 
     if (QuestManagers.Num() > 0)
     {
-        ALevelQuestManager* QuestMgr = Cast<ALevelQuestManager>(QuestManagers[0]);
-        return QuestMgr;
+        return Cast<ALevelQuestManager>(QuestManagers[0]);
     }
-
     return nullptr;
 }
 
@@ -482,14 +528,13 @@ bool UDialogueManagerComponent::ValidateSubStepRequirement(const FDialogueData& 
     {
         return true;
     }
-
-    bool bCompleted = IsSubStepCompleted(DialogueData.RequiredSubStep);
-    return bCompleted;
+    return IsSubStepCompleted(DialogueData.RequiredSubStep);
 }
 
 void UDialogueManagerComponent::SaveLastDialogueID(const FString& DialogueID)
 {
-    if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance()))
+    UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance());
+    if (GameInstance)
     {
         if (UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData())
         {
@@ -500,7 +545,8 @@ void UDialogueManagerComponent::SaveLastDialogueID(const FString& DialogueID)
 
 FString UDialogueManagerComponent::GetLastDialogueID()
 {
-    if (UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance()))
+    UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetWorld()->GetGameInstance());
+    if (GameInstance)
     {
         if (UHamonia_SaveGame* SaveData = GameInstance->GetCurrentSaveData())
         {
@@ -525,7 +571,6 @@ FString UDialogueManagerComponent::GetRandomFromFallbackTable(const FString& Tab
         int32 RandomIndex = FMath::RandRange(0, HintDialogues.Num() - 1);
         return HintDialogues[RandomIndex];
     }
-
     return "";
 }
 
@@ -556,7 +601,6 @@ FDialogueData* UDialogueManagerComponent::GetCurrentDialogueData()
     {
         return nullptr;
     }
-
     return &CurrentDialogue;
 }
 

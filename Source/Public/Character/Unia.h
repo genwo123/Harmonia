@@ -27,6 +27,7 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
+
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
@@ -45,6 +46,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
 	FString DialogueSceneID = TEXT("Level_Main_0_001");
 
+
+	UFUNCTION(BlueprintCallable, Category = "Dialogue")
+	FString GetDialogueIDToStart();
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
 	EInteractionType GetInteractionType();

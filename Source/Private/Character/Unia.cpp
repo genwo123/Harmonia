@@ -88,22 +88,28 @@ void AUnia::Interact_Implementation(AActor* Interactor)
 
 bool AUnia::CanInteract_Implementation(AActor* Interactor)
 {
-	if (bLevelDialogueEnded)
-	{
-		return false;
-	}
-
 	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(Interactor);
 	if (!Player)
 	{
 		return false;
 	}
 
+	UDialogueManagerComponent* DialogueMgr = Player->GetDialogueManagerComponent();
+	if (!DialogueMgr)
+	{
+		return false;
+	}
+
+	// Level End 상태면 대화 불가능
+	if (DialogueMgr->IsCurrentDialogueLevelEnd())
+	{
+		return false;
+	}
+
 	float Distance = FVector::Dist(GetActorLocation(), Player->GetActorLocation());
 
-	return Distance <= InteractionRange && !IsInDialogue();
+	return Distance <= InteractionRange && !DialogueMgr->bIsInDialogue;
 }
-
 
 
 FString AUnia::GetInteractionText_Implementation()
@@ -120,6 +126,7 @@ void AUnia::StartDialogue(AActor* Interactor)
 {
 	static int32 StartCount = 0;
 	UE_LOG(LogTemp, Error, TEXT("[StartDialogue] Called %d"), ++StartCount);
+
 	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(Interactor);
 	if (!Player)
 	{
@@ -132,7 +139,27 @@ void AUnia::StartDialogue(AActor* Interactor)
 		return;
 	}
 
-	OnUniaDialogueActivated.Broadcast(DialogueSceneID, PlayerDM->DialogueDataTable);
+	// GameInstance에서 저장된 DialogueID 가져오기
+	UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
+	FString NextDialogueID;
+
+	if (GameInstance)
+	{
+		NextDialogueID = GameInstance->GetCurrentDialogueID();
+	}
+
+	// 저장된 DialogueID가 있으면 그걸로 시작
+	if (!NextDialogueID.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Unia::StartDialogue] Starting from saved DialogueID: %s"), *NextDialogueID);
+		OnUniaDialogueActivated.Broadcast(NextDialogueID, PlayerDM->DialogueDataTable);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Unia::StartDialogue] Starting from DialogueSceneID: %s"), *DialogueSceneID);
+		OnUniaDialogueActivated.Broadcast(DialogueSceneID, PlayerDM->DialogueDataTable);
+	}
+
 	OnDialogueStarted();
 }
 
@@ -192,14 +219,55 @@ void AUnia::SetDialogueState(bool bInDialogue)
 
 void AUnia::HandlePlayerInteraction()
 {
-	static int32 CallCount = 0;
-	UE_LOG(LogTemp, Error, TEXT("[HandlePlayerInteraction] Called %d, PlayerPawn: %s"),
-		++CallCount, PlayerPawn ? *PlayerPawn->GetName() : TEXT("NULL"));
+	if (!PlayerPawn)
+	{
+		return;
+	}
 
-	if (PlayerPawn)
+	UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
+	if (!GameInstance)
 	{
 		StartDialogue(PlayerPawn);
+		return;
 	}
+
+	FString SavedDialogueID = GameInstance->GetCurrentDialogueID();
+
+	if (!SavedDialogueID.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Unia::HandlePlayerInteraction] Using saved DialogueID: %s"), *SavedDialogueID);
+
+		AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(PlayerPawn);
+		if (Player)
+		{
+			UDialogueManagerComponent* PlayerDM = Player->GetDialogueManagerComponent();
+			if (PlayerDM && PlayerDM->DialogueDataTable)
+			{
+				OnUniaDialogueActivated.Broadcast(SavedDialogueID, PlayerDM->DialogueDataTable);
+				return;
+			}
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Unia::HandlePlayerInteraction] No saved DialogueID, using default: %s"), *DialogueSceneID);
+	StartDialogue(PlayerPawn);
+}
+
+FString AUnia::GetDialogueIDToStart()
+{
+	UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
+	if (GameInstance)
+	{
+		FString SavedDialogueID = GameInstance->GetCurrentDialogueID();
+		if (!SavedDialogueID.IsEmpty())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Unia::GetDialogueIDToStart] Using saved: %s"), *SavedDialogueID);
+			return SavedDialogueID;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Unia::GetDialogueIDToStart] Using default: %s"), *DialogueSceneID);
+	return DialogueSceneID;
 }
 
 void AUnia::SetLevelDialogueEnded(bool bEnded)

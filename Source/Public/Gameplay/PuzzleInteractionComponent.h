@@ -81,9 +81,18 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     AActor* HoldingActor;
 
+    UFUNCTION(BlueprintCallable, Category = "Puzzle Activation")
+    void SetPuzzleActive(bool bActive);
 
+    UFUNCTION(BlueprintPure, Category = "Puzzle Activation")
+    bool IsPuzzleActive() const { return bIsPuzzleActive; }
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Activation")
+    bool bStartHidden = true;
 
 private:
+
+    bool bIsPuzzleActive = true;
 
     void SetupInitialPhysics();
     void EnablePhysics();

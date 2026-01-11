@@ -42,14 +42,11 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
     USceneComponent* HeldObjectAttachPoint;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
-    UDataTable* DefaultDialogueDataTable;
-
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     UDialogueManagerComponent* GetDialogueManager();
 
     UFUNCTION()
-    void OnDialogueStarted(ESpeakerType Speaker, FText DialogueText, EDialogueType Type, float Duration);
+    void OnDialogueStarted(ESpeakerType Speaker, FText DialogueText, EDialogueType Type, float Duration, bool bIsLastDialogue);
 
     UFUNCTION()
     void OnDialogueEnded();
@@ -59,6 +56,7 @@ public:
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Dialogue")
     void OnDialogueEndedBP();
+
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
     UInputMappingContext* DefaultMappingContext;
@@ -144,11 +142,6 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     class UDialogueManagerComponent* GetDialogueManagerComponent() const { return DialogueManager; }
 
-    UFUNCTION(BlueprintCallable, Category = "Dialogue")
-    FString GetDefaultDialogueID() const { return DefaultDialogueID; }
-
-    UFUNCTION(BlueprintCallable, Category = "Dialogue")
-    void SetDefaultDialogueID(const FString& NewDialogueID) { DefaultDialogueID = NewDialogueID; }
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Quest")
     void OnInteractComplete(AActor* InteractedActor);
@@ -207,15 +200,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bShowDebugLines = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
-    FString DefaultDialogueID = "";
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
-    bool bAutoStartDialogue = false;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Default Dialogue")
-    float DelayBeforeDialogue = 0.0f;
-
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     UItem* GetCurrentHeldInventoryItem();
 
@@ -266,12 +250,6 @@ public:
 
 protected:
     virtual void BeginPlay() override;
-
-    UFUNCTION(BlueprintCallable, Category = "Dialogue")
-    void InitializeDialogueSystem();
-
-    UFUNCTION(BlueprintCallable, Category = "Dialogue")
-    bool IsDialogueSystemReady();
 
     UPROPERTY(BlueprintReadOnly, Category = "Interaction")
     TArray<AUnia*> InteractableNPCs;

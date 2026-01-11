@@ -280,18 +280,7 @@ FString UHamoina_GameInstance::GetCurrentDialogueID() const
 {
     if (CurrentSaveData)
     {
-        // 먼저 저장된 CurrentDialogueID 확인
-        FString SavedID = CurrentSaveData->GetCurrentDialogueID();
-
-        // 저장된 ID가 있으면 그걸 반환
-        if (!SavedID.IsEmpty())
-        {
-            return SavedID;
-        }
-
-        // 없으면 기존 로직 (Step 기반)
-        FString CurrentLevel = GetLevelNameFromStage(GetCurrentStageNumber());
-        return CurrentSaveData->GetCurrentDialogueForLevel(CurrentLevel);
+        return CurrentSaveData->GetCurrentDialogueID();
     }
     return TEXT("");
 }

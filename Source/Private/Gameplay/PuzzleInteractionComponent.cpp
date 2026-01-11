@@ -41,6 +41,11 @@ void UPuzzleInteractionComponent::BeginPlay()
         PrimComp->SetEnableGravity(false);
         PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
     }
+
+    if (bStartHidden)
+    {
+        SetPuzzleActive(false);
+    }
 }
 
 void UPuzzleInteractionComponent::SetupInitialPhysics()
@@ -119,9 +124,34 @@ void UPuzzleInteractionComponent::DisablePhysics()
 }
 
 
+void UPuzzleInteractionComponent::SetPuzzleActive(bool bActive)
+{
+    bIsPuzzleActive = bActive;
+
+    AActor* Owner = GetOwner();
+    if (!Owner) return;
+
+    Owner->SetActorHiddenInGame(!bActive);
+
+    UPrimitiveComponent* PrimComp = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
+    if (!PrimComp)
+    {
+        PrimComp = Owner->FindComponentByClass<UStaticMeshComponent>();
+    }
+
+    if (PrimComp)
+    {
+        PrimComp->SetCollisionEnabled(bActive ?
+            ECollisionEnabled::QueryOnly :
+            ECollisionEnabled::NoCollision);
+    }
+
+    bCanBePickedUp = bActive;
+}
+
 bool UPuzzleInteractionComponent::PickUp(AActor* Picker)
 {
-    if (!bCanBePickedUp || HoldingActor)
+    if (!bIsPuzzleActive || !bCanBePickedUp || HoldingActor)
     {
         return false;
     }

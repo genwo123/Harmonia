@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Engine/DataTable.h"
+#include "Blueprint/UserWidget.h"
 #include "DialogueManagerComponent.generated.h"
 
 UENUM(BlueprintType)
@@ -113,10 +114,11 @@ struct DISTRICT_TEST_API FDialogueData : public FTableRowBase
     }
 };
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnDialogueStarted, ESpeakerType, Speaker, FText, DialogueText, EDialogueType, Type, float, Duration);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_FiveParams(FOnDialogueStarted, ESpeakerType, Speaker, FText, DialogueText, EDialogueType, Type, float, Duration, bool, bIsLastDialogue);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueEnded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_FourParams(FOnDialogueProgressed, ESpeakerType, Speaker, FText, DialogueText, EDialogueType, Type, float, Duration);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueProgressRequested);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueChainBreak);
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class DISTRICT_TEST_API UDialogueManagerComponent : public UActorComponent
@@ -129,7 +131,25 @@ public:
 protected:
     virtual void BeginPlay() override;
 
+    UPROPERTY()
+    class UUserWidget* CurrentDialogueWidget;
+
 public:
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue UI")
+    TSubclassOf<UUserWidget> DialogueWidgetClass;
+
+    UPROPERTY()
+    UUserWidget* DialogueWidget;
+
+    UFUNCTION(BlueprintCallable, Category = "Dialogue UI")
+    void InitializeDialogueWidget();
+
+    UFUNCTION(BlueprintCallable, Category = "Dialogue UI")
+    void ShowDialogueWidget();
+
+    UFUNCTION(BlueprintCallable, Category = "Dialogue UI")
+    void HideDialogueWidget();
+
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     FString PlayRandomDialogue();
 
@@ -156,6 +176,9 @@ public:
 
     UPROPERTY(BlueprintAssignable, Category = "Dialogue Events")
     FOnDialogueProgressRequested OnDialogueProgressRequested;
+
+    UPROPERTY(BlueprintAssignable, Category = "Dialogue Events")
+    FOnDialogueChainBreak OnDialogueChainBreak;
 
     UFUNCTION(BlueprintCallable, Category = "Dialogue")
     bool StartDialogue(const FString& DialogueID);
@@ -230,9 +253,12 @@ protected:
 
 private:
     FDialogueData CurrentDialogue;
-
     UPROPERTY()
     class ALevelQuestManager* CachedQuestManager;
-
+    void HandleChainBreak(const FString& DialogueID, const FDialogueData& DialogueData);
+    void HandleLockedDialogue(const FString& DialogueID, const FDialogueData& DialogueData);
     bool bIsLevelEnd = false;
+    bool bIsProgressingDialogue = false;
+    bool bIsRandomDialogue = false;
+    bool bIsChainBreaking = false;
 };

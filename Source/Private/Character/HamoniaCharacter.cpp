@@ -164,35 +164,17 @@ void AHamoniaCharacter::BeginPlay()
 		DialogueManager->OnDialogueStarted.AddDynamic(this, &AHamoniaCharacter::OnDialogueStarted);
 		DialogueManager->OnDialogueEnded.AddDynamic(this, &AHamoniaCharacter::OnDialogueEnded);
 
-		FTimerHandle DialogueInitTimerHandle;
-		GetWorldTimerManager().SetTimer(DialogueInitTimerHandle, this, &AHamoniaCharacter::InitializeDialogueSystem, 0.1f, false);
-	}
-
-	if (bAutoStartDialogue && !DefaultDialogueID.IsEmpty())
-	{
-		FTimerHandle DialogueTimerHandle;
-		GetWorldTimerManager().SetTimer(DialogueTimerHandle, [this]()
+		FTimerHandle WidgetInitTimerHandle;
+		GetWorldTimerManager().SetTimer(WidgetInitTimerHandle, [this]()
 			{
-				if (DialogueManager && !DialogueManager->bIsInDialogue)
+				if (DialogueManager)
 				{
-					DialogueManager->StartDialogue(DefaultDialogueID);
+					DialogueManager->InitializeDialogueWidget();
 				}
-			}, DelayBeforeDialogue, false);
+			}, 0.2f, false);
 	}
 }
 
-void AHamoniaCharacter::InitializeDialogueSystem()
-{
-	if (DialogueManager && DefaultDialogueDataTable)
-	{
-		DialogueManager->DialogueDataTable = DefaultDialogueDataTable;
-	}
-}
-
-bool AHamoniaCharacter::IsDialogueSystemReady()
-{
-	return DialogueManager && DialogueManager->DialogueDataTable != nullptr;
-}
 
 void AHamoniaCharacter::Tick(float DeltaTime)
 {
@@ -450,7 +432,6 @@ void AHamoniaCharacter::Interact()
 			return;
 		}
 	}
-
 	if (CurrentInteractableNPC)
 	{
 		if (DialogueManager)
@@ -458,19 +439,37 @@ void AHamoniaCharacter::Interact()
 			AUnia* Unia = Cast<AUnia>(CurrentInteractableNPC);
 			if (Unia)
 			{
-				if (DialogueManager->CanStartDialogue(Unia->DialogueSceneID))
+				FString DialogueIDToStart = Unia->GetDialogueIDToStart();
+
+				// GameInstance에서 가져온 DialogueID는 무조건 시작
+				UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
+				bool bUsingSavedDialogue = false;
+
+				if (GameInstance)
 				{
-					DialogueManager->StartDialogue(Unia->DialogueSceneID);
+					FString SavedDialogueID = GameInstance->GetCurrentDialogueID();
+					bUsingSavedDialogue = !SavedDialogueID.IsEmpty();
+				}
+
+				if (bUsingSavedDialogue)
+				{
+					DialogueManager->StartDialogue(DialogueIDToStart);
 				}
 				else
 				{
-					DialogueManager->PlayRandomDialogue();
+					if (DialogueManager->CanStartDialogue(DialogueIDToStart))
+					{
+						DialogueManager->StartDialogue(DialogueIDToStart);
+					}
+					else
+					{
+						DialogueManager->PlayRandomDialogue();
+					}
 				}
 			}
 		}
 		return;
 	}
-
 	if (bIsLookingAtInteractable && CurrentInteractableActor)
 	{
 		APickupActor* PickupCheck = Cast<APickupActor>(CurrentInteractableActor);
@@ -483,9 +482,7 @@ void AHamoniaCharacter::Interact()
 			}
 		}
 	}
-
 	AActor* HeldObject = GetHeldObject();
-
 	if (HeldObject)
 	{
 		UPuzzleInteractionComponent* HeldItemComp = HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
@@ -515,7 +512,6 @@ void AHamoniaCharacter::Interact()
 			return;
 		}
 	}
-
 	if (bIsLookingAtInteractable && CurrentInteractableActor)
 	{
 		UItem* HeldInventoryItem = GetCurrentHeldInventoryItem();
@@ -523,7 +519,6 @@ void AHamoniaCharacter::Interact()
 		{
 			return;
 		}
-
 		APedestal* Pedestal = Cast<APedestal>(CurrentInteractableActor);
 		if (Pedestal)
 		{
@@ -549,7 +544,6 @@ void AHamoniaCharacter::Interact()
 			}
 			return;
 		}
-
 		UPuzzleInteractionComponent* InteractionComp = CurrentInteractableActor->FindComponentByClass<UPuzzleInteractionComponent>();
 		if (InteractionComp && InteractionComp->bCanBePickedUp)
 		{
@@ -565,7 +559,6 @@ void AHamoniaCharacter::Interact()
 			}
 			return;
 		}
-
 		IInteractableInterface::Execute_Interact(CurrentInteractableActor, this);
 		if (CurrentInteractableActor->GetClass()->ImplementsInterface(UInteractableInterface::StaticClass()))
 		{
@@ -760,7 +753,7 @@ FString AHamoniaCharacter::GetCurrentInteractionText() const
 	return CurrentInteractionText;
 }
 
-void AHamoniaCharacter::OnDialogueStarted(ESpeakerType Speaker, FText DialogueText, EDialogueType Type, float Duration)
+void AHamoniaCharacter::OnDialogueStarted(ESpeakerType Speaker, FText DialogueText, EDialogueType Type, float Duration, bool bIsLastDialogue)
 {
 }
 
