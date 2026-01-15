@@ -3,6 +3,7 @@
 #include "Character/UniaWaitSpot.h"
 #include "Core/DialogueManagerComponent.h"
 #include "AI/UniaAIController.h"
+#include "Core/LevelQuestManager.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Save_Instance/Hamoina_GameInstance.h"
@@ -51,6 +52,12 @@ void AUnia::BeginPlay()
 	}
 
 	bLevelDialogueEnded = false;
+
+	ALevelQuestManager* QuestMgr = FindQuestManager();
+	if (QuestMgr)
+	{
+		QuestMgr->OnSubStepCompleted.AddDynamic(this, &AUnia::OnQuestStepCompleted);
+	}
 }
 
 void AUnia::Tick(float DeltaTime)
@@ -185,7 +192,12 @@ void AUnia::OnDialogueWidgetClosed()
 {
 	SetDialogueState(false);
 
-	if (bCanFollow && !bIsFollowingPlayer)
+	if (!PendingWaitSpotID.IsEmpty())
+	{
+		MoveToWaitSpot(PendingWaitSpotID);
+		PendingWaitSpotID = TEXT("");
+	}
+	else if (bCanFollow && !bIsFollowingPlayer)
 	{
 		SetAIFollowing(true);
 		StartFollowingPlayer();
@@ -207,6 +219,59 @@ bool AUnia::IsInDialogue() const
 		}
 	}
 	return false;
+}
+
+ALevelQuestManager* AUnia::FindQuestManager()
+{
+	if (CachedQuestManager)
+	{
+		return CachedQuestManager;
+	}
+
+	TArray<AActor*> FoundManagers;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ALevelQuestManager::StaticClass(), FoundManagers);
+
+	if (FoundManagers.Num() > 0)
+	{
+		CachedQuestManager = Cast<ALevelQuestManager>(FoundManagers[0]);
+		return CachedQuestManager;
+	}
+
+	return nullptr;
+}
+
+void AUnia::OnQuestStepCompleted(int32 StepIndex, FString DialogueID, FString WaitSpotID)
+{
+	if (DialogueID.IsEmpty())
+	{
+		return;
+	}
+
+	if (!PlayerPawn)
+	{
+		FindPlayerPawn();
+		if (!PlayerPawn)
+		{
+			return;
+		}
+	}
+
+	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(PlayerPawn);
+	if (!Player)
+	{
+		return;
+	}
+
+	UDialogueManagerComponent* PlayerDM = Player->GetDialogueManagerComponent();
+	if (!PlayerDM || !PlayerDM->DialogueDataTable)
+	{
+		return;
+	}
+
+	PendingWaitSpotID = WaitSpotID;
+
+	OnUniaDialogueActivated.Broadcast(DialogueID, PlayerDM->DialogueDataTable);
+	OnDialogueStarted();
 }
 
 void AUnia::SetDialogueState(bool bInDialogue)

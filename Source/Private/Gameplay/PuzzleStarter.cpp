@@ -1,4 +1,3 @@
-// PuzzleStarter.cpp
 #include "Gameplay/PuzzleStarter.h"
 #include "Gameplay/GridMazeManager.h"
 #include "Components/StaticMeshComponent.h"
@@ -57,22 +56,20 @@ APuzzleStarter::APuzzleStarter()
         SlotMesh3->SetStaticMesh(SphereMeshAsset.Object);
     }
 
-    // 기본 슬롯 3개 설정
     CoreSlots.SetNum(3);
     CoreSlots[0].RequiredCoreTag = FName("BP_RedCore");
     CoreSlots[1].RequiredCoreTag = FName("BP_BlueCore");
     CoreSlots[2].RequiredCoreTag = FName("BP_GreenCore");
 
-    bAutoStartWhenComplete = true;
     bAllCoresInserted = false;
     bPuzzleStarted = false;
+    bWaitingForUniaMode = false;
     SoundVolume = 1.0f;
 }
 
 void APuzzleStarter::BeginPlay()
 {
     Super::BeginPlay();
-
 
     CoreSlots[0].SlotMesh = SlotMesh1;
     CoreSlots[1].SlotMesh = SlotMesh2;
@@ -104,8 +101,6 @@ void APuzzleStarter::OnConstruction(const FTransform& Transform)
 
 void APuzzleStarter::CreateSlotMeshes()
 {
-    
-    
 }
 
 bool APuzzleStarter::TryInsertCore(AActor* CoreActor)
@@ -170,10 +165,8 @@ bool APuzzleStarter::TryInsertCore(AActor* CoreActor)
         OnAllCoresInserted.Broadcast();
         OnAllCoresInsertedBP();
 
-        if (bAutoStartWhenComplete)
-        {
-            StartConnectedPuzzle();
-        }
+        bWaitingForUniaMode = true;
+        OnReadyForUniaMode.Broadcast();
     }
 
     return true;
@@ -237,6 +230,17 @@ void APuzzleStarter::StartConnectedPuzzle()
         });
 }
 
+void APuzzleStarter::OnUniaModeCompleted()
+{
+    if (!bWaitingForUniaMode || !bAllCoresInserted)
+    {
+        return;
+    }
+
+    bWaitingForUniaMode = false;
+    StartConnectedPuzzle();
+}
+
 void APuzzleStarter::ResetAllSlots()
 {
     for (int32 i = 0; i < CoreSlots.Num(); i++)
@@ -255,6 +259,7 @@ void APuzzleStarter::ResetAllSlots()
 
     bAllCoresInserted = false;
     bPuzzleStarted = false;
+    bWaitingForUniaMode = false;
 }
 
 void APuzzleStarter::UpdateSlotVisual(int32 SlotIndex, bool bInserted)
@@ -307,7 +312,6 @@ void APuzzleStarter::PlaySound(USoundBase* Sound)
     }
 }
 
-// InteractableInterface 구현
 void APuzzleStarter::Interact_Implementation(AActor* Interactor)
 {
     if (!CanInteract_Implementation(Interactor))
@@ -315,8 +319,7 @@ void APuzzleStarter::Interact_Implementation(AActor* Interactor)
         return;
     }
 
-    // 상호작용 시 현재 상태 표시 또는 수동 시작
-    if (bAllCoresInserted && !bPuzzleStarted && !bAutoStartWhenComplete)
+    if (bAllCoresInserted && !bPuzzleStarted && !bWaitingForUniaMode)
     {
         StartConnectedPuzzle();
     }
@@ -355,7 +358,7 @@ FString APuzzleStarter::GetInteractionText_Implementation()
 
     if (bAllCoresInserted)
     {
-        return bAutoStartWhenComplete ? TEXT("Starting...") : TEXT("Press F to Start");
+        return bWaitingForUniaMode ? TEXT("Press L to Preview") : TEXT("Starting...");
     }
 
     return FString::Printf(TEXT("Insert Cores (%d/%d)"), InsertedCount, CoreSlots.Num());
@@ -408,10 +411,8 @@ bool APuzzleStarter::TryInsertCoreByTag(FName CoreTag)
         OnAllCoresInserted.Broadcast();
         OnAllCoresInsertedBP();
 
-        if (bAutoStartWhenComplete)
-        {
-            StartConnectedPuzzle();
-        }
+        bWaitingForUniaMode = true;
+        OnReadyForUniaMode.Broadcast();
     }
 
     return true;

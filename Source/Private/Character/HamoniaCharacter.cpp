@@ -4,6 +4,7 @@
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Camera/CameraActor.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Interaction/InteractableInterface.h"
@@ -25,8 +26,8 @@ AHamoniaCharacter::AHamoniaCharacter()
 	PrimaryActorTick.bCanEverTick = true;
 
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
-
 	WarningMessageComponent = CreateDefaultSubobject<UWarningMessageComponent>(TEXT("WarningMessageComponent"));
+	DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
 
 	CameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	CameraComponent->SetupAttachment(GetCapsuleComponent());
@@ -37,92 +38,44 @@ AHamoniaCharacter::AHamoniaCharacter()
 	HeldObjectAttachPoint->SetupAttachment(CameraComponent);
 	HeldObjectAttachPoint->SetRelativeLocation(FVector(100.0f, 0.0f, -20.0f));
 
-	CurrentInteractableNPC = nullptr;
+	// HeldItemDisplay 생성 - 블루프린트에서 오버라이드 가능하도록
+	HeldItemDisplay = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeldItemDisplay"));
+	if (HeldItemDisplay)
+	{
+		HeldItemDisplay->SetupAttachment(CameraComponent);
+		HeldItemDisplay->SetRelativeLocation(FVector(50.0f, 20.0f, -10.0f));
+		HeldItemDisplay->SetRelativeRotation(FRotator::ZeroRotator);
+		HeldItemDisplay->SetRelativeScale3D(FVector(1.0f, 1.0f, 1.0f));
+		HeldItemDisplay->SetVisibility(false);
+		HeldItemDisplay->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		HeldItemDisplay->SetCastShadow(false);
+		HeldItemDisplay->bHiddenInGame = false; // 추가!
+	}
 
+	CurrentInteractableNPC = nullptr;
 	GetCapsuleComponent()->InitCapsuleSize(36.0f, 88.0f);
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
-
 	bIsLookingAtInteractable = false;
 	CurrentInteractableActor = nullptr;
-
-	HeldItemDisplay = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("HeldItemDisplay"));
-	HeldItemDisplay->SetupAttachment(CameraComponent);
-	HeldItemDisplay->SetRelativeLocation(FVector(50.0f, 20.0f, -10.0f));
-	HeldItemDisplay->SetVisibility(false);
-
 	CurrentDisplayedItem = nullptr;
-
-	DialogueManager = CreateDefaultSubobject<UDialogueManagerComponent>(TEXT("DialogueManager"));
-
 	bShowDebugLines = false;
-}
-
-APedestal* AHamoniaCharacter::FindPedestalFromActor(AActor* Actor)
-{
-	if (!Actor)
-	{
-		return nullptr;
-	}
-
-	APedestal* Pedestal = Cast<APedestal>(Actor);
-	if (Pedestal)
-	{
-		return Pedestal;
-	}
-
-	AActor* ParentActor = Actor->GetAttachParentActor();
-	while (ParentActor)
-	{
-		Pedestal = Cast<APedestal>(ParentActor);
-		if (Pedestal)
-		{
-			return Pedestal;
-		}
-		ParentActor = ParentActor->GetAttachParentActor();
-	}
-
-	return nullptr;
-}
-
-void AHamoniaCharacter::SaveBeforeLevelTransition()
-{
-	if (InventoryComponent)
-	{
-		InventoryComponent->SaveInventoryToGameInstance();
-	}
-
-	UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
-	if (GameInstance)
-	{
-		GameInstance->SaveContinueGame();
-	}
-}
-
-void AHamoniaCharacter::SetupEnhancedInput()
-{
-	APlayerController* PlayerController = Cast<APlayerController>(GetController());
-	if (PlayerController && DefaultMappingContext)
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-		else
-		{
-			FTimerHandle TimerHandle;
-			GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
-		}
-	}
-	else
-	{
-		FTimerHandle TimerHandle;
-		GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
-	}
 }
 
 void AHamoniaCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (!HeldItemDisplay)
+	{
+		UE_LOG(LogTemp, Error, TEXT("HeldItemDisplay is NULL in BeginPlay!"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("HeldItemDisplay is valid!"));
+		UE_LOG(LogTemp, Warning, TEXT("Name: %s"), *HeldItemDisplay->GetName());
+		UE_LOG(LogTemp, Warning, TEXT("Parent: %s"),
+			HeldItemDisplay->GetAttachParent() ? *HeldItemDisplay->GetAttachParent()->GetName() : TEXT("NONE"));
+	}
 
 	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
 	if (MovementComponent)
@@ -175,25 +128,153 @@ void AHamoniaCharacter::BeginPlay()
 	}
 }
 
-
-void AHamoniaCharacter::Tick(float DeltaTime)
+APedestal* AHamoniaCharacter::FindPedestalFromActor(AActor* Actor)
 {
-	Super::Tick(DeltaTime);
-
-	if (CurrentInteractableActor && !IsValid(CurrentInteractableActor))
+	if (!Actor)
 	{
-		bIsLookingAtInteractable = false;
-		CurrentInteractableActor = nullptr;
-		CurrentInteractionText.Empty();
+		return nullptr;
 	}
 
-	CheckForInteractables();
-
-	if (bShowDebugLines)
+	APedestal* Pedestal = Cast<APedestal>(Actor);
+	if (Pedestal)
 	{
-		DrawDebugInteractionLine();
+		return Pedestal;
+	}
+
+	AActor* ParentActor = Actor->GetAttachParentActor();
+	while (ParentActor)
+	{
+		Pedestal = Cast<APedestal>(ParentActor);
+		if (Pedestal)
+		{
+			return Pedestal;
+		}
+		ParentActor = ParentActor->GetAttachParentActor();
+	}
+
+	return nullptr;
+}
+
+void AHamoniaCharacter::SetPreviewCameraActor(ACameraActor* CameraActor)
+{
+	CachedPreviewCamera = CameraActor;
+}
+
+
+void AHamoniaCharacter::SaveBeforeLevelTransition()
+{
+	if (InventoryComponent)
+	{
+		InventoryComponent->SaveInventoryToGameInstance();
+	}
+
+	UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
+	if (GameInstance)
+	{
+		GameInstance->SaveContinueGame();
 	}
 }
+
+void AHamoniaCharacter::SetupEnhancedInput()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (PlayerController && DefaultMappingContext)
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+		}
+		else
+		{
+			FTimerHandle TimerHandle;
+			GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+		}
+	}
+	else
+	{
+		FTimerHandle TimerHandle;
+		GetWorldTimerManager().SetTimer(TimerHandle, this, &AHamoniaCharacter::SetupEnhancedInput, 0.1f, false);
+	}
+}
+
+
+
+void AHamoniaCharacter::ShowHeldItemMesh(UItem* Item)
+{
+	if (!Item || !HeldItemDisplay)
+	{
+		HideHeldItemMeshBP();
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("ShowHeldItemMesh: %s"), *Item->Name);
+	ShowHeldItemMeshBP(Item);
+}
+
+void AHamoniaCharacter::UpdateHeldItemDisplay(UItem* NewItem)
+{
+	CurrentDisplayedItem = NewItem;
+
+	if (!NewItem)
+	{
+		HideHeldItemMesh();
+		return;
+	}
+
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		ShowHeldItemMesh(NewItem);
+	}
+	else
+	{
+		HideHeldItemMesh();
+	}
+}
+
+void AHamoniaCharacter::HideHeldItemMesh()
+{
+	HideHeldItemMeshBP();
+}
+
+void AHamoniaCharacter::OnInventoryToggle()
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	InventoryComponent->ToggleInventory();
+
+	if (InventoryComponent->bIsInventoryOpen)
+	{
+		UItem* SelectedItem = InventoryComponent->GetSelectedItem();
+
+		if (SelectedItem)
+		{
+			UpdateHeldItemDisplay(SelectedItem);
+		}
+		else
+		{
+			HideHeldItemMesh();
+		}
+	}
+	else
+	{
+		HideHeldItemMesh();
+	}
+}
+
+void AHamoniaCharacter::OnInventorySelectionChanged(int32 NewSlotIndex)
+{
+	if (!InventoryComponent)
+	{
+		return;
+	}
+
+	UItem* NewSelectedItem = InventoryComponent->GetItemAtSlot(NewSlotIndex);
+	UpdateHeldItemDisplay(NewSelectedItem);
+}
+
 
 void AHamoniaCharacter::DrawDebugInteractionLine()
 {
@@ -222,33 +303,7 @@ void AHamoniaCharacter::DrawDebugInteractionLine()
 	}
 }
 
-void AHamoniaCharacter::Move(const FInputActionValue& Value)
-{
-	FVector2D MovementVector = Value.Get<FVector2D>();
 
-	if (Controller != nullptr)
-	{
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
-		AddMovementInput(ForwardDirection, MovementVector.Y);
-		AddMovementInput(RightDirection, MovementVector.X);
-	}
-}
-
-void AHamoniaCharacter::Look(const FInputActionValue& Value)
-{
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
-
-	if (Controller != nullptr)
-	{
-		AddControllerYawInput(LookAxisVector.X * LookSensitivity);
-		AddControllerPitchInput(LookAxisVector.Y * LookSensitivity);
-	}
-}
 
 void AHamoniaCharacter::StartSprint(const FInputActionValue& Value)
 {
@@ -285,6 +340,130 @@ void AHamoniaCharacter::ToggleCrouch(const FInputActionValue& Value)
 			Crouch();
 			MovementComponent->MaxWalkSpeed = CrouchSpeed;
 		}
+	}
+}
+
+
+void AHamoniaCharacter::RotateObject()
+{
+	if (bIsLookingAtInteractable && CurrentInteractableActor)
+	{
+		APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
+		if (Pedestal)
+		{
+			Pedestal->Rotate();
+		}
+	}
+}
+
+void AHamoniaCharacter::PushObject()
+{
+	if (bIsLookingAtInteractable && CurrentInteractableActor)
+	{
+		APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
+		if (Pedestal)
+		{
+			FVector Direction = CameraComponent->GetForwardVector();
+			Direction.Z = 0;
+			Direction.Normalize();
+			Pedestal->Push(Direction);
+		}
+	}
+}
+
+void AHamoniaCharacter::OnEKeyPressed()
+{
+	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
+	{
+		OnInventoryUse();
+	}
+	else
+	{
+		PushObject();
+	}
+}
+
+void AHamoniaCharacter::DropHeldObject()
+{
+	AActor* HeldObject = GetHeldObject();
+
+	if (!HeldObject)
+	{
+		return;
+	}
+
+	UPuzzleInteractionComponent* HeldItemComp = HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
+
+	if (HeldItemComp)
+	{
+		FVector DropLocation = HeldObjectAttachPoint->GetComponentLocation();
+		HeldItemComp->PutDown(DropLocation, GetActorRotation());
+	}
+}
+
+
+AActor* AHamoniaCharacter::GetHeldObject()
+{
+	TArray<AActor*> AllActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
+
+	for (AActor* Actor : AllActors)
+	{
+		UPuzzleInteractionComponent* InteractionComp =
+			Actor->FindComponentByClass<UPuzzleInteractionComponent>();
+
+		if (InteractionComp && InteractionComp->HoldingActor == this)
+		{
+			return Actor;
+		}
+	}
+
+	return nullptr;
+}
+
+#include "Character/HamoniaCharacter.h"
+#include "Gameplay/InventoryComponent.h"
+#include "Camera/CameraComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Interaction/InteractableInterface.h"
+#include "DrawDebugHelpers.h"
+#include "EngineUtils.h"
+#include "Kismet/GameplayStatics.h" 
+#include "Gameplay/PuzzleInteractionComponent.h" 
+#include "Gameplay/Pedestal.h"
+#include "Interaction/InteractableMechanism.h"
+#include "Save_Instance/Hamoina_GameInstance.h"
+#include "Core/LevelQuestManager.h"  
+#include "EngineUtils.h"
+#include "Gameplay/PickupActor.h"
+#include "TimerManager.h"
+#include "Core/EnhancedQuestComponent.h"
+#include "Gameplay/GridMazeManager.h"
+
+void AHamoniaCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (CurrentInteractableActor && !IsValid(CurrentInteractableActor))
+	{
+		bIsLookingAtInteractable = false;
+		CurrentInteractableActor = nullptr;
+		CurrentInteractionText.Empty();
+	}
+
+	CheckForInteractables();
+
+	if (bShowDebugLines)
+	{
+		DrawDebugInteractionLine();
+	}
+
+	if (bIsInUniaMode)
+	{
+		UpdateUniaModeCamera(DeltaTime);
 	}
 }
 
@@ -362,68 +541,50 @@ void AHamoniaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		{
 			EnhancedInputComponent->BindAction(InventoryUseAction, ETriggerEvent::Started, this, &AHamoniaCharacter::OnInventoryUse);
 		}
-	}
-}
 
-void AHamoniaCharacter::RotateObject()
-{
-	if (bIsLookingAtInteractable && CurrentInteractableActor)
-	{
-		APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
-		if (Pedestal)
+		if (UniaModeAction)
 		{
-			Pedestal->Rotate();
+			EnhancedInputComponent->BindAction(UniaModeAction, ETriggerEvent::Started, this, &AHamoniaCharacter::ToggleUniaMode);
 		}
 	}
 }
 
-void AHamoniaCharacter::PushObject()
+void AHamoniaCharacter::Move(const FInputActionValue& Value)
 {
-	if (bIsLookingAtInteractable && CurrentInteractableActor)
+	if (bIsInUniaMode) return;
+
+	FVector2D MovementVector = Value.Get<FVector2D>();
+
+	if (Controller != nullptr)
 	{
-		APedestal* Pedestal = FindPedestalFromActor(CurrentInteractableActor);
-		if (Pedestal)
-		{
-			FVector Direction = CameraComponent->GetForwardVector();
-			Direction.Z = 0;
-			Direction.Normalize();
-			Pedestal->Push(Direction);
-		}
+		const FRotator Rotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
+
+		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+
+		AddMovementInput(ForwardDirection, MovementVector.Y);
+		AddMovementInput(RightDirection, MovementVector.X);
 	}
 }
 
-void AHamoniaCharacter::OnEKeyPressed()
+void AHamoniaCharacter::Look(const FInputActionValue& Value)
 {
-	if (InventoryComponent && InventoryComponent->bIsInventoryOpen)
-	{
-		OnInventoryUse();
-	}
-	else
-	{
-		PushObject();
-	}
-}
+	if (bIsInUniaMode) return;
 
-void AHamoniaCharacter::DropHeldObject()
-{
-	AActor* HeldObject = GetHeldObject();
+	FVector2D LookAxisVector = Value.Get<FVector2D>();
 
-	if (!HeldObject)
+	if (Controller != nullptr)
 	{
-		return;
-	}
-
-	UPuzzleInteractionComponent* HeldItemComp = HeldObject->FindComponentByClass<UPuzzleInteractionComponent>();
-
-	if (HeldItemComp)
-	{
-		FVector DropLocation = HeldObjectAttachPoint->GetComponentLocation();
-		HeldItemComp->PutDown(DropLocation, GetActorRotation());
+		AddControllerYawInput(LookAxisVector.X * LookSensitivity);
+		AddControllerPitchInput(LookAxisVector.Y * LookSensitivity);
 	}
 }
 
 void AHamoniaCharacter::Interact()
 {
+	if (bIsInUniaMode) return;
+
 	if (DialogueManager)
 	{
 		if (DialogueManager->bIsInDialogue)
@@ -441,7 +602,6 @@ void AHamoniaCharacter::Interact()
 			{
 				FString DialogueIDToStart = Unia->GetDialogueIDToStart();
 
-				// GameInstance에서 가져온 DialogueID는 무조건 시작
 				UHamoina_GameInstance* GameInstance = Cast<UHamoina_GameInstance>(GetGameInstance());
 				bool bUsingSavedDialogue = false;
 
@@ -567,20 +727,213 @@ void AHamoniaCharacter::Interact()
 	}
 }
 
-AActor* AHamoniaCharacter::GetHeldObject()
+void AHamoniaCharacter::ToggleUniaMode()
 {
-	TArray<AActor*> AllActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), AllActors);
-
-	for (AActor* Actor : AllActors)
+	if (bIsInUniaMode)
 	{
-		UPuzzleInteractionComponent* InteractionComp =
-			Actor->FindComponentByClass<UPuzzleInteractionComponent>();
-
-		if (InteractionComp && InteractionComp->HoldingActor == this)
+		DeactivateUniaMode();
+	}
+	else
+	{
+		if (CanUseUniaMode())
 		{
-			return Actor;
+			ActivateUniaMode();
 		}
+	}
+}
+
+void AHamoniaCharacter::ActivateUniaMode()
+{
+	if (!CanUseUniaMode())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Cannot use Unia Mode!"));
+		return;
+	}
+
+	bIsInUniaMode = true;
+	bCanUseUniaMode = false;
+
+	OriginalCameraLocation = CameraComponent->GetComponentLocation();
+	OriginalCameraRotation = CameraComponent->GetComponentRotation();
+
+	UE_LOG(LogTemp, Warning, TEXT("=== ActivateUniaMode ==="));
+	UE_LOG(LogTemp, Warning, TEXT("Original Location: %s"), *OriginalCameraLocation.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("Original Rotation: %s"), *OriginalCameraRotation.ToString());
+
+	if (UniaModeTriggerActor)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UniaModeTriggerActor: %s"), *UniaModeTriggerActor->GetName());
+
+		if (CachedPreviewCamera)
+		{
+			TargetCameraLocation = CachedPreviewCamera->GetActorLocation();
+			TargetCameraRotation = CachedPreviewCamera->GetActorRotation();
+
+			UE_LOG(LogTemp, Warning, TEXT("Using Preview Camera: %s"), *CachedPreviewCamera->GetName());
+			UE_LOG(LogTemp, Warning, TEXT("Target Location: %s"), *TargetCameraLocation.ToString());
+			UE_LOG(LogTemp, Warning, TEXT("Target Rotation: %s"), *TargetCameraRotation.ToString());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("CachedPreviewCamera is NULL! Using Unia fallback."));
+
+			AUnia* Unia = FindUniaActor();
+			if (Unia)
+			{
+				FVector UniaLocation = Unia->GetActorLocation();
+				TargetCameraLocation = UniaLocation + FVector(0.0f, 0.0f, UniaModeRiseHeight);
+				TargetCameraRotation = (UniaLocation - TargetCameraLocation).Rotation();
+
+				UE_LOG(LogTemp, Warning, TEXT("Target Location (Unia): %s"), *TargetCameraLocation.ToString());
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("FindUniaActor failed!"));
+				return;
+			}
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Normal Unia Mode (no trigger)"));
+
+		AUnia* Unia = FindUniaActor();
+		if (!Unia)
+		{
+			UE_LOG(LogTemp, Error, TEXT("FindUniaActor failed!"));
+			return;
+		}
+
+		FVector UniaLocation = Unia->GetActorLocation();
+		TargetCameraLocation = UniaLocation + FVector(0.0f, 0.0f, UniaModeRiseHeight);
+		TargetCameraRotation = (UniaLocation - TargetCameraLocation).Rotation();
+	}
+
+	CameraTransitionProgress = 0.0f;
+
+
+	if (APlayerController* PC = Cast<APlayerController>(Controller))
+	{
+		PC->SetIgnoreLookInput(true);
+		PC->SetIgnoreMoveInput(true);
+
+
+		PC->SetControlRotation(TargetCameraRotation);
+	}
+
+	if (UniaModeTriggerActor)
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			PathPreviewDelayTimer,
+			this,
+			&AHamoniaCharacter::ShowPathPreviewAfterDelay,
+			3.0f,
+			false
+		);
+	}
+}
+
+void AHamoniaCharacter::ShowPathPreviewAfterDelay()
+{
+	TArray<AActor*> FoundManagers;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridMazeManager::StaticClass(), FoundManagers);
+
+	for (AActor* Actor : FoundManagers)
+	{
+		if (AGridMazeManager* Manager = Cast<AGridMazeManager>(Actor))
+		{
+			Manager->ShowPathPreviewSequence();
+
+			float PreviewDuration = Manager->GetPreviewDuration();
+
+			GetWorld()->GetTimerManager().SetTimer(
+				UniaModeAutoReturnTimer,
+				this,
+				&AHamoniaCharacter::DeactivateUniaMode,
+				PreviewDuration + 3.0f,
+				false
+			);
+		}
+	}
+}
+
+void AHamoniaCharacter::DeactivateUniaMode()
+{
+	if (!bIsInUniaMode) return;
+
+	bIsInUniaMode = false;
+	CameraTransitionProgress = 0.0f;
+
+	GetWorld()->GetTimerManager().ClearTimer(UniaModeAutoReturnTimer);
+	GetWorld()->GetTimerManager().ClearTimer(PathPreviewDelayTimer);
+
+	
+	CameraComponent->SetWorldLocation(OriginalCameraLocation);
+	CameraComponent->SetWorldRotation(OriginalCameraRotation);
+
+	if (APlayerController* PC = Cast<APlayerController>(Controller))
+	{
+		PC->SetIgnoreLookInput(false);
+		PC->SetIgnoreMoveInput(false);
+	}
+
+	if (UniaModeTriggerActor)
+	{
+		APuzzleStarter* PuzzleStarter = Cast<APuzzleStarter>(UniaModeTriggerActor);
+		if (PuzzleStarter)
+		{
+			PuzzleStarter->OnUniaModeCompleted();
+		}
+		UniaModeTriggerActor = nullptr;
+		CachedPreviewCamera = nullptr;  
+	}
+
+	GetWorld()->GetTimerManager().SetTimer(
+		UniaModeCooldownTimer,
+		this,
+		&AHamoniaCharacter::ResetUniaModeCooldown,
+		UniaModeCooldown,
+		false
+	);
+}
+
+void AHamoniaCharacter::SetUniaModeTriggerActor(AActor* TriggerActor)
+{
+	UniaModeTriggerActor = TriggerActor;
+}
+
+bool AHamoniaCharacter::CanUseUniaMode() const
+{
+	return bCanUseUniaMode && !bIsInUniaMode;
+}
+
+void AHamoniaCharacter::ResetUniaModeCooldown()
+{
+	bCanUseUniaMode = true;
+}
+
+void AHamoniaCharacter::UpdateUniaModeCamera(float DeltaTime)
+{
+	CameraTransitionProgress += DeltaTime * UniaModeTransitionSpeed;
+	CameraTransitionProgress = FMath::Clamp(CameraTransitionProgress, 0.0f, 1.0f);
+
+	float Alpha = FMath::InterpEaseInOut(0.0f, 1.0f, CameraTransitionProgress, 2.0f);
+
+	FVector CurrentLocation = FMath::Lerp(OriginalCameraLocation, TargetCameraLocation, Alpha);
+	FRotator CurrentRotation = FMath::Lerp(OriginalCameraRotation, TargetCameraRotation, Alpha);
+
+	CameraComponent->SetWorldLocation(CurrentLocation);
+	CameraComponent->SetWorldRotation(CurrentRotation);
+}
+
+AUnia* AHamoniaCharacter::FindUniaActor()
+{
+	TArray<AActor*> FoundActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AUnia::StaticClass(), FoundActors);
+
+	if (FoundActors.Num() > 0)
+	{
+		return Cast<AUnia>(FoundActors[0]);
 	}
 
 	return nullptr;
@@ -766,25 +1119,7 @@ UDialogueManagerComponent* AHamoniaCharacter::GetDialogueManager()
 	return DialogueManager;
 }
 
-void AHamoniaCharacter::OnInventoryToggle()
-{
-	if (!InventoryComponent)
-	{
-		return;
-	}
 
-	InventoryComponent->ToggleInventory();
-
-	if (InventoryComponent->bIsInventoryOpen)
-	{
-		UItem* SelectedItem = InventoryComponent->GetSelectedItem();
-		UpdateHeldItemDisplay(SelectedItem);
-	}
-	else
-	{
-		HideHeldItemMesh();
-	}
-}
 
 void AHamoniaCharacter::OnInventoryMoveLeft()
 {
@@ -876,47 +1211,6 @@ bool AHamoniaCharacter::HandleInventoryItemInteraction(UItem* Item, AActor* Targ
 	}
 
 	return false;
-}
-
-
-void AHamoniaCharacter::UpdateHeldItemDisplay(UItem* NewItem)
-{
-	CurrentDisplayedItem = NewItem;
-
-	if (NewItem && InventoryComponent && InventoryComponent->bIsInventoryOpen)
-	{
-		ShowHeldItemMesh(NewItem);
-	}
-	else
-	{
-		HideHeldItemMesh();
-	}
-}
-
-void AHamoniaCharacter::ShowHeldItemMesh(UItem* Item)
-{
-	if (Item && HeldItemDisplay)
-	{
-		ShowHeldItemMeshBP(Item);
-	}
-	else
-	{
-		HideHeldItemMeshBP();
-	}
-}
-
-void AHamoniaCharacter::HideHeldItemMesh()
-{
-	HideHeldItemMeshBP();
-}
-
-void AHamoniaCharacter::OnInventorySelectionChanged(int32 NewSlotIndex)
-{
-	if (InventoryComponent)
-	{
-		UItem* NewSelectedItem = InventoryComponent->GetItemAtSlot(NewSlotIndex);
-		UpdateHeldItemDisplay(NewSelectedItem);
-	}
 }
 
 bool AHamoniaCharacter::IsHoldingObject() const

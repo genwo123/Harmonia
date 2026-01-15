@@ -41,6 +41,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Warning Message")
     void HideMessage();
 
+    UFUNCTION(BlueprintImplementableEvent, Category = "Warning Message")
+    void ShowWarningMessageBP(EWarningMessageType MessageType);
+
 protected:
     FTimerHandle MessageTimerHandle;
 };

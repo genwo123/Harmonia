@@ -206,7 +206,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Inventory")
     bool HandleInventoryItemInteraction(UItem* Item, AActor* TargetActor);
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UStaticMeshComponent* HeldItemDisplay;
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Inventory")
@@ -248,6 +248,43 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "UI|Warning")
     void ShowWarningMessage(EWarningMessageType MessageType);
 
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+    UInputAction* UniaModeAction;
+
+    // 기존 public 함수들 아래에 추가
+    UFUNCTION(BlueprintCallable, Category = "Unia Mode")
+    void ToggleUniaMode();
+
+    UFUNCTION(BlueprintCallable, Category = "Unia Mode")
+    void ActivateUniaMode();
+
+
+    UFUNCTION(BlueprintCallable, Category = "Unia Mode")
+    void SetPreviewCameraActor(ACameraActor* CameraActor);
+
+
+    UPROPERTY(BlueprintReadOnly, Category = "Unia Mode")
+    ACameraActor* CachedPreviewCamera;
+
+    UFUNCTION(BlueprintCallable, Category = "Unia Mode")
+    void DeactivateUniaMode();
+
+    UFUNCTION(BlueprintPure, Category = "Unia Mode")
+    bool CanUseUniaMode() const;
+
+    // 기존 protected 변수들 아래에 추가 (Movement 섹션 근처)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unia Mode")
+    float UniaModeRiseHeight = 300.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unia Mode")
+    float UniaModeDuration = 5.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unia Mode")
+    float UniaModeCooldown = 10.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unia Mode")
+    float UniaModeTransitionSpeed = 2.0f;
+
 protected:
     virtual void BeginPlay() override;
 
@@ -266,4 +303,38 @@ private:
     APedestal* FindPedestalFromActor(AActor* Actor);
 
     void SetupEnhancedInput();
+
+    bool bIsInUniaMode = false;
+    bool bCanUseUniaMode = true;
+    FTimerHandle UniaModeCooldownTimer;
+    FTimerHandle UniaModeAutoReturnTimer;
+    FVector OriginalCameraLocation;
+    FRotator OriginalCameraRotation;
+    FVector TargetCameraLocation;
+    FRotator TargetCameraRotation;
+    float CameraTransitionProgress = 0.0f;
+
+    void ResetUniaModeCooldown();
+    void UpdateUniaModeCamera(float DeltaTime);
+    AUnia* FindUniaActor();
+
+
+public:
+    UFUNCTION(BlueprintCallable, Category = "Unia Mode")
+    void SetUniaModeTriggerActor(AActor* TriggerActor);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unia Mode")
+    ACameraActor* PreviewCameraActor;
+
+    UFUNCTION(BlueprintPure, Category = "Unia Mode")
+    bool HasUniaModeTriggerActor() const { return UniaModeTriggerActor != nullptr; }
+
+protected:
+    UPROPERTY(BlueprintReadOnly, Category = "Unia Mode")
+    AActor* UniaModeTriggerActor;
+
+private:
+    FTimerHandle PathPreviewDelayTimer;
+
+    void ShowPathPreviewAfterDelay();
 };

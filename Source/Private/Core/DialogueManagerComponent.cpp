@@ -19,49 +19,70 @@ UDialogueManagerComponent::UDialogueManagerComponent()
 void UDialogueManagerComponent::BeginPlay()
 {
     Super::BeginPlay();
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] BeginPlay called"));
+
     CachedQuestManager = FindLevelQuestManager();
     bIsInDialogue = false;
     bIsLevelEnd = false;
     bIsRandomDialogue = false;
     bIsChainBreaking = false;
     CurrentDialogueID = "";
+
+    InitializeDialogueWidget();  // 이거 추가되어 있나요?
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] BeginPlay completed"));
 }
 
 void UDialogueManagerComponent::InitializeDialogueWidget()
 {
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] InitializeDialogueWidget called"));
+
     if (!DialogueWidgetClass)
     {
+        UE_LOG(LogTemp, Error, TEXT("[DialogueManager] DialogueWidgetClass is NULL!"));
         return;
     }
 
     UWorld* World = GetWorld();
     if (!World)
     {
+        UE_LOG(LogTemp, Error, TEXT("[DialogueManager] World is NULL!"));
         return;
     }
 
     APlayerController* PC = World->GetFirstPlayerController();
     if (!PC)
     {
+        UE_LOG(LogTemp, Error, TEXT("[DialogueManager] PlayerController is NULL!"));
         return;
     }
 
     DialogueWidget = CreateWidget<UUserWidget>(PC, DialogueWidgetClass);
     if (DialogueWidget)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Widget created successfully"));
         DialogueWidget->AddToViewport(10);
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Widget added to viewport"));
         DialogueWidget->SetVisibility(ESlateVisibility::Hidden);
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Widget visibility set to Hidden"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("[DialogueManager] Failed to create widget!"));
     }
 }
 
 void UDialogueManagerComponent::ShowDialogueWidget()
 {
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] ShowDialogueWidget called"));
+
     if (!DialogueWidget)
     {
+        UE_LOG(LogTemp, Error, TEXT("[DialogueManager] DialogueWidget is NULL in ShowDialogueWidget!"));
         return;
     }
 
     DialogueWidget->SetVisibility(ESlateVisibility::Visible);
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Widget visibility set to Visible"));
 }
 
 void UDialogueManagerComponent::HideDialogueWidget()
@@ -171,65 +192,6 @@ bool UDialogueManagerComponent::CanStartDialogue(const FString& DialogueID)
     return CheckAllConditions(*DialogueData);
 }
 
-
-
-void UDialogueManagerComponent::ProgressDialogue()
-{
-    if (bIsProgressingDialogue)
-    {
-        return;
-    }
-
-    if (!bIsInDialogue)
-    {
-        bIsProgressingDialogue = false;
-        return;
-    }
-
-    if (bIsChainBreaking)
-    {
-        EndDialogue();
-        bIsChainBreaking = false;
-        OnDialogueChainBreak.Broadcast();
-        return;
-    }
-
-    bIsProgressingDialogue = true;
-
-    FString NextID = CurrentDialogue.NextDialogueID;
-    if (NextID.IsEmpty())
-    {
-        EndDialogue();
-        bIsProgressingDialogue = false;
-        return;
-    }
-
-    FDialogueData* NextDialogueData = GetDialogueData(NextID);
-    if (!NextDialogueData)
-    {
-        EndDialogue();
-        bIsProgressingDialogue = false;
-        return;
-    }
-
-    if (NextDialogueData->bChainBreak)
-    {
-        HandleChainBreak(NextID, *NextDialogueData);
-        bIsProgressingDialogue = false;
-        return;
-    }
-
-    if (NextDialogueData->bIsLocked && !ValidateSubStepRequirement(*NextDialogueData))
-    {
-        HandleLockedDialogue(NextID, *NextDialogueData);
-        bIsProgressingDialogue = false;
-        return;
-    }
-
-    EndDialogue();
-    StartDialogue(NextID);
-    bIsProgressingDialogue = false;
-}
 
 void UDialogueManagerComponent::HandleChainBreak(const FString& DialogueID, const FDialogueData& DialogueData)
 {
@@ -502,6 +464,64 @@ void UDialogueManagerComponent::ProcessDialogue(const FDialogueData& DialogueDat
         DialogueData.DisplayDuration,
         bIsLastDialogue
     );
+}
+
+void UDialogueManagerComponent::ProgressDialogue()
+{
+    if (bIsProgressingDialogue)
+    {
+        return;
+    }
+
+    if (!bIsInDialogue)
+    {
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    if (bIsChainBreaking)
+    {
+        EndDialogue();
+        bIsChainBreaking = false;
+        OnDialogueChainBreak.Broadcast();
+        return;
+    }
+
+    bIsProgressingDialogue = true;
+
+    FString NextID = CurrentDialogue.NextDialogueID;
+    if (NextID.IsEmpty())
+    {
+        EndDialogue();
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    FDialogueData* NextDialogueData = GetDialogueData(NextID);
+    if (!NextDialogueData)
+    {
+        EndDialogue();
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    if (NextDialogueData->bChainBreak)
+    {
+        HandleChainBreak(NextID, *NextDialogueData);
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    if (NextDialogueData->bIsLocked && !ValidateSubStepRequirement(*NextDialogueData))
+    {
+        HandleLockedDialogue(NextID, *NextDialogueData);
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    EndDialogue();
+    StartDialogue(NextID);
+    bIsProgressingDialogue = false;
 }
 
 ALevelQuestManager* UDialogueManagerComponent::FindLevelQuestManager()

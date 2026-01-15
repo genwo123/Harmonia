@@ -7,6 +7,7 @@
 #include "Components/SphereComponent.h"
 #include "Interaction/InteractableInterface.h"
 #include "Sound/SoundBase.h"
+#include "Camera/CameraActor.h"
 #include "PuzzleStarter.generated.h"
 
 class AGridMazeManager;
@@ -49,6 +50,7 @@ struct FCoreSlot
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCoreInserted, FName, CoreTag);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAllCoresInserted);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWrongCoreInserted, FName, WrongCoreTag);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnReadyForUniaMode);
 
 UCLASS(Blueprintable, BlueprintType)
 class DISTRICT_TEST_API APuzzleStarter : public AActor, public IInteractableInterface
@@ -81,20 +83,14 @@ protected:
     USphereComponent* InteractionSphere;
 
 public:
-    // ============ 연결 설정 ============
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Connection")
     AGridMazeManager* ConnectedMazeManager;
 
-    // ============ 코어 슬롯 설정 ============
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview Camera")
+    ACameraActor* PreviewCameraActor;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Core Slots")
     TArray<FCoreSlot> CoreSlots;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Core Slots")
-    bool bAutoStartWhenComplete = true;
-
-    // ============ 비주얼 설정 ============
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
     FLinearColor EmptySlotColor = FLinearColor(0.3f, 0.3f, 0.3f, 1.0f);
@@ -104,8 +100,6 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
     float SlotSize = 50.0f;
-
-    // ============ 사운드 설정 ============
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
     USoundBase* CoreInsertSound;
@@ -119,18 +113,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
     float SoundVolume = 1.0f;
 
-    // ============ 상태 ============
-
     UPROPERTY(BlueprintReadOnly, Category = "State")
     bool bAllCoresInserted = false;
 
     UPROPERTY(BlueprintReadOnly, Category = "State")
     bool bPuzzleStarted = false;
 
+    UPROPERTY(BlueprintReadOnly, Category = "State")
+    bool bWaitingForUniaMode = false;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Visual")
     UStaticMesh* SlotMeshAsset;
-
-    // ============ 델리게이트 ============
 
     UPROPERTY(BlueprintAssignable, Category = "Events")
     FOnCoreInserted OnCoreInserted;
@@ -141,38 +134,34 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Events")
     FOnWrongCoreInserted OnWrongCoreInserted;
 
-    // ============ 주요 함수 ============
+    UPROPERTY(BlueprintAssignable, Category = "Events")
+    FOnReadyForUniaMode OnReadyForUniaMode;
 
-    // 코어 삽입 시도 (BP에서 호출)
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     bool TryInsertCore(AActor* CoreActor);
 
-    // 모든 슬롯이 채워졌는지 확인
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Puzzle")
     bool AreAllSlotsFilled() const;
 
-    // 특정 슬롯이 비어있는지 확인
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Puzzle")
     bool IsSlotEmpty(int32 SlotIndex) const;
 
-    // 퍼즐 시작
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     void StartConnectedPuzzle();
 
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     bool TryInsertCoreByTag(FName CoreTag);
 
-    // 슬롯 리셋
     UFUNCTION(BlueprintCallable, Category = "Puzzle")
     void ResetAllSlots();
 
-    // InteractableInterface 구현
+    UFUNCTION(BlueprintCallable, Category = "Puzzle")
+    void OnUniaModeCompleted();
+
     virtual void Interact_Implementation(AActor* Interactor) override;
     virtual bool CanInteract_Implementation(AActor* Interactor) override;
     virtual FString GetInteractionText_Implementation() override;
     virtual EInteractionType GetInteractionType_Implementation() override;
-
-    // ============ BP 이벤트 ============
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Events")
     void OnCoreInsertedBP(FName CoreTag, int32 SlotIndex);

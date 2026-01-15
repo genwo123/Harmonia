@@ -12,6 +12,7 @@
 class UDialogueManagerComponent;
 class AUniaWaitSpot;
 class UHamoina_GameInstance;
+class ALevelQuestManager;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUniaDialogueActivated, FString, DialogueID, UDataTable*, DataTable);
 
@@ -27,7 +28,6 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
@@ -45,7 +45,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
 	FString DialogueSceneID = TEXT("Level_Main_0_001");
-
 
 	UFUNCTION(BlueprintCallable, Category = "Dialogue")
 	FString GetDialogueIDToStart();
@@ -138,6 +137,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Interaction")
 	bool IsPlayerInRange() const { return bPlayerInRange; }
 
+	UFUNCTION()
+	void OnQuestStepCompleted(int32 StepIndex, FString DialogueID, FString WaitSpotID);
+
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Interaction")
 	USphereComponent* InteractionSphere;
@@ -159,8 +161,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
 	UDataTable* UniaRandomDialogueTable;
-
-	
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue")
 	FString UniaRandomDialogueID = TEXT("Unia_Random_001");
@@ -206,8 +206,11 @@ protected:
 
 private:
 	AUniaWaitSpot* FindWaitSpot(const FString& SpotID);
-	
+	ALevelQuestManager* FindQuestManager();
+
 	FString CurrentTargetSpotID;
+	FString PendingWaitSpotID;
 	FTimerHandle SpotCheckTimer;
 	FString CurrentLevelName;
+	ALevelQuestManager* CachedQuestManager;
 };

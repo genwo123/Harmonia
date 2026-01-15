@@ -1,4 +1,3 @@
-// GridMazeManager.h
 #pragma once
 
 #include "CoreMinimal.h"
@@ -20,6 +19,17 @@ enum class EPuzzleState : uint8
     Playing     UMETA(DisplayName = "Playing"),
     Success     UMETA(DisplayName = "Success"),
     Failed      UMETA(DisplayName = "Failed")
+};
+
+USTRUCT(BlueprintType)
+struct FPathData
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    TArray<FIntPoint> PathPoints;
+
+    FPathData() {}
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPuzzleStateChanged, EPuzzleState, NewState);
@@ -49,27 +59,26 @@ protected:
 #endif
 
 public:
-    // ============ 그리드 설정 ============
+    UFUNCTION(BlueprintPure, Category = "Preview")
+    float GetPreviewDuration() const;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings|Size")
-    int32 GridRows = 4;
+    int32 GridRows = 7;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings|Size")
-    int32 GridColumns = 4;
+    int32 GridColumns = 5;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings|Tile")
     TSubclassOf<AGridTile> TileClass;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings|Tile")
-    float TileSize = 300.0f;
+    float TileSize = 100.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings|Tile")
-    float TileThickness = 20.0f;
+    float TileThickness = 10.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid Settings|Tile")
-    float TileSpacing = 50.0f;
-
-    // ============ 퍼즐 설정 ============
+    float TileSpacing = 0.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings|Time")
     float PuzzleTimeLimit = 60.0f;
@@ -81,10 +90,10 @@ public:
     float PreviewDuration = 10.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings|Preview")
-    float TileLightDelay = 0.5f;  // 각 타일이 켜지는 간격
+    float TileLightDelay = 0.5f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings|Correct Display")
-    float CorrectDisplayDuration = 1.0f;  // 초록색 표시 시간
+    float CorrectDisplayDuration = 1.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings|Fail")
     bool bAutoResetOnFail = false;
@@ -97,8 +106,6 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Puzzle Settings|Progress")
     bool bKeepProgressOnFail = true;
-
-    // ============ 시작 위치 설정 ============
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Starting Floor")
     bool bUseStartingFloor = true;
@@ -115,7 +122,11 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Starting Floor")
     UStaticMeshComponent* StartingFloorMesh;
 
-    // ============ 경로 설정 ============
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Path Settings|Random")
+    bool bUseRandomPath = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Path Settings|Random")
+    TArray<FPathData> PredefinedPaths;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Path Settings", meta = (TitleProperty = "ToString"))
     TArray<FIntPoint> CorrectPath;
@@ -124,9 +135,7 @@ public:
     FIntPoint StartPosition = FIntPoint(0, 0);
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Path Settings")
-    FIntPoint GoalPosition = FIntPoint(3, 3);
-
-    // ============ 색상 설정 (타일에 적용) ============
+    FIntPoint GoalPosition = FIntPoint(6, 4);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Color Settings")
     FLinearColor InactiveColor = FLinearColor(0.1f, 0.1f, 0.1f, 1.0f);
@@ -146,8 +155,6 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Color Settings")
     FLinearColor WrongColor = FLinearColor(1.0f, 0.2f, 0.2f, 1.0f);
 
-    // ============ 사운드 설정 ============
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound Settings")
     USoundBase* CorrectStepSound;
 
@@ -163,23 +170,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound Settings")
     float SoundVolume = 1.0f;
 
-    // ============ 디스플레이 연결 ============
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display Connection")
     AMazeDisplay* ConnectedDisplay;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Display Connection")
     bool bAutoFindDisplay = true;
 
-    // ============ 에디터 프리뷰 ============
-
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Editor Preview")
     bool bShowPreviewInEditor = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Editor Preview")
     bool bShowPathInPreview = true;
-
-    // ============ 현재 상태 ============
 
     UPROPERTY(BlueprintReadOnly, Category = "Current State")
     EPuzzleState CurrentState = EPuzzleState::Ready;
@@ -203,8 +204,6 @@ public:
     TArray<FIntPoint> FailedSteps;
 
 public:
-    // ============ 이벤트 델리게이트 ============
-
     UPROPERTY(BlueprintAssignable, Category = "Events")
     FOnPuzzleStateChanged OnPuzzleStateChanged;
 
@@ -223,203 +222,140 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Events")
     FOnPuzzleFailed OnPuzzleFailed_Event;
 
-    // ============ 퍼즐 제어 함수 ============
-
-    // 퍼즐 시작
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void StartPuzzle();
 
-    // 카운트다운과 함께 시작
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void StartPuzzleWithCountdown();
 
-    // 퍼즐 리셋
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void ResetPuzzle();
 
-    // 완전 리셋 (진행도 포함)
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void CompleteReset();
 
-    // 퍼즐 성공 처리
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void CompletePuzzle();
 
-    // 퍼즐 실패 처리
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void FailPuzzle();
 
-    // 퍼즐 일시정지
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void PausePuzzle();
 
-    // 퍼즐 재개
     UFUNCTION(BlueprintCallable, Category = "Puzzle Control")
     void ResumePuzzle();
 
-    // ============ 타일 관리 ============
-
-    // 타일 스텝 이벤트 처리
     UFUNCTION(BlueprintCallable, Category = "Tile Management")
     void OnTileStep(AGridTile* SteppedTile, AActor* Player);
 
-    // 특정 위치의 타일 가져오기
     UFUNCTION(BlueprintCallable, Category = "Tile Management")
     AGridTile* GetTileAt(int32 X, int32 Y);
 
-    // 그리드 생성
     UFUNCTION(BlueprintCallable, Category = "Tile Management")
     void CreateGrid();
 
-    // 그리드 제거
     UFUNCTION(BlueprintCallable, Category = "Tile Management")
     void ClearGrid();
 
-    // 모든 타일 비활성화
     UFUNCTION(BlueprintCallable, Category = "Tile Management")
     void SetAllTilesInactive();
 
-    // 모든 타일 준비 상태로
     UFUNCTION(BlueprintCallable, Category = "Tile Management")
     void SetAllTilesReady();
 
-    // ============ 미리보기 제어 ============
-
-    // 경로 미리보기 시작
     UFUNCTION(BlueprintCallable, Category = "Preview")
     void ShowPathPreviewSequence();
 
-    // 미리보기 중지
     UFUNCTION(BlueprintCallable, Category = "Preview")
     void StopPreview();
 
-    // ============ 시작 위치 제어 ============
-
-    // 시작 바닥 생성
     UFUNCTION(BlueprintCallable, Category = "Starting Floor")
     void CreateStartingFloor();
 
-    // 시작 바닥 색상 변경
     UFUNCTION(BlueprintCallable, Category = "Starting Floor")
     void SetStartingFloorColor(FLinearColor NewColor);
 
-    // 시작 위치 가져오기
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Starting Floor")
     FVector GetStartingFloorLocation() const;
 
-    // 플레이어를 시작 위치로 이동
     UFUNCTION(BlueprintCallable, Category = "Starting Floor")
     void RespawnPlayerToStart(AActor* Player);
 
-    // ============ 진행도 추적 ============
-
-    // 완료된 스텝 표시
     UFUNCTION(BlueprintCallable, Category = "Progress Tracking")
     void MarkStepAsCompleted(const FIntPoint& Position);
 
-    // 실패한 스텝 표시
     UFUNCTION(BlueprintCallable, Category = "Progress Tracking")
     void MarkStepAsFailed(const FIntPoint& Position);
 
-    // 스텝 완료 여부 확인
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Progress Tracking")
     bool IsStepCompleted(const FIntPoint& Position) const;
 
-    // 스텝 실패 여부 확인
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Progress Tracking")
     bool IsStepFailed(const FIntPoint& Position) const;
 
-    // 진행도 기록 초기화
     UFUNCTION(BlueprintCallable, Category = "Progress Tracking")
     void ClearProgressHistory();
 
-    // 진행도 색상 복원
     UFUNCTION(BlueprintCallable, Category = "Progress Tracking")
     void RestoreProgressColors();
 
-    // ============ 경로 검증 ============
-
-    // 정답 경로 검증
     UFUNCTION(BlueprintCallable, Category = "Path Validation")
     bool ValidateCorrectPath();
 
-    // ============ 설정 변경 ============
-
-    // 그리드 크기 설정
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetGridSize(int32 NewRows, int32 NewColumns);
 
-    // 제한 시간 설정
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetTimeLimit(float NewTimeLimit);
 
-    // 정답 경로 설정
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetCorrectPath(const TArray<FIntPoint>& NewPath);
 
-    // 실패 후 리셋 지연 설정
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetFailResetDelay(float NewDelay);
 
-    // 타일 두께 설정
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetTileThickness(float NewThickness);
 
-    // 색상 일괄 설정
     UFUNCTION(BlueprintCallable, Category = "Settings")
     void SetPuzzleColors(FLinearColor Inactive, FLinearColor Ready, FLinearColor Correct, FLinearColor Wrong);
 
-    // ============ 정보 조회 ============
-
-    // 현재 상태 가져오기
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     EPuzzleState GetCurrentState() const { return CurrentState; }
 
-    // 남은 시간 가져오기
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     float GetTimeRemaining() const { return TimeRemaining; }
 
-    // 현재 진행 스텝 가져오기
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     int32 GetCurrentPathIndex() const { return CurrentPathIndex; }
 
-    // 퍼즐 진행 중인지 확인
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     bool IsGameActive() const { return CurrentState == EPuzzleState::Playing; }
 
-    // 진행도 비율 가져오기 (0.0 ~ 1.0)
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     float GetProgress() const;
 
-    // 진행도 텍스트 가져오기 "(3/10)" 형식
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     FString GetProgressText() const;
 
-    // 경로 길이 가져오기
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     int32 GetPathLength() const { return CorrectPath.Num(); }
 
-    // 특정 인덱스의 경로 스텝 가져오기
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     FIntPoint GetPathStepAt(int32 Index) const;
 
-    // 퍼즐 완료 여부
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     bool IsPuzzleCompleted() const { return CurrentState == EPuzzleState::Success; }
 
-    // 퍼즐 실패 여부
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Information")
     bool IsPuzzleFailed() const { return CurrentState == EPuzzleState::Failed; }
-
-    // ============ 에디터 도구 ============
 
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "Editor Tools")
     void EditorCreateGrid();
 
     UFUNCTION(BlueprintCallable, CallInEditor, Category = "Editor Tools")
     void EditorClearGrid();
-
-    // ============ BP 이벤트들 ============
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Blueprint Events")
     void OnPuzzleStarted();
@@ -444,8 +380,6 @@ public:
 
     UFUNCTION(BlueprintImplementableEvent, Category = "Blueprint Events")
     void OnPreviewFinished();
-
-    // ============ BP 커스터마이즈 가능 함수들 ============
 
     UFUNCTION(BlueprintNativeEvent, Category = "Custom Logic")
     bool ShouldStartPuzzle(AGridTile* FirstTile);
@@ -479,11 +413,12 @@ private:
     void ApplyTileColors();
     void DestroyAllTiles();
     void ResetToStartPosition();
+    void SelectRandomPath();
 
     FTimerHandle WrongTileTimer;
-
     bool bGamePaused = false;
     FTimerHandle ResetTimer;
     FTimerHandle PreviewTimerHandle;
     FTimerHandle CorrectDisplayTimer;
+    int32 SelectedPathIndex = -1;
 };

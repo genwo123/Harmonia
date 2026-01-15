@@ -1,3 +1,4 @@
+// Core/LevelQuestManager.cpp
 #include "Core/LevelQuestManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Save_Instance/Hamoina_GameInstance.h"
@@ -67,12 +68,11 @@ void ALevelQuestManager::StartLevel(const FString& LevelID)
 {
     if (!LevelDataTable) return;
 
-    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*LevelID, "");
+    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*LevelID, TEXT(""));
     if (!LevelData) return;
 
     if (CurrentLevel == LevelID && SubStepCompletionStatus.Num() > 0)
     {
-
         OnQuestUpdated.Broadcast(CurrentLevel);
         return;
     }
@@ -105,7 +105,7 @@ bool ALevelQuestManager::CanStartLevel(const FString& LevelID)
 {
     if (!LevelDataTable) return false;
 
-    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*LevelID, "");
+    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*LevelID, TEXT(""));
     if (!LevelData) return false;
 
     if (LevelData->PrerequisiteLevel.IsEmpty()) return true;
@@ -115,18 +115,18 @@ bool ALevelQuestManager::CanStartLevel(const FString& LevelID)
 
 FString ALevelQuestManager::GetCurrentLevelDialogue()
 {
-    if (!LevelDataTable || CurrentLevel.IsEmpty()) return "";
+    if (!LevelDataTable || CurrentLevel.IsEmpty()) return TEXT("");
 
-    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
-    return LevelData ? LevelData->LumiDialogueID : "";
+    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, TEXT(""));
+    return LevelData ? LevelData->LumiDialogueID : TEXT("");
 }
 
 FString ALevelQuestManager::GetCurrentLevelName()
 {
-    if (!LevelDataTable || CurrentLevel.IsEmpty()) return "";
+    if (!LevelDataTable || CurrentLevel.IsEmpty()) return TEXT("");
 
-    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
-    return LevelData ? LevelData->LevelName : "";
+    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, TEXT(""));
+    return LevelData ? LevelData->LevelName : TEXT("");
 }
 
 bool ALevelQuestManager::IsCurrentLevelCompleted()
@@ -138,34 +138,60 @@ bool ALevelQuestManager::HasSubSteps()
 {
     if (!LevelDataTable || CurrentLevel.IsEmpty()) return false;
 
-    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
+    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, TEXT(""));
     return LevelData && LevelData->SubSteps.Num() > 0;
 }
 
 void ALevelQuestManager::CompleteSubStep(int32 StepIndex)
 {
-    if (!SubStepCompletionStatus.IsValidIndex(StepIndex)) return;
+    if (!SubStepCompletionStatus.IsValidIndex(StepIndex))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[LevelQuestManager] Invalid StepIndex: %d"), StepIndex);
+        return;
+    }
+
+    if (SubStepCompletionStatus[StepIndex])
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[LevelQuestManager] SubStep %d already completed"), StepIndex);
+        return;
+    }
 
     SubStepCompletionStatus[StepIndex] = true;
+    UE_LOG(LogTemp, Log, TEXT("[LevelQuestManager] SubStep %d completed!"), StepIndex);
+
+    FString DialogueID = GetDialogueIDForSubStep(StepIndex);
+    FString WaitSpotID = GetWaitSpotIDForSubStep(StepIndex);
+
+    if (!DialogueID.IsEmpty())
+    {
+        UE_LOG(LogTemp, Log, TEXT("[LevelQuestManager] Triggering Dialogue: %s"), *DialogueID);
+    }
+    if (!WaitSpotID.IsEmpty())
+    {
+        UE_LOG(LogTemp, Log, TEXT("[LevelQuestManager] Unia will move to: %s"), *WaitSpotID);
+    }
+
+    OnSubStepCompleted.Broadcast(StepIndex, DialogueID, WaitSpotID);
 
     bool bAllCompleted = true;
-    for (bool bCompleted : SubStepCompletionStatus)
+    for (int32 i = 0; i < SubStepCompletionStatus.Num(); i++)
     {
-        if (!bCompleted)
+        if (!SubStepCompletionStatus[i])
         {
             bAllCompleted = false;
+            UE_LOG(LogTemp, Log, TEXT("[LevelQuestManager] SubStep %d still incomplete"), i);
             break;
         }
     }
 
     if (bAllCompleted)
     {
+        UE_LOG(LogTemp, Log, TEXT("[LevelQuestManager] All SubSteps completed! Level Clear!"));
         CompleteCurrentLevel();
     }
 
     SaveQuestProgress();
 }
-
 bool ALevelQuestManager::IsSubStepCompleted(int32 StepIndex)
 {
     if (SubStepCompletionStatus.IsValidIndex(StepIndex))
@@ -184,7 +210,7 @@ int32 ALevelQuestManager::GetSubStepCount()
 {
     if (!LevelDataTable || CurrentLevel.IsEmpty()) return 0;
 
-    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
+    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, TEXT(""));
     return LevelData ? LevelData->SubSteps.Num() : 0;
 }
 
@@ -192,16 +218,16 @@ TArray<FString> ALevelQuestManager::GetAllSubStepTexts()
 {
     if (!LevelDataTable || CurrentLevel.IsEmpty()) return {};
 
-    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
+    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, TEXT(""));
     return LevelData ? LevelData->SubSteps : TArray<FString>();
 }
 
 FString ALevelQuestManager::GetCurrentMainObjective()
 {
-    if (!LevelDataTable || CurrentLevel.IsEmpty()) return "";
+    if (!LevelDataTable || CurrentLevel.IsEmpty()) return TEXT("");
 
-    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, "");
-    return LevelData ? LevelData->MainObjective : "";
+    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, TEXT(""));
+    return LevelData ? LevelData->MainObjective : TEXT("");
 }
 
 int32 ALevelQuestManager::GetCurrentSubStep()
@@ -215,6 +241,60 @@ int32 ALevelQuestManager::GetCurrentSubStep()
     }
 
     return FMath::Max(0, SubStepCompletionStatus.Num() - 1);
+}
+
+FString ALevelQuestManager::GetDialogueIDForSubStep(int32 StepIndex)
+{
+    if (!LevelDataTable || CurrentLevel.IsEmpty())
+    {
+        return TEXT("");
+    }
+
+    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, TEXT(""));
+    if (!LevelData)
+    {
+        return TEXT("");
+    }
+
+    if (LevelData->SubStepDialogueIDs.IsValidIndex(StepIndex))
+    {
+        return LevelData->SubStepDialogueIDs[StepIndex];
+    }
+
+    return TEXT("");
+}
+
+FString ALevelQuestManager::GetWaitSpotIDForSubStep(int32 StepIndex)
+{
+    if (!LevelDataTable || CurrentLevel.IsEmpty())
+    {
+        return TEXT("");
+    }
+
+    FLevelInfo* LevelData = LevelDataTable->FindRow<FLevelInfo>(*CurrentLevel, TEXT(""));
+    if (!LevelData)
+    {
+        return TEXT("");
+    }
+
+    if (LevelData->SubStepWaitSpotIDs.IsValidIndex(StepIndex))
+    {
+        return LevelData->SubStepWaitSpotIDs[StepIndex];
+    }
+
+    return TEXT("");
+}
+
+FString ALevelQuestManager::GetCurrentUnlockedDialogueID()
+{
+    int32 CurrentStep = GetCurrentSubStep();
+
+    if (CurrentStep < 0)
+    {
+        return TEXT("");
+    }
+
+    return GetDialogueIDForSubStep(CurrentStep);
 }
 
 void ALevelQuestManager::SaveQuestProgress()
