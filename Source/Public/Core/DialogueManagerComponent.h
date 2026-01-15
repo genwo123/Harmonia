@@ -253,6 +253,8 @@ protected:
 
 private:
     FDialogueData CurrentDialogue;
+
+    bool bUserCanProgress = false;
     UPROPERTY()
     class ALevelQuestManager* CachedQuestManager;
     void HandleChainBreak(const FString& DialogueID, const FDialogueData& DialogueData);

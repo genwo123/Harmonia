@@ -266,20 +266,6 @@ bool UPuzzleInteractionComponent::PutDown(FVector Location, FRotator Rotation)
         PrimComp->WakeAllRigidBodies();
     }
 
-    USoundBase* SoundToPlay = nullptr;
-    if (SoundType == EPuzzleObjectSoundType::Type1)
-    {
-        SoundToPlay = DropSound_Type1;
-    }
-    else if (SoundType == EPuzzleObjectSoundType::Type2)
-    {
-        SoundToPlay = DropSound_Type2;
-    }
-
-    if (SoundToPlay)
-    {
-        UGameplayStatics::PlaySoundAtLocation(this, SoundToPlay, WorldLocation);
-    }
 
     HoldingActor = nullptr;
     return true;

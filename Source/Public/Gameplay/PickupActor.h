@@ -17,13 +17,12 @@ public:
 protected:
     virtual void BeginPlay() override;
     void UpdateWidgetPosition();
+
 public:
     virtual void Tick(float DeltaTime) override;
 
-
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
     class UStaticMeshComponent* MeshComponent;
-
 
     UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Components")
     class USphereComponent* InteractionSphere;
@@ -60,10 +59,13 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category = "Pickup")
     void OnPickedUp(AActor* Interactor);
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup")
+    // 픽업 사운드
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup|Sound")
     class USoundBase* PickupSound;
-    
 
+    // 드랍 사운드 추가
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup|Sound")
+    class USoundBase* DropSound;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     class UWidgetComponent* InteractionWidgetComponent;
@@ -75,8 +77,6 @@ public:
     UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Interaction")
     void HideInteractionWidget();
     virtual void HideInteractionWidget_Implementation() override;
-
-
 
     // 메시 회전 설정
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance", meta = (ExposeOnSpawn = true))
@@ -94,12 +94,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Pickup")
     void OnPickupSuccess(AActor* Interactor);
 
+    // 드랍 관련 함수 추가
+    UFUNCTION(BlueprintCallable, Category = "Pickup")
+    void OnDropped(const FVector& DropLocation);
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
     bool bDrawDebug = true;
-
-
-
-
 
 #if WITH_EDITOR
     virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;

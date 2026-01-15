@@ -27,8 +27,9 @@ void UDialogueManagerComponent::BeginPlay()
     bIsRandomDialogue = false;
     bIsChainBreaking = false;
     CurrentDialogueID = "";
+    bUserCanProgress = false;  // 초기에는 진행 불가
 
-    InitializeDialogueWidget();  // 이거 추가되어 있나요?
+    InitializeDialogueWidget();
     UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] BeginPlay completed"));
 }
 
@@ -95,18 +96,29 @@ void UDialogueManagerComponent::HideDialogueWidget()
     DialogueWidget->SetVisibility(ESlateVisibility::Hidden);
 }
 
+// StartDialogue 함수에 로그 추가
 bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
 {
+    UE_LOG(LogTemp, Warning, TEXT("========================================"));
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] StartDialogue called with ID: %s"), *DialogueID);
+
     if (!DialogueDataTable)
     {
+        UE_LOG(LogTemp, Error, TEXT("[DialogueManager] DialogueDataTable is NULL!"));
         return false;
     }
 
     FDialogueData* DialogueData = GetDialogueData(DialogueID);
     if (!DialogueData)
     {
+        UE_LOG(LogTemp, Error, TEXT("[DialogueManager] DialogueData not found for ID: %s"), *DialogueID);
         return false;
     }
+
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Dialogue found - NextID: %s, ChainBreak: %s, IsLocked: %s"),
+        *DialogueData->NextDialogueID,
+        DialogueData->bChainBreak ? TEXT("TRUE") : TEXT("FALSE"),
+        DialogueData->bIsLocked ? TEXT("TRUE") : TEXT("FALSE"));
 
     CurrentDialogue = *DialogueData;
     CurrentDialogueID = DialogueID;
@@ -116,11 +128,9 @@ bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
     if (PC)
     {
         PC->bShowMouseCursor = true;
-
         FInputModeGameAndUI InputMode;
         InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
         PC->SetInputMode(InputMode);
-
         PC->SetIgnoreMoveInput(true);
     }
 
@@ -128,10 +138,141 @@ bool UDialogueManagerComponent::StartDialogue(const FString& DialogueID)
     return true;
 }
 
-void UDialogueManagerComponent::EndDialogue()
+void UDialogueManagerComponent::ProcessDialogue(const FDialogueData& DialogueData)
 {
+    CurrentDialogue = DialogueData;
+    CurrentDialogueID = DialogueData.DialogueID;
+    bIsInDialogue = true;
+
+    // 새 대화가 시작되면 무조건 진행 불가 상태로 설정
+    bUserCanProgress = false;
+
+    ShowDialogueWidget();
+
+    bool bIsLastDialogue = DialogueData.NextDialogueID.IsEmpty() || bIsChainBreaking;
+
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] ProcessDialogue - ID: %s"), *DialogueData.DialogueID);
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] IsLastDialogue: %s, UserCanProgress: FALSE (BLOCKED)"),
+        bIsLastDialogue ? TEXT("TRUE") : TEXT("FALSE"));
+
+    OnDialogueStarted.Broadcast(
+        DialogueData.Speaker,
+        DialogueData.DialogueText,
+        DialogueData.DialogueType,
+        DialogueData.DisplayDuration,
+        bIsLastDialogue
+    );
+
+    //  Broadcast 후 0.2초 뒤에 진행 허용
+    FTimerHandle UnlockTimer;
+    GetWorld()->GetTimerManager().SetTimer(UnlockTimer, [this]()
+        {
+            bUserCanProgress = true;
+            UE_LOG(LogTemp, Warning, TEXT("[DialogueManager]  User can now progress"));
+        }, 0.2f, false);
+}
+
+// ProgressDialogue - 완전 차단
+void UDialogueManagerComponent::ProgressDialogue()
+{
+    UE_LOG(LogTemp, Warning, TEXT("----------------------------------------"));
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] ProgressDialogue called"));
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] UserCanProgress: %s"),
+        bUserCanProgress ? TEXT("TRUE") : TEXT("FALSE"));
+
+    //  진행 불가 상태면 무조건 차단
+    if (!bUserCanProgress)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[DialogueManager]  BLOCKED! User cannot progress yet. Ignoring call."));
+        return;
+    }
+
+    // 진행 시작하면 다시 차단
+    bUserCanProgress = false;
+
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Current State - InDialogue: %s, IsProgressing: %s"),
+        bIsInDialogue ? TEXT("TRUE") : TEXT("FALSE"),
+        bIsProgressingDialogue ? TEXT("TRUE") : TEXT("FALSE"));
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] CurrentDialogueID: %s"), *CurrentDialogueID);
+
+    if (bIsProgressingDialogue)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Already progressing, returning"));
+        return;
+    }
+
     if (!bIsInDialogue)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Not in dialogue, returning"));
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    if (bIsChainBreaking)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Chain breaking, ending dialogue"));
+        EndDialogue();
+        bIsChainBreaking = false;
+        OnDialogueChainBreak.Broadcast();
+        return;
+    }
+
+    bIsProgressingDialogue = true;
+
+    FString NextID = CurrentDialogue.NextDialogueID;
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] NextDialogueID: %s"), *NextID);
+
+    if (NextID.IsEmpty())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] No next dialogue, ending"));
+        EndDialogue();
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    FDialogueData* NextDialogueData = GetDialogueData(NextID);
+    if (!NextDialogueData)
+    {
+        UE_LOG(LogTemp, Error, TEXT("[DialogueManager] Next dialogue data not found for ID: %s"), *NextID);
+        EndDialogue();
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Next dialogue found - ChainBreak: %s, IsLocked: %s"),
+        NextDialogueData->bChainBreak ? TEXT("TRUE") : TEXT("FALSE"),
+        NextDialogueData->bIsLocked ? TEXT("TRUE") : TEXT("FALSE"));
+
+    if (NextDialogueData->bChainBreak)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Next dialogue is chain break, handling..."));
+        HandleChainBreak(NextID, *NextDialogueData);
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    if (NextDialogueData->bIsLocked && !ValidateSubStepRequirement(*NextDialogueData))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Next dialogue is locked, handling..."));
+        HandleLockedDialogue(NextID, *NextDialogueData);
+        bIsProgressingDialogue = false;
+        return;
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager]  ALLOWED: Ending current dialogue and starting next: %s"), *NextID);
+    EndDialogue();
+    StartDialogue(NextID);
+    bIsProgressingDialogue = false;
+}
+
+// EndDialogue 함수에 로그 추가
+void UDialogueManagerComponent::EndDialogue()
+{
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] EndDialogue called - CurrentID: %s"), *CurrentDialogueID);
+
+    if (!bIsInDialogue)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Not in dialogue, skipping end"));
         return;
     }
 
@@ -139,6 +280,7 @@ void UDialogueManagerComponent::EndDialogue()
 
     if (bIsLevelEnd || bIsRandomDialogue)
     {
+        UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Level end or random dialogue, clearing CurrentDialogueID"));
         CurrentDialogueID = "";
     }
 
@@ -154,8 +296,10 @@ void UDialogueManagerComponent::EndDialogue()
 
     HideDialogueWidget();
     OnDialogueEnded.Broadcast();
-}
 
+    UE_LOG(LogTemp, Warning, TEXT("[DialogueManager] Dialogue ended"));
+    UE_LOG(LogTemp, Warning, TEXT("========================================"));
+}
 FString UDialogueManagerComponent::PlayRandomDialogue()
 {
     FString RandomID = GetRandomFromFallbackTable("DT_Unia_Random");
@@ -447,82 +591,7 @@ FDialogueData* UDialogueManagerComponent::GetDialogueData(const FString& Dialogu
     return nullptr;
 }
 
-void UDialogueManagerComponent::ProcessDialogue(const FDialogueData& DialogueData)
-{
-    CurrentDialogue = DialogueData;
-    CurrentDialogueID = DialogueData.DialogueID;
-    bIsInDialogue = true;
 
-    ShowDialogueWidget();
-
-    bool bIsLastDialogue = DialogueData.NextDialogueID.IsEmpty() || bIsChainBreaking;
-
-    OnDialogueStarted.Broadcast(
-        DialogueData.Speaker,
-        DialogueData.DialogueText,
-        DialogueData.DialogueType,
-        DialogueData.DisplayDuration,
-        bIsLastDialogue
-    );
-}
-
-void UDialogueManagerComponent::ProgressDialogue()
-{
-    if (bIsProgressingDialogue)
-    {
-        return;
-    }
-
-    if (!bIsInDialogue)
-    {
-        bIsProgressingDialogue = false;
-        return;
-    }
-
-    if (bIsChainBreaking)
-    {
-        EndDialogue();
-        bIsChainBreaking = false;
-        OnDialogueChainBreak.Broadcast();
-        return;
-    }
-
-    bIsProgressingDialogue = true;
-
-    FString NextID = CurrentDialogue.NextDialogueID;
-    if (NextID.IsEmpty())
-    {
-        EndDialogue();
-        bIsProgressingDialogue = false;
-        return;
-    }
-
-    FDialogueData* NextDialogueData = GetDialogueData(NextID);
-    if (!NextDialogueData)
-    {
-        EndDialogue();
-        bIsProgressingDialogue = false;
-        return;
-    }
-
-    if (NextDialogueData->bChainBreak)
-    {
-        HandleChainBreak(NextID, *NextDialogueData);
-        bIsProgressingDialogue = false;
-        return;
-    }
-
-    if (NextDialogueData->bIsLocked && !ValidateSubStepRequirement(*NextDialogueData))
-    {
-        HandleLockedDialogue(NextID, *NextDialogueData);
-        bIsProgressingDialogue = false;
-        return;
-    }
-
-    EndDialogue();
-    StartDialogue(NextID);
-    bIsProgressingDialogue = false;
-}
 
 ALevelQuestManager* UDialogueManagerComponent::FindLevelQuestManager()
 {

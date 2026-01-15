@@ -212,6 +212,17 @@ void APickupActor::OnPickupSuccess(AActor* Interactor)
     }
 }
 
+void APickupActor::OnDropped(const FVector& DropLocation)
+{
+    // 드랍 사운드만 재생
+    if (DropSound)
+    {
+        UGameplayStatics::PlaySoundAtLocation(this, DropSound, DropLocation);
+    }
+}
+
+
+
 #if WITH_EDITOR
 void APickupActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
