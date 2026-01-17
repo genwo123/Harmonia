@@ -627,3 +627,34 @@ AUniaWaitSpot* AUnia::FindWaitSpot(const FString& SpotID)
 
 	return nullptr;
 }
+
+void AUnia::ForceStartDialogueWithPlayer(const FString& DialogueID)
+{
+	if (!PlayerPawn)
+	{
+		FindPlayerPawn();
+	}
+
+	if (!PlayerPawn)
+		return;
+
+	AHamoniaCharacter* Player = Cast<AHamoniaCharacter>(PlayerPawn);
+	if (!Player)
+		return;
+
+	UDialogueManagerComponent* DialogueMgr = Player->GetDialogueManagerComponent();
+	if (!DialogueMgr)
+		return;
+
+	FVector PlayerLocation = Player->GetActorLocation();
+	FVector PlayerForward = Player->GetActorForwardVector();
+	FVector TargetLocation = PlayerLocation + (PlayerForward * 300.0f);
+
+	MoveAIToLocation(TargetLocation);
+
+	FTimerHandle DialogueTimer;
+	GetWorld()->GetTimerManager().SetTimer(DialogueTimer, [this, DialogueMgr, DialogueID]()
+		{
+			DialogueMgr->StartDialogue(DialogueID);
+		}, 1.0f, false);
+}

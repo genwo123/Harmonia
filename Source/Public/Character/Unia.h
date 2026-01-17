@@ -148,7 +148,7 @@ protected:
 	FString NPCName = TEXT("Unia");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC Settings")
-	float InteractionRange = 200.0f;
+	float InteractionRange = 500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC Settings")
 	bool bLookAtPlayer = true;
@@ -190,6 +190,9 @@ protected:
 	bool bPlayerInRange = false;
 
 	APawn* PlayerPawn;
+
+	UFUNCTION(BlueprintCallable, Category = "Dialogue")
+	void ForceStartDialogueWithPlayer(const FString& DialogueID);
 
 	UFUNCTION()
 	void OnInteractionSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
